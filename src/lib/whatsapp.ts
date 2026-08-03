@@ -1,10 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { generateWhatsAppMessage } from "@/lib/deepseek";
 
-const WHATSAPP_API_VERSION = "v22.0";
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
-const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || "";
-
 interface WhatsAppApiResponse {
   messaging_product: string;
   contacts?: Array<{ input: string; wa_id: string }>;
@@ -12,24 +8,69 @@ interface WhatsAppApiResponse {
   error?: { message: string; type: string; code: number };
 }
 
-async function sendMessage(
+interface TwilioApiResponse {
+  sid: string;
+  status: string;
+  error_code?: string | null;
+  error_message?: string | null;
+}
+
+async function getWhatsAppConfig() {
+  const config = await prisma.whatsAppConfig.findFirst({
+    orderBy: { updatedAt: "desc" },
+  });
+  return config;
+}
+
+async function getProvider(): Promise<"META" | "TWILIO"> {
+  try {
+    const config = await prisma.systemConfig.findUnique({
+      where: { key: "whatsapp_provider" },
+    });
+    return (config?.value as "META" | "TWILIO") || "META";
+  } catch {
+    return "META";
+  }
+}
+
+async function getTwilioConfig() {
+  try {
+    const [accountSidConfig, authTokenConfig, phoneConfig] = await Promise.all([
+      prisma.systemConfig.findUnique({ where: { key: "twilio_account_sid" } }),
+      prisma.systemConfig.findUnique({ where: { key: "twilio_auth_token" } }),
+      prisma.systemConfig.findUnique({ where: { key: "twilio_phone" } }),
+    ]);
+    return {
+      accountSid: accountSidConfig?.value || process.env.TWILIO_ACCOUNT_SID || "",
+      authToken: authTokenConfig?.value || process.env.TWILIO_AUTH_TOKEN || "",
+      phoneNumber: phoneConfig?.value || process.env.TWILIO_PHONE_NUMBER || "",
+    };
+  } catch {
+    return {
+      accountSid: process.env.TWILIO_ACCOUNT_SID || "",
+      authToken: process.env.TWILIO_AUTH_TOKEN || "",
+      phoneNumber: process.env.TWILIO_PHONE_NUMBER || "",
+    };
+  }
+}
+
+async function sendMetaMessage(
   to: string,
+  phoneNumberId: string,
+  accessToken: string,
   message: string
 ): Promise<WhatsAppApiResponse | null> {
-  if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
-    console.warn("WhatsApp not configured: missing PHONE_NUMBER_ID or ACCESS_TOKEN");
-    return null;
-  }
+  const WHATSAPP_API_VERSION = "v22.0";
 
   try {
     const normalizedNumber = to.replace(/[^0-9]/g, "");
 
     const response = await fetch(
-      `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${phoneNumberId}/messages`,
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -48,15 +89,88 @@ async function sendMessage(
     const data: WhatsAppApiResponse = await response.json();
 
     if (!response.ok || data.error) {
-      console.error("WhatsApp send error:", data.error);
+      console.error("WhatsApp Meta send error:", data.error);
       return null;
     }
 
     return data;
   } catch (error) {
-    console.error("WhatsApp fetch error:", error);
+    console.error("WhatsApp Meta fetch error:", error);
     return null;
   }
+}
+
+async function sendTwilioMessage(
+  to: string,
+  twilioConfig: { accountSid: string; authToken: string; phoneNumber: string },
+  message: string
+): Promise<WhatsAppApiResponse | null> {
+  try {
+    const normalizedNumber = to.replace(/[^0-9]/g, "");
+    const credentials = Buffer.from(
+      `${twilioConfig.accountSid}:${twilioConfig.authToken}`
+    ).toString("base64");
+
+    const formBody = new URLSearchParams({
+      To: `whatsapp:+${normalizedNumber}`,
+      From: `whatsapp:+${twilioConfig.phoneNumber.replace(/[^0-9]/g, "")}`,
+      Body: message,
+    });
+
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${twilioConfig.accountSid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: formBody.toString(),
+      }
+    );
+
+    const data: TwilioApiResponse = await response.json();
+
+    if (!response.ok || data.error_message) {
+      console.error("WhatsApp Twilio send error:", data.error_message);
+      return null;
+    }
+
+    return {
+      messaging_product: "whatsapp",
+      messages: [{ id: data.sid }],
+    };
+  } catch (error) {
+    console.error("WhatsApp Twilio fetch error:", error);
+    return null;
+  }
+}
+
+async function sendMessage(
+  to: string,
+  message: string
+): Promise<WhatsAppApiResponse | null> {
+  const provider = await getProvider();
+
+  if (provider === "TWILIO") {
+    const twilioConfig = await getTwilioConfig();
+    if (!twilioConfig.accountSid || !twilioConfig.authToken || !twilioConfig.phoneNumber) {
+      console.warn("WhatsApp Twilio not configured: missing accountSid, authToken, or phoneNumber");
+      return null;
+    }
+    return sendTwilioMessage(to, twilioConfig, message);
+  }
+
+  const config = await getWhatsAppConfig();
+  const phoneNumberId = config?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+  const accessToken = config?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN || "";
+
+  if (!phoneNumberId || !accessToken) {
+    console.warn("WhatsApp Meta not configured: missing phoneNumberId or accessToken");
+    return null;
+  }
+
+  return sendMetaMessage(to, phoneNumberId, accessToken, message);
 }
 
 interface TemplateParameter {
@@ -71,10 +185,23 @@ async function sendTemplateMessage(
   templateName: string,
   params: TemplateParameter[]
 ): Promise<WhatsAppApiResponse | null> {
-  if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
-    console.warn("WhatsApp not configured");
+  const provider = await getProvider();
+
+  if (provider === "TWILIO") {
+    console.warn("Twilio does not support WhatsApp template messages via basic API. Use sendMessage instead.");
     return null;
   }
+
+  const config = await getWhatsAppConfig();
+  const phoneNumberId = config?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+  const accessToken = config?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN || "";
+
+  if (!phoneNumberId || !accessToken) {
+    console.warn("WhatsApp Meta not configured");
+    return null;
+  }
+
+  const WHATSAPP_API_VERSION = "v22.0";
 
   try {
     const normalizedNumber = to.replace(/[^0-9]/g, "");
@@ -94,11 +221,11 @@ async function sendTemplateMessage(
       : [];
 
     const response = await fetch(
-      `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${phoneNumberId}/messages`,
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -251,7 +378,7 @@ async function sendAlert(
       message: alertMessage,
     };
 
-    const message = await generateWhatsAppMessage(context, "alert");
+    await generateWhatsAppMessage(context, "alert");
     const fullMessage = `⚠️ *Alerta*\n\n${alertMessage}`;
     const result = await sendMessage(to, fullMessage);
 

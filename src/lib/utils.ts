@@ -32,12 +32,7 @@ export function formatDate(
 }
 
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("es-GT", {
-    style: "currency",
-    currency: "GTQ",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  return `Q ${amount.toLocaleString("es-GT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function cn(...inputs: (string | undefined | null | false | 0 | 0n)[]): string {

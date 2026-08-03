@@ -35,7 +35,7 @@ import { Badge, eventStatusLabel, eventStatusColor } from "@/components/ui/Badge
 import { Tabs, TabList, Tab, TabPanel } from "@/components/ui/Tabs";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, formatCurrency, cn } from "@/lib/utils";
 import type { Event, EventStatus, User, ApiResponse, PaginatedResponse } from "@/types";
 
 const MONTHS = [
@@ -868,7 +868,7 @@ function EventDetailModal({
                   <span className="text-gray-700 dark:text-gray-300">{c.clientName}</span>
                   <div className="flex items-center gap-3">
                     <span className="text-gray-900 dark:text-white font-medium">
-                      Q {c.amount.toLocaleString("es-GT")}
+                      {formatCurrency(Number(c.amount))}
                     </span>
                     <Badge size="sm" color={c.status === "COMPLETADO" ? "green" : c.status === "PARCIAL" ? "orange" : "yellow"}>
                       {c.status === "COMPLETADO" ? "Completado" : c.status === "PARCIAL" ? "Parcial" : "Pendiente"}

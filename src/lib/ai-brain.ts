@@ -64,19 +64,33 @@ export async function getAIClient(): Promise<{
   maxTokens: number;
 }> {
   const settings = await getAISettings();
-  const apiKey = settings?.apiKey || process.env.DEEPSEEK_API_KEY || "";
   const provider = settings?.provider || "DEEPSEEK";
 
-  let baseUrl = settings?.baseUrl || "";
-  if (!baseUrl) {
-    const baseUrls: Record<string, string> = {
-      DEEPSEEK: "https://api.deepseek.com/v1",
-      OPENAI: "https://api.openai.com/v1",
-      OPENROUTER: "https://openrouter.ai/api/v1",
-      NVIDIA: "https://integrate.api.nvidia.com/v1",
-    };
-    baseUrl = baseUrls[provider] || "https://api.deepseek.com/v1";
+  const envApiKeys: Record<string, string | undefined> = {
+    DEEPSEEK: process.env.DEEPSEEK_API_KEY,
+    OPENAI: process.env.OPENAI_API_KEY,
+    OPENROUTER: process.env.OPENROUTER_API_KEY,
+    NVIDIA: process.env.NVIDIA_API_KEY,
+  };
+
+  const apiKey =
+    settings?.apiKey ||
+    envApiKeys[provider] ||
+    envApiKeys["DEEPSEEK"] ||
+    process.env.DEEPSEEK_API_KEY ||
+    "";
+
+  if (!apiKey) {
+    throw new Error("No se encontró API Key para IA. Configure una en Admin > IA & Modelos.");
   }
+
+  const baseUrls: Record<string, string> = {
+    DEEPSEEK: "https://api.deepseek.com/v1",
+    OPENAI: "https://api.openai.com/v1",
+    OPENROUTER: "https://openrouter.ai/api/v1",
+    NVIDIA: "https://integrate.api.nvidia.com/v1",
+  };
+  const baseUrl = settings?.baseUrl || baseUrls[provider] || "https://api.deepseek.com/v1";
 
   const defaultModels: Record<string, string> = {
     DEEPSEEK: "deepseek-chat",

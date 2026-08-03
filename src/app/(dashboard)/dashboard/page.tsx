@@ -166,7 +166,7 @@ export default function DashboardPage() {
     },
     {
       label: "Cobros Pendientes",
-      value: `Q ${(data?.stats.cobrosAmount ?? 0).toLocaleString("es-GT")}`,
+      value: formatCurrency(data?.stats.cobrosAmount ?? 0),
       icon: DollarSign,
       color: "text-orange-400",
       bg: "bg-orange-500/10",

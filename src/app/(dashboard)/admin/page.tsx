@@ -19,6 +19,7 @@ import {
   SlidersHorizontal,
   Filter,
   Cpu,
+  Info,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,6 +34,7 @@ import { formatDate, cn } from "@/lib/utils";
 import type { Activity as ActivityType, ApiResponse } from "@/types";
 
 interface AISettings {
+  id?: string;
   provider: string;
   apiKey: string;
   model: string;
@@ -47,6 +49,12 @@ interface WhatsAppSettings {
   webhookUrl: string;
 }
 
+interface TwilioSettings {
+  accountSid: string;
+  authToken: string;
+  phoneNumber: string;
+}
+
 interface SystemHealth {
   db: boolean;
   ai: boolean;
@@ -55,10 +63,10 @@ interface SystemHealth {
 }
 
 const AI_PROVIDERS = [
-  { value: "deepseek", label: "DeepSeek", models: ["deepseek-chat", "deepseek-reasoner"] },
-  { value: "openai", label: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"] },
-  { value: "openrouter", label: "OpenRouter", models: ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-pro"] },
-  { value: "nvidia", label: "NVIDIA NIM", models: ["meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b"] },
+  { value: "DEEPSEEK", label: "DeepSeek", models: ["deepseek-chat", "deepseek-reasoner"] },
+  { value: "OPENAI", label: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"] },
+  { value: "OPENROUTER", label: "OpenRouter", models: ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-pro"] },
+  { value: "NVIDIA", label: "NVIDIA NIM", models: ["meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b"] },
 ];
 
 export default function AdminPage() {
@@ -75,7 +83,7 @@ export default function AdminPage() {
   const [healthChecking, setHealthChecking] = useState(false);
 
   const [aiSettings, setAISettings] = useState<AISettings>({
-    provider: "deepseek",
+    provider: "DEEPSEEK",
     apiKey: "",
     model: "deepseek-chat",
     temperature: 0.7,
@@ -94,6 +102,14 @@ export default function AdminPage() {
   const [whatsappTesting, setWhatsappTesting] = useState(false);
   const [testMessage, setTestMessage] = useState("");
 
+  const [waProvider, setWaProvider] = useState<"META" | "TWILIO">("META");
+  const [twilioSettings, setTwilioSettings] = useState<TwilioSettings>({
+    accountSid: "",
+    authToken: "",
+    phoneNumber: "",
+  });
+  const [waProviderSaving, setWaProviderSaving] = useState(false);
+
   const canAccess = user?.role === "DUENO" || user?.role === "ADMIN";
 
   const fetchAISettings = useCallback(async () => {
@@ -103,13 +119,14 @@ export default function AdminPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const json: ApiResponse<AISettings> = await res.json();
+        const json: ApiResponse<AISettings & { id: string }> = await res.json();
         if (json.success && json.data) {
-          setAISettings((prev) => ({
-            ...prev,
-            ...json.data,
+          setAISettings({
+            provider: json.data.provider || "DEEPSEEK",
+            model: json.data.model || "deepseek-chat",
             apiKey: json.data.apiKey ? "••••••••" : "",
-          }));
+            temperature: json.data.temperature ?? 0.7,
+          });
         }
       }
     } catch {
@@ -126,11 +143,42 @@ export default function AdminPage() {
       if (res.ok) {
         const json: ApiResponse<WhatsAppSettings> = await res.json();
         if (json.success && json.data) {
-          setWhatsappSettings((prev) => ({
-            ...prev,
-            ...json.data,
+          setWhatsappSettings({
+            phoneNumberId: json.data.phoneNumberId || "",
             accessToken: json.data.accessToken ? "••••••••" : "",
-          }));
+            verifyToken: json.data.verifyToken || "",
+            businessPhone: json.data.businessPhone || "",
+            webhookUrl: json.data.webhookUrl || "",
+          });
+        }
+      }
+    } catch {
+      // silent
+    }
+  }, [token]);
+
+  const fetchWaProvider = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/admin/system-config", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          const configs = json.data as Array<{ key: string; value: string }>;
+          const providerConfig = configs.find((c) => c.key === "whatsapp_provider");
+          if (providerConfig) {
+            setWaProvider(providerConfig.value === "TWILIO" ? "TWILIO" : "META");
+          }
+          const twilioSid = configs.find((c) => c.key === "twilio_account_sid");
+          const twilioToken = configs.find((c) => c.key === "twilio_auth_token");
+          const twilioPhone = configs.find((c) => c.key === "twilio_phone");
+          setTwilioSettings({
+            accountSid: twilioSid?.value ? "••••••••" : "",
+            authToken: twilioToken?.value ? "••••••••" : "",
+            phoneNumber: twilioPhone?.value || "",
+          });
         }
       }
     } catch {
@@ -182,23 +230,34 @@ export default function AdminPage() {
       checkSystemHealth();
       fetchAISettings();
       fetchWhatsAppSettings();
+      fetchWaProvider();
     }
-  }, [canAccess, fetchActivities, checkSystemHealth, fetchAISettings, fetchWhatsAppSettings]);
+  }, [canAccess, fetchActivities, checkSystemHealth, fetchAISettings, fetchWhatsAppSettings, fetchWaProvider]);
 
   async function saveAISettings() {
     if (!token) return;
     setAISaving(true);
     try {
+      const body: Record<string, unknown> = {
+        provider: aiSettings.provider,
+        model: aiSettings.model,
+        temperature: aiSettings.temperature,
+      };
+      if (aiSettings.apiKey && aiSettings.apiKey !== "••••••••") {
+        body.apiKey = aiSettings.apiKey;
+      }
       const res = await fetch("/api/admin/ai-settings", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(aiSettings),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error("Error al guardar");
-      toast.success("Configuración de IA guardada");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al guardar");
+      toast.success(json.message || "Configuración de IA guardada");
+      setAISettings((prev) => ({ ...prev, apiKey: "••••••••" }));
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al guardar");
     } finally {
@@ -210,19 +269,24 @@ export default function AdminPage() {
     if (!token) return;
     setAITesting(true);
     try {
-      const res = await fetch("/api/admin/ai-test", {
+      const res = await fetch("/api/admin/ai-settings/test", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(aiSettings),
+        body: JSON.stringify({
+          provider: aiSettings.provider,
+          apiKey: aiSettings.apiKey,
+          model: aiSettings.model,
+        }),
       });
-      if (res.ok) {
-        toast.success("Conexión IA exitosa");
+      const json = await res.json();
+      if (res.ok && json.success) {
+        toast.success(`Conexión IA exitosa (${json.data.timingMs}ms)`);
         setSystemHealth((prev) => ({ ...prev, ai: true }));
       } else {
-        throw new Error("Error de conexión");
+        throw new Error(json.error || "Error de conexión");
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al probar conexión IA");
@@ -236,21 +300,94 @@ export default function AdminPage() {
     if (!token) return;
     setWhatsappSaving(true);
     try {
+      const body: Record<string, unknown> = {
+        businessPhone: whatsappSettings.businessPhone,
+        verifyToken: whatsappSettings.verifyToken,
+        webhookUrl: whatsappSettings.webhookUrl,
+      };
+      if (whatsappSettings.phoneNumberId) body.phoneNumberId = whatsappSettings.phoneNumberId;
+      if (whatsappSettings.accessToken && whatsappSettings.accessToken !== "••••••••") {
+        body.accessToken = whatsappSettings.accessToken;
+      }
+      if (waProvider === "META") {
+        body.isActive = true;
+      }
+
       const res = await fetch("/api/admin/whatsapp-settings", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(whatsappSettings),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error("Error al guardar");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al guardar");
+
+      setWhatsappSaving(false);
+
+      if (waProvider === "TWILIO") {
+        setWaProviderSaving(true);
+        await saveTwilioConfig();
+        setWaProviderSaving(false);
+      }
+
       toast.success("Configuración de WhatsApp guardada");
+      setWhatsappSettings((prev) => ({ ...prev, accessToken: "••••••••" }));
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al guardar");
-    } finally {
       setWhatsappSaving(false);
     }
+  }
+
+  async function saveProvider(provider: "META" | "TWILIO") {
+    if (!token) return;
+    setWaProvider(provider);
+    setWaProviderSaving(true);
+    try {
+      await fetch("/api/admin/system-config", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          key: "whatsapp_provider",
+          value: provider,
+          description: "Proveedor de WhatsApp: META (Cloud API) o TWILIO",
+        }),
+      });
+    } catch {
+      toast.error("Error al cambiar proveedor");
+    } finally {
+      setWaProviderSaving(false);
+    }
+  }
+
+  async function saveTwilioConfig() {
+    const configs = [
+      { key: "twilio_account_sid", value: twilioSettings.accountSid !== "••••••••" ? twilioSettings.accountSid : undefined, description: "Twilio Account SID" },
+      { key: "twilio_auth_token", value: twilioSettings.authToken !== "••••••••" ? twilioSettings.authToken : undefined, description: "Twilio Auth Token" },
+      { key: "twilio_phone", value: twilioSettings.phoneNumber, description: "Twilio WhatsApp Phone Number" },
+    ];
+
+    for (const cfg of configs) {
+      if (cfg.value !== undefined && cfg.value !== "") {
+        await fetch("/api/admin/system-config", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(cfg),
+        });
+      }
+    }
+    setTwilioSettings((prev) => ({
+      ...prev,
+      accountSid: "••••••••",
+      authToken: "••••••••",
+    }));
   }
 
   async function testWhatsAppMessage() {
@@ -452,30 +589,116 @@ export default function AdminPage() {
                 )} />
                 <MessageCircle className="h-6 w-6 text-green-500" />
                 <h3 className="font-semibold text-gray-900 dark:text-white">
-                  Configuración de WhatsApp Cloud API
+                  Configuración de WhatsApp
                 </h3>
               </div>
 
               <div className="space-y-4">
-                <Input
-                  label="Phone Number ID"
-                  placeholder="123456789012345"
-                  value={whatsappSettings.phoneNumberId}
-                  onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, phoneNumberId: e.target.value }))}
-                />
-                <Input
-                  label="Access Token"
-                  type="password"
-                  placeholder="EAA..."
-                  value={whatsappSettings.accessToken}
-                  onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, accessToken: e.target.value }))}
-                />
-                <Input
-                  label="Verify Token (Webhook)"
-                  placeholder="tu-token-de-verificacion"
-                  value={whatsappSettings.verifyToken}
-                  onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, verifyToken: e.target.value }))}
-                />
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs text-blue-700 dark:text-blue-400 space-y-2">
+                      <p className="font-medium">Cómo obtener un número de WhatsApp Business:</p>
+                      <p>
+                        <strong>Meta (Facebook):</strong> Ve a{" "}
+                        <a href="https://business.facebook.com" target="_blank" rel="noopener noreferrer" className="underline">
+                          business.facebook.com
+                        </a>{" "}
+                        y crea una cuenta de negocio. Luego en{" "}
+                        <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="underline">
+                          Meta Developer Console
+                        </a>{" "}
+                        crea una app con WhatsApp. Necesitarás verificar tu negocio.
+                      </p>
+                      <p>
+                        <strong>Twilio:</strong> Ve a{" "}
+                        <a href="https://console.twilio.com" target="_blank" rel="noopener noreferrer" className="underline">
+                          console.twilio.com
+                        </a>{" "}
+                        y activa el sandbox de WhatsApp o solicita un número aprobado.
+                      </p>
+                      <p>Ambos proveedores requieren números de negocio verificados. No uses tu número personal.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Proveedor de WhatsApp
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveProvider("META")}
+                      className={cn(
+                        "flex-1 px-4 py-2 text-sm font-medium rounded-lg border transition-colors",
+                        waProvider === "META"
+                          ? "bg-blue-50 dark:bg-blue-900/30 border-blue-500 text-blue-700 dark:text-blue-300"
+                          : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      )}
+                    >
+                      Meta WhatsApp Cloud API
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveProvider("TWILIO")}
+                      className={cn(
+                        "flex-1 px-4 py-2 text-sm font-medium rounded-lg border transition-colors",
+                        waProvider === "TWILIO"
+                          ? "bg-red-50 dark:bg-red-900/30 border-red-500 text-red-700 dark:text-red-300"
+                          : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      )}
+                    >
+                      Twilio WhatsApp
+                    </button>
+                  </div>
+                  {waProviderSaving && (
+                    <p className="text-xs text-gray-400 mt-1">Guardando proveedor...</p>
+                  )}
+                </div>
+
+                {waProvider === "META" && (
+                  <>
+                    <Input
+                      label="Phone Number ID"
+                      placeholder="123456789012345"
+                      value={whatsappSettings.phoneNumberId}
+                      onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, phoneNumberId: e.target.value }))}
+                    />
+                    <Input
+                      label="Access Token"
+                      type="password"
+                      placeholder="EAA..."
+                      value={whatsappSettings.accessToken}
+                      onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, accessToken: e.target.value }))}
+                    />
+                    <Input
+                      label="Verify Token (Webhook)"
+                      placeholder="tu-token-de-verificacion"
+                      value={whatsappSettings.verifyToken}
+                      onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, verifyToken: e.target.value }))}
+                    />
+                  </>
+                )}
+
+                {waProvider === "TWILIO" && (
+                  <>
+                    <Input
+                      label="Account SID"
+                      placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      value={twilioSettings.accountSid}
+                      onChange={(e) => setTwilioSettings((prev) => ({ ...prev, accountSid: e.target.value }))}
+                    />
+                    <Input
+                      label="Auth Token"
+                      type="password"
+                      placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      value={twilioSettings.authToken}
+                      onChange={(e) => setTwilioSettings((prev) => ({ ...prev, authToken: e.target.value }))}
+                    />
+                  </>
+                )}
+
                 <Input
                   label="Número de WhatsApp del Negocio"
                   placeholder="+502 5555-5555"
@@ -483,63 +706,60 @@ export default function AdminPage() {
                   onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, businessPhone: e.target.value }))}
                 />
 
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Webhook className="h-5 w-5 text-blue-500" />
-                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Configuración del Webhook
-                    </h4>
-                  </div>
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">URL del Webhook (copia esta URL en Meta Developer Console)</p>
-                      <div className="flex items-center gap-2">
-                        <code className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded px-2 py-1.5 flex-1 break-all">
-                          {whatsappSettings.webhookUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/whatsapp`}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            const url = whatsappSettings.webhookUrl || `${window.location.origin}/api/webhooks/whatsapp`;
-                            navigator.clipboard.writeText(url);
-                            toast.success("URL copiada al portapapeles");
-                          }}
-                        >
-                          Copiar
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <div className="flex-shrink-0 mt-0.5">
-                        <Webhook className="h-4 w-4 text-blue-500" />
-                      </div>
-                      <div className="text-xs text-blue-700 dark:text-blue-400">
-                        <p className="font-medium mb-1">Instrucciones:</p>
-                        <ol className="list-decimal ml-3 space-y-0.5">
-                          <li>Ve a Meta Developer Console &gt; WhatsApp &gt; Configuration</li>
-                          <li>Pega la URL del webhook en el campo "Callback URL"</li>
-                          <li>Ingresa el Verify Token configurado arriba</li>
-                          <li>Suscríbete a los eventos "messages"</li>
-                        </ol>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {waProvider === "TWILIO" && (
+                  <Input
+                    label="Número de WhatsApp (Twilio)"
+                    placeholder="+14155238886"
+                    value={twilioSettings.phoneNumber}
+                    onChange={(e) => setTwilioSettings((prev) => ({ ...prev, phoneNumber: e.target.value }))}
+                  />
+                )}
 
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 mb-3">
-                    <QrCode className="h-5 w-5 text-gray-500" />
-                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                      QR Code (Conexión futura)
-                    </h4>
+                {waProvider === "META" && (
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Webhook className="h-5 w-5 text-blue-500" />
+                      <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                        Configuración del Webhook
+                      </h4>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">URL del Webhook (copia esta URL en Meta Developer Console)</p>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded px-2 py-1.5 flex-1 break-all">
+                            {whatsappSettings.webhookUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/whatsapp`}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const url = whatsappSettings.webhookUrl || `${window.location.origin}/api/webhooks/whatsapp`;
+                              navigator.clipboard.writeText(url);
+                              toast.success("URL copiada al portapapeles");
+                            }}
+                          >
+                            Copiar
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <div className="flex-shrink-0 mt-0.5">
+                          <Webhook className="h-4 w-4 text-blue-500" />
+                        </div>
+                        <div className="text-xs text-blue-700 dark:text-blue-400">
+                          <p className="font-medium mb-1">Instrucciones:</p>
+                          <ol className="list-decimal ml-3 space-y-0.5">
+                            <li>Ve a Meta Developer Console &gt; WhatsApp &gt; Configuration</li>
+                            <li>Pega la URL del webhook en el campo "Callback URL"</li>
+                            <li>Ingresa el Verify Token configurado arriba</li>
+                            <li>Suscríbete a los eventos "messages"</li>
+                          </ol>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-center h-32 bg-white dark:bg-gray-700 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
-                    <p className="text-sm text-gray-400 dark:text-gray-500">
-                      Escanea el QR desde WhatsApp Business App
-                    </p>
-                  </div>
-                </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -567,7 +787,7 @@ export default function AdminPage() {
                   <Button
                     variant="primary"
                     onClick={saveWhatsAppSettings}
-                    isLoading={whatsappSaving}
+                    isLoading={whatsappSaving || waProviderSaving}
                     leftIcon={<MessageCircle className="h-4 w-4" />}
                   >
                     Guardar Configuración
@@ -663,7 +883,9 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <p className="text-gray-500">Mensajería</p>
-                  <p className="text-gray-700 dark:text-gray-300">WhatsApp Cloud API</p>
+                  <p className="text-gray-700 dark:text-gray-300">
+                    WhatsApp {waProvider === "TWILIO" ? "Twilio" : "Meta Cloud API"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-500">UI</p>
