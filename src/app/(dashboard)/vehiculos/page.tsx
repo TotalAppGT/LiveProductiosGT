@@ -97,6 +97,8 @@ export default function VehiculosPage() {
     return false;
   });
 
+  const canManage = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -106,14 +108,16 @@ export default function VehiculosPage() {
             Gestiona la flota de vehículos
           </p>
         </div>
-        <Button
-          variant="primary"
-          size="sm"
-          leftIcon={<Plus className="h-4 w-4" />}
-          onClick={() => setShowAddModal(true)}
-        >
-          Agregar Vehículo
-        </Button>
+        {canManage && (
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus className="h-4 w-4" />}
+            onClick={() => setShowAddModal(true)}
+          >
+            Agregar Vehículo
+          </Button>
+        )}
       </div>
 
       {maintenanceAlerts.length > 0 && (
@@ -174,7 +178,7 @@ export default function VehiculosPage() {
           action={{ label: "Agregar Vehículo", onClick: () => setShowAddModal(true) }}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {vehicles.map((vehicle) => (
             <Card key={vehicle.id} variant="bordered" className="p-4">
               <div className="flex items-start justify-between mb-3">
@@ -238,32 +242,35 @@ export default function VehiculosPage() {
                 )}
               </div>
 
-              <div className="flex gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => setEditingVehicle(vehicle)}
-                >
-                  <Pencil className="h-3 w-3 mr-1" /> Editar
-                </Button>
-                <select
-                  value={vehicle.status}
-                  onChange={(e) => quickStatusUpdate(vehicle.id, e.target.value)}
-                  className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="DISPONIBLE">Disponible</option>
-                  <option value="EN_USO">En uso</option>
-                  <option value="EN_MANTENIMIENTO">En mantenimiento</option>
-                  <option value="FUERA_SERVICIO">Fuera de servicio</option>
-                </select>
-              </div>
+              {canManage && (
+                <div className="flex gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setEditingVehicle(vehicle)}
+                  >
+                    <Pencil className="h-3 w-3 mr-1" /> Editar
+                  </Button>
+                  <select
+                    value={vehicle.status}
+                    onChange={(e) => quickStatusUpdate(vehicle.id, e.target.value)}
+                    className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="DISPONIBLE">Disponible</option>
+                    <option value="EN_USO">En uso</option>
+                    <option value="EN_MANTENIMIENTO">En mantenimiento</option>
+                    <option value="FUERA_SERVICIO">Fuera de servicio</option>
+                  </select>
+                </div>
+              )}
             </Card>
           ))}
         </div>
       )}
 
       <VehicleFormModal
+        key={editingVehicle?.id || "new"}
         isOpen={showAddModal || !!editingVehicle}
         onClose={() => {
           setShowAddModal(false);

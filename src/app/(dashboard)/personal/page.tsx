@@ -31,7 +31,7 @@ export default function PersonalPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  const canManage = currentUser?.role === "DUEÑO" || currentUser?.role === "ADMIN";
+  const canManage = currentUser?.role === "DUENO" || currentUser?.role === "ADMIN";
 
   const fetchUsers = useCallback(async () => {
     if (!token) return;
@@ -149,7 +149,7 @@ export default function PersonalPage() {
           },
           {
             label: "Dueños/Admins",
-            value: users.filter((u) => u.role === "DUEÑO" || u.role === "ADMIN").length,
+            value: users.filter((u) => u.role === "DUENO" || u.role === "ADMIN").length,
             icon: Shield,
             color: "text-purple-400",
           },
@@ -193,7 +193,8 @@ export default function PersonalPage() {
           action={{ label: "Agregar Usuario", onClick: () => setShowAddModal(true) }}
         />
       ) : (
-        <Card variant="bordered" className="overflow-hidden">
+        <>
+          <Card variant="bordered" className="overflow-hidden hidden md:block">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -234,7 +235,7 @@ export default function PersonalPage() {
                         className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                         disabled={u.id === currentUser?.id}
                       >
-                        <option value="DUEÑO">Dueño</option>
+                        <option value="DUENO">Dueño</option>
                         <option value="ADMIN">Administrador</option>
                         <option value="JEFE">Jefe</option>
                         <option value="EMPLEADO">Empleado</option>
@@ -286,7 +287,58 @@ export default function PersonalPage() {
             </table>
           </div>
         </Card>
-      )}
+
+        <div className="md:hidden space-y-3">
+          {users.map((u) => (
+            <Card key={u.id} variant="bordered" className={cn("p-4", !u.active && "opacity-50")}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {u.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{u.name}</p>
+                    <p className="text-xs text-gray-500">{u.email}</p>
+                  </div>
+                </div>
+                <Badge size="sm" color={u.active ? "green" : "red"} dot>
+                  {u.active ? "Activo" : "Inactivo"}
+                </Badge>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Rol</span>
+                  <select
+                    value={u.role}
+                    onChange={(e) => updateRole(u, e.target.value as UserRole)}
+                    className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    disabled={u.id === currentUser?.id}
+                  >
+                    <option value="DUENO">Dueño</option>
+                    <option value="ADMIN">Administrador</option>
+                    <option value="JEFE">Jefe</option>
+                    <option value="EMPLEADO">Empleado</option>
+                  </select>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Teléfono</span>
+                  <span className="text-gray-700 dark:text-gray-300">{u.phone || u.whatsappNumber || "-"}</span>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <Button variant="ghost" size="sm" onClick={() => setEditingUser(u)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                {u.id !== currentUser?.id && (
+                  <Button variant="ghost" size="sm" onClick={() => toggleActive(u)}>
+                    {u.active ? <UserX className="h-4 w-4 text-red-500" /> : <UserCheck className="h-4 w-4 text-green-500" />}
+                  </Button>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </>)}
 
       <AddUserModal
         isOpen={showAddModal}
@@ -375,7 +427,7 @@ function AddUserModal({
             onChange={(e) => setRole(e.target.value as any)}
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           >
-            <option value="DUEÑO">Dueño</option>
+            <option value="DUENO">Dueño</option>
             <option value="ADMIN">Administrador</option>
             <option value="JEFE">Jefe</option>
             <option value="EMPLEADO">Empleado</option>
@@ -383,12 +435,11 @@ function AddUserModal({
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="ghost" onClick={onClose} type="button">Cancelar</Button>
-          <Button variant="primary" type="submit" isLoading={saving}>Guardar Cambios</Button>
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="ghost" onClick={onClose} type="button">Cancelar</Button>
           <Button variant="primary" type="submit" isLoading={saving}>Crear Usuario</Button>
         </div>
+        <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">
+          También puedes invitar usuarios a través de Google Sign-In desde la página de inicio de sesión.
+        </p>
       </form>
     </Modal>
   );
@@ -459,7 +510,7 @@ function EditUserModal({
             onChange={(e) => setRole(e.target.value as any)}
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           >
-            <option value="DUEÑO">Dueño</option>
+            <option value="DUENO">Dueño</option>
             <option value="ADMIN">Administrador</option>
             <option value="JEFE">Jefe</option>
             <option value="EMPLEADO">Empleado</option>

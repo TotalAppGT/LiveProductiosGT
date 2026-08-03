@@ -13,6 +13,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -67,7 +68,7 @@ const navItems: NavItem[] = [
     label: "Admin",
     href: "/admin",
     icon: Shield,
-    roles: ["DUEÑO", "ADMIN"],
+    roles: ["DUENO", "ADMIN"],
   },
 ];
 
@@ -124,16 +125,25 @@ function Sidebar() {
               </span>
             )}
           </div>
-          <button
-            onClick={toggleSidebar}
-            className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors"
-          >
-            {sidebarCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </button>
+          {isMobile ? (
+            <button
+              onClick={() => setSidebarCollapsed(true)}
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          ) : (
+            <button
+              onClick={toggleSidebar}
+              className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </button>
+          )}
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3">
@@ -146,7 +156,7 @@ function Sidebar() {
                   <button
                     onClick={() => handleNavigate(item.href)}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[44px]",
                       active
                         ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
                         : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200",
@@ -187,7 +197,7 @@ function Sidebar() {
                     {user.name}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {user.role === "DUEÑO"
+                    {user.role === "DUENO"
                       ? "Dueño"
                       : user.role === "ADMIN"
                       ? "Administrador"

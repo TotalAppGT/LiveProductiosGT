@@ -5,7 +5,8 @@ const prisma = new PrismaClient();
 
 async function createOrSyncFirebaseUser(adminEmail: string, adminPassword: string, userId: string) {
   try {
-    const admin = await import("firebase-admin");
+    const fbAdmin = await import("firebase-admin");
+    const admin = fbAdmin.default || fbAdmin;
     if (!admin.apps || !admin.apps.length) {
       const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
       if (!privateKey || !process.env.FIREBASE_ADMIN_PROJECT_ID || !process.env.FIREBASE_ADMIN_CLIENT_EMAIL) {
@@ -20,7 +21,8 @@ async function createOrSyncFirebaseUser(adminEmail: string, adminPassword: strin
         }),
       });
     }
-    const auth = admin.getAuth();
+    const { getAuth } = await import("firebase-admin/auth");
+    const auth = getAuth();
     try {
       const fbUser = await auth.getUserByEmail(adminEmail);
       console.log(`Usuario Firebase ya existe: ${fbUser.uid}`);

@@ -195,7 +195,7 @@ export function cobroStatusLabel(status: string): string {
 
 export function roleLabel(role: string): string {
   const map: Record<string, string> = {
-    DUEÑO: "Dueño",
+    DUENO: "Dueño",
     ADMIN: "Administrador",
     JEFE: "Jefe",
     EMPLEADO: "Empleado",
@@ -205,7 +205,7 @@ export function roleLabel(role: string): string {
 
 export function roleColor(role: string): BadgeColor {
   const map: Record<string, BadgeColor> = {
-    DUEÑO: "purple",
+    DUENO: "purple",
     ADMIN: "indigo",
     JEFE: "blue",
     EMPLEADO: "gray",

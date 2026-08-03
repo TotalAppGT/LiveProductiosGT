@@ -72,7 +72,7 @@ export default function TareasPage() {
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
 
-  const isAdminOrJefe = user?.role === "DUEÑO" || user?.role === "ADMIN" || user?.role === "JEFE";
+  const isAdminOrJefe = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
 
   const fetchTasks = useCallback(async () => {
     if (!token) return;
@@ -363,7 +363,7 @@ export default function TareasPage() {
                 action={{ label: "Nueva Tarea", onClick: () => setShowCreateModal(true) }}
               />
             ) : viewMode === "kanban" ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:overflow-x-auto">
                 {Object.entries(kanbanColumns).map(([status, columnTasks]) => (
                   <div key={status} className="space-y-3">
                     <div className="flex items-center justify-between">

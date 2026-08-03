@@ -193,7 +193,8 @@ export default function CobrosPage() {
           action={{ label: "Nuevo Cobro", onClick: () => setShowAddModal(true) }}
         />
       ) : (
-        <Card variant="bordered" className="overflow-hidden">
+        <>
+          <Card variant="bordered" className="overflow-hidden hidden md:block">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -259,7 +260,7 @@ export default function CobrosPage() {
                             >
                               <CheckCircle2 className="h-4 w-4 text-green-500" />
                             </Button>
-                          </>
+                            </>
                         )}
                         <Button
                           variant="ghost"
@@ -277,6 +278,58 @@ export default function CobrosPage() {
             </table>
           </div>
         </Card>
+
+        <div className="md:hidden space-y-3">
+          {cobros.map((cobro) => (
+            <Card key={cobro.id} variant="bordered" className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{cobro.clientName}</p>
+                  {cobro.invoiceNumber && (
+                    <p className="text-xs text-gray-400">Factura: {cobro.invoiceNumber}</p>
+                  )}
+                </div>
+                <Badge size="sm" color={cobroStatusColor(cobro.status)}>
+                  {cobroStatusLabel(cobro.status)}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                <div>
+                  <span className="text-xs text-gray-500">Monto</span>
+                  <p className="font-semibold text-gray-900 dark:text-white">{formatCurrency(cobro.amount)}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">Vence</span>
+                  <p className="text-gray-700 dark:text-gray-300">{cobro.dueDate ? formatDate(cobro.dueDate) : "-"}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">Evento</span>
+                  <p className="text-gray-700 dark:text-gray-300">{cobro.event?.name || "-"}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">Asignado</span>
+                  <p className="text-gray-700 dark:text-gray-300">{cobro.assignedTo?.name || "-"}</p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                {cobro.status !== "COMPLETADO" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPaymentModal({ cobro, amount: String(cobro.amount) })}
+                    title="Marcar pago"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => setEditingCobro(cobro)} title="Editar">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </>
       )}
 
       <CobroFormModal

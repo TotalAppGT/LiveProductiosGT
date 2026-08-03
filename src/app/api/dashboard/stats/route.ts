@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
+import { startOfDay, startOfWeek, endOfWeek } from "date-fns";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,12 +14,9 @@ export async function GET(request: NextRequest) {
     }
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const weekStart = new Date(today);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    const todayStart = startOfDay(today);
+    const weekStart = startOfWeek(today, { weekStartsOn: 0 });
+    const weekEnd = endOfWeek(today, { weekStartsOn: 0 });
 
     const [
       totalTasks,
@@ -33,12 +31,17 @@ export async function GET(request: NextRequest) {
       eventosActivos,
     ] = await Promise.all([
       prisma.task.count(),
-      prisma.task.count({ where: { status: "COMPLETADA" } }),
+      prisma.taskHistory.count({
+        where: {
+          newStatus: "COMPLETADA",
+          createdAt: { gte: todayStart },
+        },
+      }),
       prisma.task.count({ where: { status: "PENDIENTE" } }),
       prisma.task.count({ where: { status: "EN_PROCESO" } }),
       prisma.event.count({
         where: {
-          date: { gte: weekStart },
+          date: { gte: weekStart, lte: weekEnd },
           status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
         },
       }),

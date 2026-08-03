@@ -45,8 +45,22 @@ interface DashboardData {
     cobrosAmount: number;
   };
   dailyReport: string;
-  recentActivity: Activity[];
-  tasksDueToday: Task[];
+  recentActivity: Array<{
+    id: string;
+    user: { name: string; avatar: string | null };
+    action: string;
+    details: string;
+    createdAt: string;
+  }>;
+  tasksDueToday: Array<{
+    id: string;
+    title: string;
+    priority: string;
+    status: string;
+    category: string;
+    dueDate?: string;
+    assignedTo: { name: string } | null;
+  }>;
 }
 
 export default function DashboardPage() {
@@ -92,7 +106,7 @@ export default function DashboardPage() {
     { name: "Cobros", value: data?.stats.pendingCobros || 0, fill: "#f97316" },
   ];
 
-  const isAdminOrOwner = user?.role === "DUEÑO" || user?.role === "ADMIN";
+  const isAdminOrOwner = user?.role === "DUENO" || user?.role === "ADMIN";
 
   const statCards = [
     {
@@ -190,7 +204,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {statCards.map((card) => (
           <Card
             key={card.label}
@@ -222,7 +236,7 @@ export default function DashboardPage() {
                 Resumen de Actividad
               </h2>
             </div>
-            <div className="h-64">
+            <div className="h-48 sm:h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />

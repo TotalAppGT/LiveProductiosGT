@@ -1,4 +1,4 @@
-export type UserRole = 'DUEÑO' | 'ADMIN' | 'JEFE' | 'EMPLEADO';
+export type UserRole = 'DUENO' | 'ADMIN' | 'JEFE' | 'EMPLEADO';
 
 export type TaskType = 'FIJA' | 'DINAMICA';
 

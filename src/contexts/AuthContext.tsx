@@ -16,6 +16,8 @@ import {
 import {
   getAuth,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
@@ -46,6 +48,7 @@ interface AuthContextValue extends AuthState {
   logout: () => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   refreshUser: () => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -137,7 +140,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthInstance(auth);
 
     const persisted = getPersistedAuth();
-    if (persisted.token && persisted.user) {
+    const hasPersistedAuth = !!(persisted.token && persisted.user);
+
+    if (hasPersistedAuth) {
       setState((prev) => ({
         ...prev,
         user: persisted.user,
@@ -145,6 +150,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading: true,
       }));
     }
+
+    let authResolved = false;
+
+    const fallbackTimer = setTimeout(() => {
+      if (!authResolved) {
+        if (hasPersistedAuth) {
+          setState((prev) => ({
+            ...prev,
+            loading: false,
+            initialized: true,
+          }));
+        } else {
+          persistAuth(null, null);
+          setState({
+            user: null,
+            token: null,
+            loading: false,
+            initialized: true,
+          });
+        }
+        authResolved = true;
+      }
+    }, 5000);
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -157,6 +185,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             loading: false,
             initialized: true,
           });
+          authResolved = true;
+          clearTimeout(fallbackTimer);
         } catch {
           await signOut(auth);
           persistAuth(null, null);
@@ -166,19 +196,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             loading: false,
             initialized: true,
           });
+          authResolved = true;
+          clearTimeout(fallbackTimer);
         }
       } else {
-        persistAuth(null, null);
-        setState({
-          user: null,
-          token: null,
-          loading: false,
-          initialized: true,
-        });
+        if (hasPersistedAuth) {
+          setState((prev) => ({
+            ...prev,
+            loading: false,
+            initialized: true,
+          }));
+        } else {
+          persistAuth(null, null);
+          setState({
+            user: null,
+            token: null,
+            loading: false,
+            initialized: true,
+          });
+        }
+        authResolved = true;
+        clearTimeout(fallbackTimer);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      clearTimeout(fallbackTimer);
+    };
   }, []);
 
   const fetchUserFromBackend = useCallback(async () => {
@@ -285,6 +330,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [authInstance]
   );
 
+  const loginWithGoogle = useCallback(async () => {
+      if (!authInstance) throw new Error("Auth not initialized");
+      setState((prev) => ({ ...prev, loading: true }));
+
+      try {
+        const provider = new GoogleAuthProvider();
+        const firebaseCredential = await signInWithPopup(authInstance, provider);
+        const { user, token } = await syncWithBackend(firebaseCredential.user);
+        persistAuth(token, user);
+        setState({
+          user,
+          token,
+          loading: false,
+          initialized: true,
+        });
+      } catch (error) {
+        setState((prev) => ({ ...prev, loading: false }));
+        throw error;
+      }
+    }, [authInstance]);
+
   const logout = useCallback(async () => {
     if (authInstance) {
       try {
@@ -325,6 +391,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         register,
+        loginWithGoogle,
         refreshUser,
       }}
     >

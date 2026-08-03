@@ -26,6 +26,7 @@ function Header({ title, className }: HeaderProps) {
   const {
     sidebarCollapsed,
     toggleSidebar,
+    isMobile,
     notificationsCount,
     clearNotifications,
   } = useApp();
@@ -56,7 +57,7 @@ function Header({ title, className }: HeaderProps) {
           .join(" / "));
 
   const roleLabel =
-    user?.role === "DUEÑO"
+    user?.role === "DUENO"
       ? "Dueño"
       : user?.role === "ADMIN"
       ? "Administrador"
@@ -71,7 +72,7 @@ function Header({ title, className }: HeaderProps) {
         className
       )}
     >
-      <div className="flex items-center justify-between h-16 px-4 lg:px-6">
+      <div className="flex items-center justify-between h-14 sm:h-16 px-3 sm:px-4 lg:px-6">
         <div className="flex items-center gap-4">
           <button
             onClick={toggleSidebar}

@@ -9,6 +9,9 @@ import {
   Download,
   Pencil,
   Trash2,
+  Filter,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,6 +54,7 @@ export default function InventarioPage() {
   const [locationFilter, setLocationFilter] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const fetchItems = useCallback(async () => {
     if (!token) return;
@@ -183,39 +187,89 @@ export default function InventarioPage() {
             className="pl-10"
           />
         </div>
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Todas las categorías</option>
-          {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Todos los estados</option>
-          <option value="DISPONIBLE">Disponible</option>
-          <option value="ASIGNADO">Asignado</option>
-          <option value="EN_REPARACION">En Reparación</option>
-          <option value="DANADO">Dañado</option>
-          <option value="PERDIDO">Perdido</option>
-        </select>
-        <select
-          value={locationFilter}
-          onChange={(e) => setLocationFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Todas las ubicaciones</option>
-          {Object.entries(LOCATION_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<Filter className="h-4 w-4" />}
+            onClick={() => setShowFilters(!showFilters)}
+            className="sm:hidden"
+          >
+            Filtros
+          </Button>
+          <div className="hidden sm:flex gap-2">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todas las categorías</option>
+              {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todos los estados</option>
+              <option value="DISPONIBLE">Disponible</option>
+              <option value="ASIGNADO">Asignado</option>
+              <option value="EN_REPARACION">En Reparación</option>
+              <option value="DANADO">Dañado</option>
+              <option value="PERDIDO">Perdido</option>
+            </select>
+            <select
+              value={locationFilter}
+              onChange={(e) => setLocationFilter(e.target.value)}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todas las ubicaciones</option>
+              {Object.entries(LOCATION_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
+
+      {showFilters && (
+        <div className="sm:hidden grid grid-cols-1 gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Todas las categorías</option>
+            {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Todos los estados</option>
+            <option value="DISPONIBLE">Disponible</option>
+            <option value="ASIGNADO">Asignado</option>
+            <option value="EN_REPARACION">En Reparación</option>
+            <option value="DANADO">Dañado</option>
+            <option value="PERDIDO">Perdido</option>
+          </select>
+          <select
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Todas las ubicaciones</option>
+            {Object.entries(LOCATION_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-12">
@@ -234,7 +288,8 @@ export default function InventarioPage() {
           action={{ label: "Agregar Ítem", onClick: () => setShowAddModal(true) }}
         />
       ) : (
-        <Card variant="bordered" className="overflow-hidden">
+        <>
+          <Card variant="bordered" className="overflow-hidden hidden md:block">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -319,6 +374,58 @@ export default function InventarioPage() {
             </table>
           </div>
         </Card>
+
+        <div className="md:hidden space-y-3">
+          {items.map((item) => (
+            <Card
+              key={item.id}
+              variant="bordered"
+              className={cn(
+                "p-4",
+                (item.status === "DANADO" || item.status === "PERDIDO") && "bg-red-50/50 dark:bg-red-900/5"
+              )}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{item.name}</p>
+                  {item.serialNumber && (
+                    <p className="text-xs text-gray-400">SN: {item.serialNumber}</p>
+                  )}
+                </div>
+                <Badge size="sm" color={inventoryStatusColor(item.status)}>
+                  {inventoryStatusLabel(item.status)}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-xs text-gray-500">Categoría</span>
+                  <p className="text-gray-700 dark:text-gray-300">{CATEGORY_LABELS[item.category] || item.category}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">Cantidad</span>
+                  <p className="text-gray-700 dark:text-gray-300 font-medium">{item.quantity}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">Ubicación</span>
+                  <p className="text-gray-700 dark:text-gray-300">{LOCATION_LABELS[item.location] || item.location}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">Asignado</span>
+                  <p className="text-gray-700 dark:text-gray-300">{item.assignedTo?.name || "-"}</p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <Button variant="ghost" size="sm" onClick={() => setEditingItem(item)} title="Editar">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => deleteItem(item.id)} title="Eliminar">
+                  <Trash2 className="h-4 w-4 text-red-500" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </>
       )}
 
       <InventoryFormModal

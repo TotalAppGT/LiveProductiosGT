@@ -35,7 +35,7 @@ export default function AdminPage() {
     whatsapp: boolean;
   } | null>(null);
 
-  const canAccess = user?.role === "DUEÑO" || user?.role === "ADMIN";
+  const canAccess = user?.role === "DUENO" || user?.role === "ADMIN";
 
   const fetchActivities = useCallback(async () => {
     if (!token) return;
@@ -101,24 +101,24 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Panel de Administración</h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
+      <div className="px-1">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Panel de Administración</h1>
+        <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm mt-1">
           Configuración y monitoreo del sistema
         </p>
       </div>
 
       <Tabs defaultValue="health">
-        <TabList>
-          <Tab value="health">Salud del Sistema</Tab>
-          <Tab value="settings">Configuración</Tab>
-          <Tab value="activity">Registro de Actividad</Tab>
+        <TabList className="overflow-x-auto flex-nowrap">
+          <Tab value="health">Salud</Tab>
+          <Tab value="settings">Config</Tab>
+          <Tab value="activity">Actividad</Tab>
           <Tab value="ai">IA & WhatsApp</Tab>
         </TabList>
 
         <TabPanel value="health">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {[
               {
                 label: "Base de Datos",

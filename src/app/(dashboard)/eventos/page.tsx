@@ -148,6 +148,7 @@ export default function EventosPage() {
             size="sm"
             leftIcon={viewMode === "calendar" ? <List className="h-4 w-4" /> : <CalendarIcon className="h-4 w-4" />}
             onClick={() => setViewMode(viewMode === "list" ? "calendar" : "list")}
+            className="hidden sm:flex"
           >
             {viewMode === "calendar" ? "Lista" : "Calendario"}
           </Button>
