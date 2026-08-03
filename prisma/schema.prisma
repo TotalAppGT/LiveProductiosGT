@@ -1,0 +1,345 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DUENO
+  ADMIN
+  JEFE
+  EMPLEADO
+}
+
+enum TaskType {
+  FIJA
+  DINAMICA
+}
+
+enum TaskFrequency {
+  DIARIA
+  SEMANAL
+  MENSUAL
+}
+
+enum DayOfWeek {
+  LUNES
+  MARTES
+  MIERCOLES
+  JUEVES
+  VIERNES
+  SABADO
+  DOMINGO
+}
+
+enum TaskStatus {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADA
+  REPROGRAMADA
+  CANCELADA
+}
+
+enum TaskPriority {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum TaskCategory {
+  PRE_EVENTO
+  POST_EVENTO
+  COTIZACION
+  COBRO
+  INVENTARIO
+  VEHICULO
+  PERSONAL
+  BODEGA
+  MANTENIMIENTO
+  ADMINISTRACION
+  OTRO
+}
+
+enum EventStatus {
+  COTIZACION
+  CONFIRMADO
+  EN_PROGRESO
+  COMPLETADO
+  CANCELADO
+}
+
+enum InventoryCategory {
+  AUDIO
+  ILUMINACION
+  INSTRUMENTO
+  CABLEADO
+  MOBILIARIO
+  HERRAMIENTA
+  CONSUMIBLE
+  OTRO
+}
+
+enum InventoryStatus {
+  DISPONIBLE
+  ASIGNADO
+  EN_REPARACION
+  PERDIDO
+  DANADO
+}
+
+enum InventoryLocation {
+  BODEGA_ELGIN
+  BODEGA_PP
+  EN_EVENTO
+  EN_RENTA
+}
+
+enum VehicleStatus {
+  DISPONIBLE
+  EN_USO
+  EN_MANTENIMIENTO
+  FUERA_SERVICIO
+}
+
+enum VehicleType {
+  CAMION
+  PANEL
+  PICKUP
+  MOTO
+  SEDAN
+  OTRO
+}
+
+enum CobroStatus {
+  PENDIENTE
+  PARCIAL
+  COMPLETADO
+}
+
+enum WhatsAppMessageType {
+  TASK_REMINDER
+  EVENT_REMINDER
+  NOTIFICATION
+  ALERT
+  CHAT
+}
+
+enum WhatsAppMessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users    User[]
+  events   Event[]
+  tasks    Task[]
+  vehicles Vehicle[]
+  cobros   Cobro[]
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  password        String
+  name            String
+  phone           String?
+  role            Role     @default(EMPLEADO)
+  firebaseUid     String?  @unique
+  avatar          String?
+  whatsappNumber  String?
+  active          Boolean  @default(true)
+  tenantId        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant           Tenant?            @relation(fields: [tenantId], references: [id])
+  assignedTasks    Task[]             @relation("TaskAssignee")
+  createdTasks     Task[]             @relation("TaskCreator")
+  taskComments     TaskComment[]
+  taskHistory      TaskHistory[]
+  inventoryItems   InventoryItem[]
+  vehicles         Vehicle[]
+  cobros           Cobro[]
+  activities       Activity[]
+  whatsappMessages WhatsAppMessage[]
+  plannedEvents    Event[]            @relation("EventPlanner")
+  responsibleEvents Event[]           @relation("EventResponsible")
+}
+
+model Task {
+  id                 String       @id @default(cuid())
+  title              String
+  description        String?
+  type               TaskType     @default(FIJA)
+  frequency          TaskFrequency?
+  dayOfWeek          DayOfWeek?
+  dueDate            DateTime?
+  status             TaskStatus   @default(PENDIENTE)
+  priority           TaskPriority @default(MEDIA)
+  category           TaskCategory @default(OTRO)
+  comments           String?
+  rescheduledTo      DateTime?
+  requiresConfirmation Boolean   @default(false)
+  confirmedAt        DateTime?
+  assignedToId       String?
+  assignedById       String?
+  eventId            String?
+  tenantId           String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  assignedTo User?          @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  assignedBy User?          @relation("TaskCreator", fields: [assignedById], references: [id])
+  event      Event?         @relation(fields: [eventId], references: [id])
+  tenant     Tenant?        @relation(fields: [tenantId], references: [id])
+  commentsList      TaskComment[]
+  history          TaskHistory[]
+  whatsappMessages WhatsAppMessage[]
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  content   String
+  taskId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+}
+
+model TaskHistory {
+  id             String     @id @default(cuid())
+  taskId         String
+  userId         String
+  action         String
+  previousStatus TaskStatus?
+  newStatus      TaskStatus?
+  createdAt      DateTime   @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Event {
+  id            String      @id @default(cuid())
+  name          String
+  clientName    String
+  clientPhone   String?
+  clientEmail   String?
+  date          DateTime
+  location      String?
+  guestCount    Int?
+  status        EventStatus @default(COTIZACION)
+  serviceType   String?
+  audioType     String?
+  plannerId     String?
+  responsibleId String?
+  notes         String?
+  tenantId      String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  planner     User?    @relation("EventPlanner", fields: [plannerId], references: [id])
+  responsible User?    @relation("EventResponsible", fields: [responsibleId], references: [id])
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  tasks            Task[]
+  cobros           Cobro[]
+  whatsappMessages WhatsAppMessage[]
+}
+
+model InventoryItem {
+  id            String           @id @default(cuid())
+  name          String
+  category      InventoryCategory @default(OTRO)
+  quantity      Int              @default(1)
+  assignedToId  String?
+  status        InventoryStatus  @default(DISPONIBLE)
+  location      InventoryLocation @default(BODEGA_ELGIN)
+  notes         String?
+  lastCheckedAt DateTime?
+  serialNumber  String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  assignedTo User? @relation(fields: [assignedToId], references: [id])
+}
+
+model Vehicle {
+  id                String        @id @default(cuid())
+  name              String
+  plate             String        @unique
+  type              VehicleType   @default(OTRO)
+  status            VehicleStatus @default(DISPONIBLE)
+  assignedToId      String?
+  mileage           Int?
+  fuelLevel         Int?
+  lastMaintenanceAt DateTime?
+  notes             String?
+  tenantId          String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  assignedTo User?   @relation(fields: [assignedToId], references: [id])
+  tenant     Tenant? @relation(fields: [tenantId], references: [id])
+}
+
+model Cobro {
+  id            String     @id @default(cuid())
+  clientName    String
+  amount        Decimal    @db.Decimal(10, 2)
+  status        CobroStatus @default(PENDIENTE)
+  invoiceNumber String?
+  dueDate       DateTime?
+  assignedToId  String?
+  notes         String?
+  eventId       String?
+  tenantId      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  event      Event?  @relation(fields: [eventId], references: [id])
+  assignedTo User?   @relation(fields: [assignedToId], references: [id])
+  tenant     Tenant? @relation(fields: [tenantId], references: [id])
+}
+
+model Activity {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  resource   String?
+  resourceId String?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model WhatsAppMessage {
+  id            String               @id @default(cuid())
+  userId        String
+  toNumber      String
+  message       String
+  type          WhatsAppMessageType  @default(NOTIFICATION)
+  status        WhatsAppMessageStatus @default(SENT)
+  relatedTaskId String?
+  relatedEventId String?
+  createdAt     DateTime             @default(now())
+
+  user         User?  @relation(fields: [userId], references: [id])
+  relatedTask  Task?  @relation(fields: [relatedTaskId], references: [id])
+  relatedEvent Event? @relation(fields: [relatedEventId], references: [id])
+}

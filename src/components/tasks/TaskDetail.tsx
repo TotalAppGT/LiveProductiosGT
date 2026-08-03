@@ -1,0 +1,444 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import {
+  X,
+  Send,
+  Clock,
+  Calendar,
+  CalendarClock,
+  MessageSquare,
+  User,
+  Link,
+  ArrowRight,
+  Phone,
+  AlertTriangle,
+  CheckCircle2,
+  RotateCcw,
+  Play,
+  Ban,
+  CalendarPlus,
+} from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { Badge, taskStatusColor, taskStatusLabel, taskPriorityColor, taskPriorityLabel } from "@/components/ui/Badge";
+import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import type { Task, TaskStatus, TaskCategory, TaskHistory, TaskComment, User as UserType } from "@/types";
+
+interface TaskDetailProps {
+  task: Task | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onStatusChange: (taskId: string, status: TaskStatus) => void;
+  onAddComment: (taskId: string, content: string) => void;
+  onReschedule: (taskId: string, newDate: string, reason: string) => void;
+  isLoading?: boolean;
+}
+
+const categoryLabels: Record<TaskCategory, string> = {
+  PRE_EVENTO: "Pre-evento",
+  POST_EVENTO: "Post-evento",
+  COTIZACION: "Cotización",
+  COBRO: "Cobro",
+  INVENTARIO: "Inventario",
+  VEHICULO: "Vehículo",
+  PERSONAL: "Personal",
+  BODEGA: "Bodega",
+  MANTENIMIENTO: "Mantenimiento",
+  ADMINISTRACION: "Administración",
+  OTRO: "Otro",
+};
+
+const statusChangeOptions: { status: TaskStatus; label: string; icon: typeof CheckCircle2; color: string }[] = [
+  { status: "PENDIENTE", label: "Marcar pendiente", icon: RotateCcw, color: "text-yellow-600" },
+  { status: "EN_PROCESO", label: "Iniciar tarea", icon: Play, color: "text-blue-600" },
+  { status: "COMPLETADA", label: "Completar tarea", icon: CheckCircle2, color: "text-green-600" },
+  { status: "CANCELADA", label: "Cancelar tarea", icon: Ban, color: "text-red-600" },
+];
+
+export function TaskDetail({
+  task,
+  isOpen,
+  onClose,
+  onStatusChange,
+  onAddComment,
+  onReschedule,
+  isLoading = false,
+}: TaskDetailProps) {
+  const [comment, setComment] = useState("");
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleReason, setRescheduleReason] = useState("");
+  const [showConfirmStatus, setShowConfirmStatus] = useState<TaskStatus | null>(null);
+  const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (task) {
+      setComment("");
+      setShowReschedule(false);
+      setShowConfirmStatus(null);
+    }
+  }, [task?.id]);
+
+  useEffect(() => {
+    commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [task?.commentsList?.length]);
+
+  if (!task) return null;
+
+  const t = task;
+  const isCompleted = t.status === "COMPLETADA";
+  const isCancelled = t.status === "CANCELADA";
+
+  function handleAddComment() {
+    if (!comment.trim()) return;
+    onAddComment(t.id, comment.trim());
+    setComment("");
+  }
+
+  function handleReschedule() {
+    if (!rescheduleDate) return;
+    const fullDate = rescheduleTime
+      ? `${rescheduleDate}T${rescheduleTime}:00`
+      : `${rescheduleDate}T23:59:00`;
+    onReschedule(t.id, fullDate, rescheduleReason.trim());
+    setShowReschedule(false);
+    setRescheduleDate("");
+    setRescheduleTime("");
+    setRescheduleReason("");
+  }
+
+  function handleStatusChange(status: TaskStatus) {
+    onStatusChange(t.id, status);
+    setShowConfirmStatus(null);
+  }
+
+  const whatsappPreview = `Hola ${task.assignedTo?.name || "usuario"}, tienes una tarea "${task.title}" ${task.dueDate ? `para el ${format(new Date(task.dueDate), "dd/MM/yyyy")}` : ""}. Prioridad: ${taskPriorityLabel(task.priority)}.`;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Detalle de tarea" size="xl">
+      <div className="space-y-6">
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                {task.title}
+              </h2>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge color={taskStatusColor(task.status)} size="md" dot>
+                  {taskStatusLabel(task.status)}
+                </Badge>
+                <Badge color={taskPriorityColor(task.priority)} size="md">
+                  {taskPriorityLabel(task.priority)}
+                </Badge>
+                <Badge color="purple" size="md">
+                  {categoryLabels[task.category]}
+                </Badge>
+                {task.type === "FIJA" && (
+                  <Badge color="teal" size="md">
+                    {task.frequency
+                      ? task.frequency.charAt(0) + task.frequency.slice(1).toLowerCase()
+                      : "Fija"}
+                  </Badge>
+                )}
+              </div>
+            </div>
+            {task.assignedTo && (
+              <div className="flex flex-col items-center gap-1">
+                <Avatar name={task.assignedTo.name} src={task.assignedTo.avatar} size="lg" />
+                <span className="text-xs text-gray-500 dark:text-gray-400">{task.assignedTo.name}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              <div>
+                <div className="text-xs text-gray-400">Fecha de entrega</div>
+                <div className="text-gray-700 dark:text-gray-300 font-medium">
+                  {task.dueDate ? format(new Date(task.dueDate), "dd/MM/yyyy HH:mm") : "Sin fecha"}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <User className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              <div>
+                <div className="text-xs text-gray-400">Asignado por</div>
+                <div className="text-gray-700 dark:text-gray-300 font-medium">
+                  {task.assignedBy?.name || "—"}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              <div>
+                <div className="text-xs text-gray-400">Creada</div>
+                <div className="text-gray-700 dark:text-gray-300 font-medium">
+                  {format(new Date(task.createdAt), "dd/MM/yyyy")}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {task.description && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                Descripción
+              </h4>
+              <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                {task.description}
+              </p>
+            </div>
+          )}
+
+          {task.event && (
+            <div className="flex items-center gap-2 text-sm bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+              <Link className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span className="text-gray-600 dark:text-gray-400">Evento:</span>
+              <a
+                href={`/events/${task.event.id}`}
+                className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
+              >
+                {task.event.name} - {task.event.clientName}
+              </a>
+            </div>
+          )}
+
+          {task.rescheduledTo && (
+            <div className="flex items-center gap-2 text-sm bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
+              <CalendarClock className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <span className="text-gray-600 dark:text-gray-400">Reprogramada para:</span>
+              <span className="text-purple-700 dark:text-purple-300 font-medium">
+                {format(new Date(task.rescheduledTo), "dd/MM/yyyy HH:mm")}
+              </span>
+            </div>
+          )}
+
+          {!isCompleted && !isCancelled && (
+            <>
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
+                  Cambiar estado
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {statusChangeOptions
+                    .filter((opt) => opt.status !== task.status)
+                    .map((opt) => (
+                      <Button
+                        key={opt.status}
+                        variant="outline"
+                        size="sm"
+                        leftIcon={<opt.icon className={cn("h-4 w-4", opt.color)} />}
+                        onClick={() => setShowConfirmStatus(opt.status)}
+                        disabled={isLoading}
+                      >
+                        {opt.label}
+                      </Button>
+                    ))}
+                </div>
+              </div>
+
+              <div>
+                <button
+                  onClick={() => setShowReschedule(!showReschedule)}
+                  className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  <CalendarPlus className="h-4 w-4" />
+                  {showReschedule ? "Cancelar reprogramación" : "Reprogramar tarea"}
+                </button>
+
+                {showReschedule && (
+                  <div className="mt-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                          Nueva fecha
+                        </label>
+                        <input
+                          type="date"
+                          value={rescheduleDate}
+                          onChange={(e) => setRescheduleDate(e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                          Nueva hora
+                        </label>
+                        <input
+                          type="time"
+                          value={rescheduleTime}
+                          onChange={(e) => setRescheduleTime(e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                        Motivo de reprogramación
+                      </label>
+                      <input
+                        type="text"
+                        value={rescheduleReason}
+                        onChange={(e) => setRescheduleReason(e.target.value)}
+                        placeholder="Ej: Cliente solicitó cambio de fecha"
+                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        onClick={handleReschedule}
+                        disabled={!rescheduleDate || isLoading}
+                        leftIcon={<CalendarClock className="h-4 w-4" />}
+                      >
+                        Reprogramar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {task.assignedTo?.whatsappNumber && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
+                Notificación WhatsApp
+              </h4>
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <span className="text-xs text-green-700 dark:text-green-300 font-medium">
+                    Vista previa del mensaje
+                  </span>
+                </div>
+                <p className="text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 border border-gray-200 dark:border-gray-600">
+                  {whatsappPreview}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Comentarios
+            {task.commentsList && task.commentsList.length > 0 && (
+              <Badge color="blue" size="sm">{task.commentsList.length}</Badge>
+            )}
+          </h4>
+
+          <div className="space-y-3 max-h-60 overflow-y-auto mb-3">
+            {!task.commentsList || task.commentsList.length === 0 ? (
+              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">
+                Sin comentarios aún
+              </p>
+            ) : (
+              task.commentsList.map((c) => (
+                <div key={c.id} className="flex gap-3">
+                  <Avatar name={c.user?.name} src={c.user?.avatar} size="sm" className="mt-1" />
+                  <div className="flex-1 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        {c.user?.name || "Usuario"}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {formatDistanceToNow(new Date(c.createdAt), { locale: es, addSuffix: true })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{c.content}</p>
+                  </div>
+                </div>
+              ))
+            )}
+            <div ref={commentsEndRef} />
+          </div>
+
+          {!isCompleted && !isCancelled && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
+                placeholder="Escribe un comentario..."
+                className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <Button
+                size="md"
+                onClick={handleAddComment}
+                disabled={!comment.trim() || isLoading}
+                leftIcon={<Send className="h-4 w-4" />}
+              >
+                Enviar
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {task.history && task.history.length > 0 && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Historial de cambios
+            </h4>
+            <div className="space-y-3 relative before:absolute before:left-[11px] before:top-3 before:bottom-3 before:w-0.5 before:bg-gray-200 dark:before:bg-gray-700">
+              {task.history.map((entry) => (
+                <div key={entry.id} className="flex gap-3 relative">
+                  <div className="w-[22px] h-[22px] rounded-full bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-500 flex items-center justify-center flex-shrink-0 z-10">
+                    <ArrowRight className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex-1 pb-3">
+                    <div className="text-sm">
+                      <span className="text-gray-700 dark:text-gray-300">{entry.action}</span>
+                      {entry.previousStatus && entry.newStatus && (
+                        <span className="ml-2 inline-flex items-center gap-1">
+                          <Badge color={taskStatusColor(entry.previousStatus)} size="sm">
+                            {taskStatusLabel(entry.previousStatus)}
+                          </Badge>
+                          <ArrowRight className="h-3 w-3 text-gray-400" />
+                          <Badge color={taskStatusColor(entry.newStatus)} size="sm">
+                            {taskStatusLabel(entry.newStatus)}
+                          </Badge>
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      {entry.user && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          por {entry.user.name}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">
+                        {format(new Date(entry.createdAt), "dd/MM/yyyy HH:mm")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <ConfirmDialog
+        isOpen={!!showConfirmStatus}
+        onClose={() => setShowConfirmStatus(null)}
+        onConfirm={() => showConfirmStatus && handleStatusChange(showConfirmStatus)}
+        title="Cambiar estado"
+        message={`¿Estás seguro de cambiar el estado de esta tarea a "${showConfirmStatus ? taskStatusLabel(showConfirmStatus) : ""}"?`}
+        confirmLabel="Confirmar cambio"
+        variant={showConfirmStatus === "CANCELADA" ? "danger" : "info"}
+        loading={isLoading}
+      />
+    </Modal>
+  );
+}

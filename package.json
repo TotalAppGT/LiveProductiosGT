@@ -1,0 +1,53 @@
+{
+  "name": "live-productions-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p $PORT",
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.5.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "bcryptjs": "^2.4.3",
+    "date-fns": "^4.1.0",
+    "firebase": "^11.4.0",
+    "firebase-admin": "^13.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.483.0",
+    "next": "^15.2.4",
+    "next-auth": "^4.24.11",
+    "openai": "^4.90.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hot-toast": "^2.5.2",
+    "react-icons": "^5.5.0",
+    "recharts": "^2.15.1",
+    "twilio": "^5.5.0",
+    "zod": "^3.24.3",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.13.14",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.23.0",
+    "eslint-config-next": "^15.2.4",
+    "postcss": "^8.5.3",
+    "prisma": "^6.5.0",
+    "tailwindcss": "^4.0.17",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
