@@ -18,6 +18,7 @@ import {
   Play,
   Ban,
   CalendarPlus,
+  UserPlus,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -36,6 +37,7 @@ interface TaskDetailProps {
   onStatusChange: (taskId: string, status: TaskStatus) => void;
   onAddComment: (taskId: string, content: string) => void;
   onReschedule: (taskId: string, newDate: string, reason: string) => void;
+  onDelegate?: (taskId: string, userId: string, reason: string) => Promise<void>;
   isLoading?: boolean;
 }
 
@@ -67,6 +69,7 @@ export function TaskDetail({
   onStatusChange,
   onAddComment,
   onReschedule,
+  onDelegate,
   isLoading = false,
 }: TaskDetailProps) {
   const [comment, setComment] = useState("");
@@ -75,6 +78,10 @@ export function TaskDetail({
   const [rescheduleTime, setRescheduleTime] = useState("");
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [showConfirmStatus, setShowConfirmStatus] = useState<TaskStatus | null>(null);
+  const [showDelegateModal, setShowDelegateModal] = useState(false);
+  const [delegateUserId, setDelegateUserId] = useState("");
+  const [delegateReason, setDelegateReason] = useState("");
+  const [delegating, setDelegating] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -116,6 +123,19 @@ export function TaskDetail({
   function handleStatusChange(status: TaskStatus) {
     onStatusChange(t.id, status);
     setShowConfirmStatus(null);
+  }
+
+  async function handleDelegate() {
+    if (!onDelegate || !delegateUserId) return;
+    setDelegating(true);
+    try {
+      await onDelegate(t.id, delegateUserId, delegateReason.trim());
+      setShowDelegateModal(false);
+      setDelegateUserId("");
+      setDelegateReason("");
+    } finally {
+      setDelegating(false);
+    }
   }
 
   const whatsappPreview = `Hola ${task.assignedTo?.name || "usuario"}, tienes una tarea "${task.title}" ${task.dueDate ? `para el ${format(new Date(task.dueDate), "dd/MM/yyyy")}` : ""}. Prioridad: ${taskPriorityLabel(task.priority)}.`;
@@ -241,6 +261,17 @@ export function TaskDetail({
                         {opt.label}
                       </Button>
                     ))}
+                  {onDelegate && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      leftIcon={<UserPlus className="h-4 w-4 text-indigo-600" />}
+                      onClick={() => setShowDelegateModal(true)}
+                      disabled={isLoading}
+                    >
+                      Pasar a otro usuario
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -439,6 +470,51 @@ export function TaskDetail({
         variant={showConfirmStatus === "CANCELADA" ? "danger" : "info"}
         loading={isLoading}
       />
+
+      {onDelegate && (
+        <Modal isOpen={showDelegateModal} onClose={() => setShowDelegateModal(false)} title="Pasar tarea a otro usuario" size="md">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Selecciona el usuario al que deseas transferir la tarea <strong>{task.title}</strong>.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Nuevo responsable
+              </label>
+              <select
+                value={delegateUserId}
+                onChange={(e) => setDelegateUserId(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">Seleccionar usuario</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Motivo (opcional)
+              </label>
+              <input
+                type="text"
+                value={delegateReason}
+                onChange={(e) => setDelegateReason(e.target.value)}
+                placeholder="Ej: Reasignación de carga de trabajo"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="ghost" onClick={() => setShowDelegateModal(false)}>Cancelar</Button>
+              <Button
+                variant="primary"
+                onClick={handleDelegate}
+                isLoading={delegating}
+                disabled={!delegateUserId}
+              >
+                Transferir tarea
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Modal>
   );
 }

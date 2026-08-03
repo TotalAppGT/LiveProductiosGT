@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Brain,
   X,
@@ -9,6 +9,10 @@ import {
   Loader2,
   MessageSquare,
   Zap,
+  Mic,
+  Maximize2,
+  Minimize2,
+  Cpu,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/Button";
@@ -17,31 +21,49 @@ import { cn } from "@/lib/utils";
 
 interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: Date;
 }
 
 const QUICK_ACTIONS = [
-  { label: "Resumen del día", prompt: "Genera un resumen de las tareas y eventos del día de hoy." },
-  { label: "Tareas atrasadas", prompt: "¿Qué tareas están atrasadas o pendientes?" },
-  { label: "Sugerir asignaciones", prompt: "Sugiere asignaciones de tareas basadas en la carga actual del equipo." },
-  { label: "Estado de cobros", prompt: "¿Cuál es el estado actual de los cobros pendientes?" },
+  { label: "Resumen de hoy", prompt: "Genera un resumen de las tareas y eventos del día de hoy." },
+  { label: "Tareas atrasadas", prompt: "¿Qué tareas están atrasadas o pendientes? ¿Quién las tiene asignadas?" },
+  { label: "¿Quién no ha entrado hoy?", prompt: "¿Qué usuarios no han iniciado sesión o no han completado tareas hoy?" },
+  { label: "Eventos esta semana", prompt: "¿Cuáles son los eventos programados para esta semana y qué personal está asignado?" },
 ];
+
+const SYSTEM_PROMPT = `Eres el asistente inteligente de Live Productions, una empresa de producción de eventos en vivo ubicada en Guatemala. 
+La empresa se especializa en servicios de audio profesional, iluminación escénica, alquiler de instrumentos musicales, servicios de DJ, 
+mobiliario para eventos, y producción completa de eventos sociales y corporativos.
+
+Tu función es ayudar al personal a gestionar tareas, eventos, cobros, inventario y personal de manera eficiente.
+Responde siempre en español, sé conciso pero amable, y proporciona información útil basada en los datos disponibles.
+Cuando no tengas suficiente información, indica claramente qué datos necesitarías para ayudar mejor.`;
+
+interface AIChatContext {
+  user: { name: string; role: string };
+  todayTasks: { title: string; status: string; assignedTo?: string }[];
+  upcomingEvents: { name: string; date: string; status: string }[];
+  provider?: string;
+  model?: string;
+}
 
 export function AIChat() {
   const { user, token } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: `¡Hola ${user?.name?.split(" ")[0] || ""}! Soy tu asistente inteligente de Live Productions. Puedo ayudarte con:\n\n• Resumen de tareas y eventos\n• Sugerencias de asignación\n• Análisis de productividad\n• Estado de cobros\n\n¿En qué puedo ayudarte hoy?`,
+      content: `¡Hola ${user?.name?.split(" ")[0] || ""}! Soy tu asistente inteligente de Live Productions. Puedo ayudarte con:\n\n• Resumen de tareas y eventos del día\n• Análisis de cumplimiento del equipo\n• Sugerencias de asignación de personal\n• Estado de cobros y facturación\n• Consultas sobre inventario y equipo\n\n¿En qué puedo ayudarte hoy?`,
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [aiInfo, setAIInfo] = useState<{ provider: string; model: string }>({ provider: "DeepSeek", model: "deepseek-chat" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -54,6 +76,76 @@ export function AIChat() {
       inputRef.current?.focus();
     }
   }, [isOpen]);
+
+  const fetchContext = useCallback(async (): Promise<AIChatContext> => {
+    const ctx: AIChatContext = {
+      user: { name: user?.name || "Usuario", role: user?.role || "EMPLEADO" },
+      todayTasks: [],
+      upcomingEvents: [],
+    };
+    if (!token) return ctx;
+
+    try {
+      const tRes = await fetch("/api/tasks?dueDate=today&limit=20", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (tRes.ok) {
+        const tJson = await tRes.json();
+        if (tJson.success && tJson.data) {
+          ctx.todayTasks = tJson.data.map((t: { title: string; status: string; assignedTo?: { name: string } }) => ({
+            title: t.title,
+            status: t.status,
+            assignedTo: t.assignedTo?.name,
+          }));
+        }
+      }
+    } catch { /* */ }
+
+    try {
+      const eRes = await fetch("/api/events/upcoming?limit=10", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (eRes.ok) {
+        const eJson = await eRes.json();
+        if (eJson.success && eJson.data) {
+          ctx.upcomingEvents = eJson.data.map((e: { name: string; date: string; status: string }) => ({
+            name: e.name,
+            date: e.date,
+            status: e.status,
+          }));
+        }
+      }
+    } catch { /* */ }
+
+    return ctx;
+  }, [token, user]);
+
+  useEffect(() => {
+    const loadAIInfo = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch("/api/admin/ai-settings", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            const providers: Record<string, string> = {
+              deepseek: "DeepSeek",
+              openai: "OpenAI",
+              openrouter: "OpenRouter",
+              nvidia: "NVIDIA NIM",
+            };
+            setAIInfo({
+              provider: providers[json.data.provider] || json.data.provider || "DeepSeek",
+              model: json.data.model || "deepseek-chat",
+            });
+          }
+        }
+      } catch { /* */ }
+    };
+    loadAIInfo();
+  }, [token]);
 
   async function sendMessage(content: string) {
     if (!content.trim() || isLoading) return;
@@ -70,13 +162,19 @@ export function AIChat() {
     setIsLoading(true);
 
     try {
+      const context = await fetchContext();
+
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ message: content.trim() }),
+        body: JSON.stringify({
+          message: content.trim(),
+          systemPrompt: SYSTEM_PROMPT,
+          context,
+        }),
       });
 
       if (!res.ok) throw new Error("Error en la respuesta");
@@ -131,22 +229,38 @@ export function AIChat() {
           <Brain className="h-6 w-6 text-white" />
         )}
         {!isOpen && (
-          <span className="absolute -top-1 -right-1 h-4 w-4 bg-green-400 rounded-full border-2 border-white dark:border-gray-900 animate-pulse-dot" />
+          <span className="absolute -top-1 -right-1 h-4 w-4 bg-green-400 rounded-full border-2 border-white dark:border-gray-900 animate-pulse" />
         )}
       </button>
 
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[600px] max-h-[calc(100vh-8rem)] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden animate-slide-up">
+        <div
+          className={cn(
+            "fixed z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden animate-slide-up",
+            isFullscreen
+              ? "inset-4 rounded-none sm:inset-6"
+              : "bottom-24 right-6 w-[380px] max-w-[calc(100vw-2rem)] h-[600px] max-h-[calc(100vh-8rem)]"
+          )}
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-600 to-blue-600">
             <div className="flex items-center gap-2">
               <Brain className="h-5 w-5 text-white" />
               <div>
                 <h3 className="text-sm font-semibold text-white">Asistente IA</h3>
-                <p className="text-xs text-purple-200">Live Productions</p>
+                <p className="text-xs text-purple-200 flex items-center gap-1">
+                  {aiInfo.provider} · {aiInfo.model}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <span className="flex h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="flex h-2 w-2 rounded-full bg-green-400" />
+              <button
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                title={isFullscreen ? "Reducir" : "Pantalla completa"}
+              >
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
               <button
                 onClick={() => setIsOpen(false)}
                 className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
@@ -208,6 +322,7 @@ export function AIChat() {
                 </div>
                 <div className="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-bl-md px-4 py-3">
                   <div className="flex items-center gap-1.5">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mr-2">Pensando...</p>
                     <span className="h-2 w-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                     <span className="h-2 w-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
                     <span className="h-2 w-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
@@ -243,6 +358,13 @@ export function AIChat() {
             onSubmit={handleSubmit}
             className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700"
           >
+            <button
+              type="button"
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="Nota de voz (próximamente)"
+            >
+              <Mic className="h-4 w-4" />
+            </button>
             <Input
               ref={inputRef}
               value={input}

@@ -328,6 +328,41 @@ model Activity {
   user User @relation(fields: [userId], references: [id])
 }
 
+model AISettings {
+  id           String   @id @default(uuid())
+  provider     String   @default("DEEPSEEK")
+  apiKey       String   @default("")
+  model        String   @default("deepseek-chat")
+  baseUrl      String   @default("https://api.deepseek.com/v1")
+  temperature  Float    @default(0.7)
+  maxTokens    Int      @default(2000)
+  systemPrompt String   @default("Eres el asistente de Live Productions Guatemala...") @db.Text
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String   @default("")
+  updatedAt   DateTime @updatedAt
+}
+
+model WhatsAppConfig {
+  id            String   @id @default(uuid())
+  phoneNumberId String   @default("")
+  accessToken   String   @default("")
+  verifyToken   String   @default("")
+  businessPhone String   @default("")
+  webhookUrl    String   @default("")
+  qrCodeUrl     String   @default("")
+  isActive      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 model WhatsAppMessage {
   id            String               @id @default(cuid())
   userId        String

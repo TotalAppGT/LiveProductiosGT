@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Settings,
   Shield,
-  Users,
   Activity,
   MessageCircle,
   Brain,
@@ -13,10 +12,19 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Database,
+  Webhook,
+  QrCode,
+  Send,
+  SlidersHorizontal,
+  Filter,
+  Cpu,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs, TabList, Tab, TabPanel } from "@/components/ui/Tabs";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -24,18 +32,111 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, cn } from "@/lib/utils";
 import type { Activity as ActivityType, ApiResponse } from "@/types";
 
+interface AISettings {
+  provider: string;
+  apiKey: string;
+  model: string;
+  temperature: number;
+}
+
+interface WhatsAppSettings {
+  phoneNumberId: string;
+  accessToken: string;
+  verifyToken: string;
+  businessPhone: string;
+  webhookUrl: string;
+}
+
+interface SystemHealth {
+  db: boolean;
+  ai: boolean;
+  whatsapp: boolean;
+  firebase: boolean;
+}
+
+const AI_PROVIDERS = [
+  { value: "deepseek", label: "DeepSeek", models: ["deepseek-chat", "deepseek-reasoner"] },
+  { value: "openai", label: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"] },
+  { value: "openrouter", label: "OpenRouter", models: ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-pro"] },
+  { value: "nvidia", label: "NVIDIA NIM", models: ["meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b"] },
+];
+
 export default function AdminPage() {
   const { user, token } = useAuth();
   const [activities, setActivities] = useState<ActivityType[]>([]);
+  const [activityFilter, setActivityFilter] = useState("");
   const [loading, setLoading] = useState(true);
-  const [systemHealth, setSystemHealth] = useState<{
-    db: boolean;
-    ai: boolean;
-    firebase: boolean;
-    whatsapp: boolean;
-  } | null>(null);
+  const [systemHealth, setSystemHealth] = useState<SystemHealth>({
+    db: false,
+    ai: false,
+    whatsapp: false,
+    firebase: false,
+  });
+  const [healthChecking, setHealthChecking] = useState(false);
+
+  const [aiSettings, setAISettings] = useState<AISettings>({
+    provider: "deepseek",
+    apiKey: "",
+    model: "deepseek-chat",
+    temperature: 0.7,
+  });
+  const [aiSaving, setAISaving] = useState(false);
+  const [aiTesting, setAITesting] = useState(false);
+
+  const [whatsappSettings, setWhatsappSettings] = useState<WhatsAppSettings>({
+    phoneNumberId: "",
+    accessToken: "",
+    verifyToken: "",
+    businessPhone: "",
+    webhookUrl: "",
+  });
+  const [whatsappSaving, setWhatsappSaving] = useState(false);
+  const [whatsappTesting, setWhatsappTesting] = useState(false);
+  const [testMessage, setTestMessage] = useState("");
 
   const canAccess = user?.role === "DUENO" || user?.role === "ADMIN";
+
+  const fetchAISettings = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/admin/ai-settings", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json: ApiResponse<AISettings> = await res.json();
+        if (json.success && json.data) {
+          setAISettings((prev) => ({
+            ...prev,
+            ...json.data,
+            apiKey: json.data.apiKey ? "••••••••" : "",
+          }));
+        }
+      }
+    } catch {
+      // silent
+    }
+  }, [token]);
+
+  const fetchWhatsAppSettings = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/admin/whatsapp-settings", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json: ApiResponse<WhatsAppSettings> = await res.json();
+        if (json.success && json.data) {
+          setWhatsappSettings((prev) => ({
+            ...prev,
+            ...json.data,
+            accessToken: json.data.accessToken ? "••••••••" : "",
+          }));
+        }
+      }
+    } catch {
+      // silent
+    }
+  }, [token]);
 
   const fetchActivities = useCallback(async () => {
     if (!token) return;
@@ -45,7 +146,7 @@ export default function AdminPage() {
       });
       if (res.ok) {
         const json = await res.json();
-        if (json.success && json.data) setActivities(json.data.slice(0, 50));
+        if (json.success && json.data) setActivities(json.data.slice(0, 100));
       }
     } catch {
       // silent
@@ -56,37 +157,138 @@ export default function AdminPage() {
 
   const checkSystemHealth = useCallback(async () => {
     if (!token) return;
+    setHealthChecking(true);
+    const health: SystemHealth = { db: false, ai: false, whatsapp: false, firebase: false };
     try {
-      const res = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ message: "ping" }),
-      });
-      setSystemHealth({
-        db: true,
-        ai: res.ok,
-        firebase: true,
-        whatsapp: true,
-      });
-    } catch {
-      setSystemHealth({
-        db: true,
-        ai: false,
-        firebase: true,
-        whatsapp: false,
-      });
-    }
+      const dbRes = await fetch("/api/health/db", { headers: { Authorization: `Bearer ${token}` } });
+      health.db = dbRes.ok;
+    } catch { /* */ }
+    try {
+      const aiRes = await fetch("/api/health/ai", { headers: { Authorization: `Bearer ${token}` } });
+      health.ai = aiRes.ok;
+    } catch { /* */ }
+    try {
+      const waRes = await fetch("/api/health/whatsapp", { headers: { Authorization: `Bearer ${token}` } });
+      health.whatsapp = waRes.ok;
+    } catch { /* */ }
+    health.firebase = true;
+    setSystemHealth(health);
+    setHealthChecking(false);
   }, [token]);
 
   useEffect(() => {
     if (canAccess) {
       fetchActivities();
       checkSystemHealth();
+      fetchAISettings();
+      fetchWhatsAppSettings();
     }
-  }, [canAccess, fetchActivities, checkSystemHealth]);
+  }, [canAccess, fetchActivities, checkSystemHealth, fetchAISettings, fetchWhatsAppSettings]);
+
+  async function saveAISettings() {
+    if (!token) return;
+    setAISaving(true);
+    try {
+      const res = await fetch("/api/admin/ai-settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(aiSettings),
+      });
+      if (!res.ok) throw new Error("Error al guardar");
+      toast.success("Configuración de IA guardada");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al guardar");
+    } finally {
+      setAISaving(false);
+    }
+  }
+
+  async function testAIConnection() {
+    if (!token) return;
+    setAITesting(true);
+    try {
+      const res = await fetch("/api/admin/ai-test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(aiSettings),
+      });
+      if (res.ok) {
+        toast.success("Conexión IA exitosa");
+        setSystemHealth((prev) => ({ ...prev, ai: true }));
+      } else {
+        throw new Error("Error de conexión");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al probar conexión IA");
+      setSystemHealth((prev) => ({ ...prev, ai: false }));
+    } finally {
+      setAITesting(false);
+    }
+  }
+
+  async function saveWhatsAppSettings() {
+    if (!token) return;
+    setWhatsappSaving(true);
+    try {
+      const res = await fetch("/api/admin/whatsapp-settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(whatsappSettings),
+      });
+      if (!res.ok) throw new Error("Error al guardar");
+      toast.success("Configuración de WhatsApp guardada");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al guardar");
+    } finally {
+      setWhatsappSaving(false);
+    }
+  }
+
+  async function testWhatsAppMessage() {
+    if (!token || !testMessage.trim()) {
+      toast.error("Escribe un mensaje de prueba");
+      return;
+    }
+    setWhatsappTesting(true);
+    try {
+      const res = await fetch("/api/admin/whatsapp-test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message: testMessage }),
+      });
+      if (res.ok) {
+        toast.success("Mensaje de prueba enviado");
+        setSystemHealth((prev) => ({ ...prev, whatsapp: true }));
+      } else {
+        throw new Error("Error al enviar");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al probar WhatsApp");
+      setSystemHealth((prev) => ({ ...prev, whatsapp: false }));
+    } finally {
+      setWhatsappTesting(false);
+    }
+  }
+
+  const filteredActivities = activityFilter
+    ? activities.filter((a) =>
+        a.action.toLowerCase().includes(activityFilter.toLowerCase()) ||
+        (a.user?.name || "").toLowerCase().includes(activityFilter.toLowerCase()) ||
+        (a.resource || "").toLowerCase().includes(activityFilter.toLowerCase())
+      )
+    : activities;
 
   if (!canAccess) {
     return (
@@ -109,314 +311,441 @@ export default function AdminPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="health">
+      <Tabs defaultValue="ai">
         <TabList className="overflow-x-auto flex-nowrap">
-          <Tab value="health">Salud</Tab>
-          <Tab value="settings">Config</Tab>
-          <Tab value="activity">Actividad</Tab>
-          <Tab value="ai">IA & WhatsApp</Tab>
+          <Tab value="ai">
+            <span className="flex items-center gap-1.5">
+              <Brain className="h-4 w-4" />
+              <span className="hidden sm:inline">IA & Modelos</span>
+            </span>
+          </Tab>
+          <Tab value="whatsapp">
+            <span className="flex items-center gap-1.5">
+              <MessageCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">WhatsApp</span>
+            </span>
+          </Tab>
+          <Tab value="system">
+            <span className="flex items-center gap-1.5">
+              <Server className="h-4 w-4" />
+              <span className="hidden sm:inline">Sistema</span>
+            </span>
+          </Tab>
+          <Tab value="activity">
+            <span className="flex items-center gap-1.5">
+              <Activity className="h-4 w-4" />
+              <span className="hidden sm:inline">Actividad</span>
+            </span>
+          </Tab>
         </TabList>
-
-        <TabPanel value="health">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {[
-              {
-                label: "Base de Datos",
-                icon: Server,
-                ok: systemHealth?.db,
-              },
-              {
-                label: "Inteligencia Artificial",
-                icon: Brain,
-                ok: systemHealth?.ai,
-              },
-              {
-                label: "Firebase Auth",
-                icon: Shield,
-                ok: systemHealth?.firebase,
-              },
-              {
-                label: "WhatsApp API",
-                icon: MessageCircle,
-                ok: systemHealth?.whatsapp,
-              },
-            ].map((item) => (
-              <Card key={item.label} variant="bordered" className="p-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      "h-10 w-10 rounded-lg flex items-center justify-center",
-                      item.ok === undefined
-                        ? "bg-gray-100 dark:bg-gray-700"
-                        : item.ok
-                        ? "bg-green-500/10"
-                        : "bg-red-500/10"
-                    )}
-                  >
-                    <item.icon
-                      className={cn(
-                        "h-5 w-5",
-                        item.ok === undefined
-                          ? "text-gray-400"
-                          : item.ok
-                          ? "text-green-500"
-                          : "text-red-500"
-                      )}
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {item.label}
-                    </p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {item.ok === undefined ? (
-                        <span className="text-xs text-gray-400">Verificando...</span>
-                      ) : item.ok ? (
-                        <>
-                          <CheckCircle2 className="h-3 w-3 text-green-500" />
-                          <span className="text-xs text-green-600">Operativo</span>
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-3 w-3 text-red-500" />
-                          <span className="text-xs text-red-600">Error</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          <Card variant="bordered" className="p-6 mt-6">
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
-              Información del Sistema
-            </h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-gray-500">Framework</p>
-                <p className="text-gray-700 dark:text-gray-300">Next.js 15 + React 19</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Base de Datos</p>
-                <p className="text-gray-700 dark:text-gray-300">Prisma + PostgreSQL</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Autenticación</p>
-                <p className="text-gray-700 dark:text-gray-300">Firebase Auth</p>
-              </div>
-              <div>
-                <p className="text-gray-500">IA</p>
-                <p className="text-gray-700 dark:text-gray-300">DeepSeek API</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Mensajería</p>
-                <p className="text-gray-700 dark:text-gray-300">Twilio WhatsApp</p>
-              </div>
-              <div>
-                <p className="text-gray-500">UI</p>
-                <p className="text-gray-700 dark:text-gray-300">Tailwind CSS 4 + Lucide Icons</p>
-              </div>
-            </div>
-          </Card>
-        </TabPanel>
-
-        <TabPanel value="settings">
-          <Card variant="bordered" className="p-6">
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
-              Configuración del Sistema
-            </h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    Notificaciones WhatsApp
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Activar recordatorios automáticos por WhatsApp
-                  </p>
-                </div>
-                <Button variant="outline" size="sm">Configurar</Button>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    Recordatorios de Tareas
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Enviar recordatorios antes del vencimiento
-                  </p>
-                </div>
-                <Button variant="outline" size="sm">Configurar</Button>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    Reportes Automáticos
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Generar resúmenes diarios con IA
-                  </p>
-                </div>
-                <Button variant="outline" size="sm">Configurar</Button>
-              </div>
-            </div>
-          </Card>
-        </TabPanel>
-
-        <TabPanel value="activity">
-          {loading ? (
-            <LoadingSpinner text="Cargando actividad..." />
-          ) : activities.length === 0 ? (
-            <EmptyState
-              icon={<Activity className="h-16 w-16" />}
-              title="Sin actividad"
-              description="No hay registros de actividad aún."
-            />
-          ) : (
-            <Card variant="bordered" className="overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Usuario</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Acción</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Recurso</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {activities.map((act) => (
-                      <tr key={act.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-gray-900 dark:text-white">
-                            {act.user?.name || "Sistema"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-gray-600 dark:text-gray-300">
-                            {act.action}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-gray-500">
-                            {act.resource}
-                            {act.resourceId && ` #${act.resourceId}`}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-gray-400 flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatDate(act.createdAt)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-        </TabPanel>
 
         <TabPanel value="ai">
           <div className="space-y-6">
             <Card variant="bordered" className="p-6">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 mb-6">
+                <div className={cn(
+                  "h-3 w-3 rounded-full",
+                  systemHealth.ai ? "bg-green-500" : "bg-red-500"
+                )} />
                 <Brain className="h-6 w-6 text-purple-500" />
                 <h3 className="font-semibold text-gray-900 dark:text-white">
-                  Configuración de IA
+                  Configuración de IA & Modelos
                 </h3>
               </div>
+
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Key className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        API Key DeepSeek
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {systemHealth?.ai
-                          ? "Configurada y funcionando"
-                          : "No configurada o con error"}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    size="sm"
-                    color={systemHealth?.ai ? "green" : "red"}
-                    dot
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Proveedor de IA
+                  </label>
+                  <select
+                    value={aiSettings.provider}
+                    onChange={(e) => {
+                      const provider = e.target.value;
+                      const providerData = AI_PROVIDERS.find((p) => p.value === provider);
+                      setAISettings((prev) => ({
+                        ...prev,
+                        provider,
+                        model: providerData?.models[0] || prev.model,
+                      }));
+                    }}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   >
-                    {systemHealth?.ai ? "Activo" : "Error"}
-                  </Badge>
+                    {AI_PROVIDERS.map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      Resumen Diario
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Generar resumen automático de tareas cada día
-                    </p>
+
+                <Input
+                  label="API Key"
+                  type="password"
+                  placeholder="sk-..."
+                  value={aiSettings.apiKey}
+                  onChange={(e) => setAISettings((prev) => ({ ...prev, apiKey: e.target.value }))}
+                />
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Modelo
+                  </label>
+                  <select
+                    value={aiSettings.model}
+                    onChange={(e) => setAISettings((prev) => ({ ...prev, model: e.target.value }))}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    {(AI_PROVIDERS.find((p) => p.value === aiSettings.provider)?.models || []).map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Temperatura: {aiSettings.temperature.toFixed(1)}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value={aiSettings.temperature}
+                    onChange={(e) => setAISettings((prev) => ({ ...prev, temperature: parseFloat(e.target.value) }))}
+                    className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>Preciso (0)</span>
+                    <span>Creativo (2)</span>
                   </div>
-                  <Badge size="sm" color="green" dot>Activo</Badge>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={testAIConnection}
+                    isLoading={aiTesting}
+                    leftIcon={<CheckCircle2 className="h-4 w-4" />}
+                  >
+                    Probar Conexión
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={saveAISettings}
+                    isLoading={aiSaving}
+                    leftIcon={<Cpu className="h-4 w-4" />}
+                  >
+                    Guardar Configuración
+                  </Button>
                 </div>
               </div>
             </Card>
+          </div>
+        </TabPanel>
 
+        <TabPanel value="whatsapp">
+          <div className="space-y-6">
             <Card variant="bordered" className="p-6">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 mb-6">
+                <div className={cn(
+                  "h-3 w-3 rounded-full",
+                  systemHealth.whatsapp ? "bg-green-500" : "bg-red-500"
+                )} />
                 <MessageCircle className="h-6 w-6 text-green-500" />
                 <h3 className="font-semibold text-gray-900 dark:text-white">
-                  Notificaciones WhatsApp
+                  Configuración de WhatsApp Cloud API
                 </h3>
               </div>
+
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      Estado del servicio
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {systemHealth?.whatsapp
-                        ? "Conectado a Twilio WhatsApp API"
-                        : "Error de conexión"}
+                <Input
+                  label="Phone Number ID"
+                  placeholder="123456789012345"
+                  value={whatsappSettings.phoneNumberId}
+                  onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, phoneNumberId: e.target.value }))}
+                />
+                <Input
+                  label="Access Token"
+                  type="password"
+                  placeholder="EAA..."
+                  value={whatsappSettings.accessToken}
+                  onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, accessToken: e.target.value }))}
+                />
+                <Input
+                  label="Verify Token (Webhook)"
+                  placeholder="tu-token-de-verificacion"
+                  value={whatsappSettings.verifyToken}
+                  onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, verifyToken: e.target.value }))}
+                />
+                <Input
+                  label="Número de WhatsApp del Negocio"
+                  placeholder="+502 5555-5555"
+                  value={whatsappSettings.businessPhone}
+                  onChange={(e) => setWhatsappSettings((prev) => ({ ...prev, businessPhone: e.target.value }))}
+                />
+
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Webhook className="h-5 w-5 text-blue-500" />
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                      Configuración del Webhook
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">URL del Webhook (copia esta URL en Meta Developer Console)</p>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded px-2 py-1.5 flex-1 break-all">
+                          {whatsappSettings.webhookUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/whatsapp`}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const url = whatsappSettings.webhookUrl || `${window.location.origin}/api/webhooks/whatsapp`;
+                            navigator.clipboard.writeText(url);
+                            toast.success("URL copiada al portapapeles");
+                          }}
+                        >
+                          Copiar
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <Webhook className="h-4 w-4 text-blue-500" />
+                      </div>
+                      <div className="text-xs text-blue-700 dark:text-blue-400">
+                        <p className="font-medium mb-1">Instrucciones:</p>
+                        <ol className="list-decimal ml-3 space-y-0.5">
+                          <li>Ve a Meta Developer Console &gt; WhatsApp &gt; Configuration</li>
+                          <li>Pega la URL del webhook en el campo "Callback URL"</li>
+                          <li>Ingresa el Verify Token configurado arriba</li>
+                          <li>Suscríbete a los eventos "messages"</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <QrCode className="h-5 w-5 text-gray-500" />
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                      QR Code (Conexión futura)
+                    </h4>
+                  </div>
+                  <div className="flex items-center justify-center h-32 bg-white dark:bg-gray-700 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+                    <p className="text-sm text-gray-400 dark:text-gray-500">
+                      Escanea el QR desde WhatsApp Business App
                     </p>
                   </div>
-                  <Badge
-                    size="sm"
-                    color={systemHealth?.whatsapp ? "green" : "red"}
-                    dot
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Probar envío de mensaje
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Mensaje de prueba..."
+                      value={testMessage}
+                      onChange={(e) => setTestMessage(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="primary"
+                      onClick={testWhatsAppMessage}
+                      isLoading={whatsappTesting}
+                      leftIcon={<Send className="h-4 w-4" />}
+                    >
+                      Enviar
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button
+                    variant="primary"
+                    onClick={saveWhatsAppSettings}
+                    isLoading={whatsappSaving}
+                    leftIcon={<MessageCircle className="h-4 w-4" />}
                   >
-                    {systemHealth?.whatsapp ? "Conectado" : "Error"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      Recordatorios de tareas
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Enviar recordatorio 1 hora antes del vencimiento
-                    </p>
-                  </div>
-                  <Badge size="sm" color="green" dot>Activo</Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      Alertas de equipo dañado
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Notificar cuando equipo se reporta como dañado
-                    </p>
-                  </div>
-                  <Badge size="sm" color="green" dot>Activo</Badge>
+                    Guardar Configuración
+                  </Button>
                 </div>
               </div>
             </Card>
+          </div>
+        </TabPanel>
+
+        <TabPanel value="system">
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {[
+                { label: "Base de Datos", icon: Database, ok: systemHealth.db },
+                { label: "Inteligencia Artificial", icon: Brain, ok: systemHealth.ai },
+                { label: "Firebase Auth", icon: Shield, ok: systemHealth.firebase },
+                { label: "WhatsApp API", icon: MessageCircle, ok: systemHealth.whatsapp },
+              ].map((item) => (
+                <Card key={item.label} variant="bordered" className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "h-10 w-10 rounded-lg flex items-center justify-center",
+                        item.ok
+                          ? "bg-green-500/10"
+                          : "bg-red-500/10"
+                      )}
+                    >
+                      <item.icon
+                        className={cn(
+                          "h-5 w-5",
+                          item.ok ? "text-green-500" : "text-red-500"
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {item.label}
+                      </p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {item.ok ? (
+                          <>
+                            <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            <span className="text-xs text-green-600">Operativo</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-3 w-3 text-red-500" />
+                            <span className="text-xs text-red-600">Error</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                onClick={checkSystemHealth}
+                isLoading={healthChecking}
+                leftIcon={<Server className="h-4 w-4" />}
+              >
+                Verificar Todo
+              </Button>
+            </div>
+
+            <Card variant="bordered" className="p-6">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
+                Información del Sistema
+              </h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500">Framework</p>
+                  <p className="text-gray-700 dark:text-gray-300">Next.js 15 + React 19</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Base de Datos</p>
+                  <p className="text-gray-700 dark:text-gray-300">Prisma + PostgreSQL</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Autenticación</p>
+                  <p className="text-gray-700 dark:text-gray-300">Firebase Auth</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">IA</p>
+                  <p className="text-gray-700 dark:text-gray-300">
+                    {AI_PROVIDERS.find((p) => p.value === aiSettings.provider)?.label || "DeepSeek"} API
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Mensajería</p>
+                  <p className="text-gray-700 dark:text-gray-300">WhatsApp Cloud API</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">UI</p>
+                  <p className="text-gray-700 dark:text-gray-300">Tailwind CSS 4 + Lucide Icons</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </TabPanel>
+
+        <TabPanel value="activity">
+          <div className="space-y-4">
+            <div className="relative">
+              <Filter className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="Filtrar actividad..."
+                value={activityFilter}
+                onChange={(e) => setActivityFilter(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            {loading ? (
+              <LoadingSpinner text="Cargando actividad..." />
+            ) : filteredActivities.length === 0 ? (
+              <EmptyState
+                icon={<Activity className="h-16 w-16" />}
+                title="Sin actividad"
+                description="No hay registros de actividad para los filtros actuales."
+              />
+            ) : (
+              <Card variant="bordered" className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Usuario</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Acción</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Recurso</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Detalles</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {filteredActivities.map((act) => (
+                        <tr key={act.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-gray-900 dark:text-white">
+                              {act.user?.name || "Sistema"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-gray-600 dark:text-gray-300">
+                              {act.action}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-gray-500">
+                              {act.resource}
+                              {act.resourceId && (
+                                <span className="text-gray-400 ml-1">#{act.resourceId.slice(0, 8)}</span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-gray-400 max-w-[200px] truncate block">
+                              {act.details || "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-gray-400 flex items-center gap-1 whitespace-nowrap">
+                              <Clock className="h-3 w-3" />
+                              {formatDate(act.createdAt)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
           </div>
         </TabPanel>
       </Tabs>

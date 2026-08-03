@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   CheckSquare,
   Calendar,
+  ClipboardCheck,
   Package,
   Users,
   DollarSign,
@@ -38,6 +39,12 @@ const navItems: NavItem[] = [
     label: "Tareas",
     href: "/tareas",
     icon: CheckSquare,
+  },
+  {
+    label: "Cumplimiento",
+    href: "/cumplimiento",
+    icon: ClipboardCheck,
+    roles: ["DUENO", "ADMIN", "JEFE"],
   },
   {
     label: "Eventos",

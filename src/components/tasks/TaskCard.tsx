@@ -11,6 +11,7 @@ import {
   Clock,
   User,
   ExternalLink,
+  UserPlus,
 } from "lucide-react";
 import { format, formatDistanceToNow, isToday, isTomorrow, isPast } from "date-fns";
 import { es } from "date-fns/locale";
@@ -26,6 +27,8 @@ interface TaskCardProps {
   onReschedule: (task: Task) => void;
   onComment: (task: Task) => void;
   onClick: (task: Task) => void;
+  onDelegate?: (task: Task) => void;
+  showDelegate?: boolean;
   className?: string;
 }
 
@@ -73,6 +76,8 @@ export function TaskCard({
   onReschedule,
   onComment,
   onClick,
+  onDelegate,
+  showDelegate = false,
   className,
 }: TaskCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -204,6 +209,18 @@ export function TaskCard({
                 </span>
               )}
             </button>
+            {showDelegate && onDelegate && !isCompleted && !isCancelled && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelegate(task);
+                }}
+                className="p-1.5 rounded-lg text-indigo-500 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/20 transition-colors"
+                title="Pasar a otro usuario"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();

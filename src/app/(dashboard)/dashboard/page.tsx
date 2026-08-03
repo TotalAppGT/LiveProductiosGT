@@ -14,6 +14,8 @@ import {
   User,
   TrendingUp,
   ArrowUpRight,
+  Users as UsersIcon,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   BarChart,
@@ -69,6 +71,12 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [compliance, setCompliance] = useState<{
+    totalComplianceRate: number;
+    activeUsers: number;
+    inactiveUsers: number;
+    totalPendingTasks: number;
+  } | null>(null);
 
   const today = new Date();
   const formattedDate = `${getDayName(today)}, ${formatDate(today)}`;
@@ -99,14 +107,37 @@ export default function DashboardPage() {
     fetchDashboard();
   }, [fetchDashboard]);
 
+  const isAdminOrOwner = user?.role === "DUENO" || user?.role === "ADMIN";
+
+  useEffect(() => {
+    const fetchCompliance = async () => {
+      if (!token || !isAdminOrOwner) return;
+      try {
+        const res = await fetch("/api/cumplimiento?filter=today", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            setCompliance({
+              totalComplianceRate: json.data.totalComplianceRate,
+              activeUsers: json.data.activeUsers,
+              inactiveUsers: json.data.inactiveUsers,
+              totalPendingTasks: json.data.totalPendingTasks,
+            });
+          }
+        }
+      } catch { /* */ }
+    };
+    if (!loading) fetchCompliance();
+  }, [token, loading, isAdminOrOwner]);
+
   const chartData = [
     { name: "Pendiente", value: data?.stats.pendingTasks || 0, fill: "#eab308" },
     { name: "Hoy", value: data?.stats.completedTasksToday || 0, fill: "#22c55e" },
     { name: "Eventos", value: data?.stats.eventsThisWeek || 0, fill: "#3b82f6" },
     { name: "Cobros", value: data?.stats.pendingCobros || 0, fill: "#f97316" },
   ];
-
-  const isAdminOrOwner = user?.role === "DUENO" || user?.role === "ADMIN";
 
   const statCards = [
     {
@@ -369,6 +400,61 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      {isAdminOrOwner && compliance && (
+        <Card variant="bordered" className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <ClipboardCheck className="h-5 w-5 text-blue-500" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Cumplimiento del Equipo Hoy
+              </h2>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => router.push("/cumplimiento")}>
+              Ver detalle <ArrowUpRight className="h-3 w-3 ml-1" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {compliance.totalComplianceRate.toFixed(0)}%
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Cumplimiento General</p>
+              <div className="mt-2 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    compliance.totalComplianceRate >= 80
+                      ? "bg-green-500"
+                      : compliance.totalComplianceRate >= 50
+                      ? "bg-orange-400"
+                      : "bg-red-500"
+                  )}
+                  style={{ width: `${compliance.totalComplianceRate}%` }}
+                />
+              </div>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                {compliance.activeUsers}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Usuarios Activos</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                {compliance.inactiveUsers}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Sin Actividad</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                {compliance.totalPendingTasks}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tareas Pendientes</p>
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

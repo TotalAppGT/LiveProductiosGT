@@ -81,6 +81,62 @@ async function main() {
   }
 
   await createOrSyncFirebaseUser(adminEmail, adminPassword, adminUser.id);
+
+  // === Default AI Settings ===
+  const existingAISettings = await prisma.aISettings.findFirst();
+  if (!existingAISettings) {
+    await prisma.aISettings.create({
+      data: {
+        provider: "DEEPSEEK",
+        apiKey: process.env.DEEPSEEK_API_KEY || "",
+        model: "deepseek-chat",
+        baseUrl: "https://api.deepseek.com/v1",
+        temperature: 0.7,
+        maxTokens: 2000,
+        systemPrompt: "Eres el asistente de Live Productions Guatemala, una empresa de producción de eventos en vivo. Ayudas con gestión de tareas, planificación de eventos, inventario de equipos profesionales, vehículos, cobros y personal. Responde en español de manera profesional y concisa.",
+        isActive: true,
+      },
+    });
+    console.log("Default AI settings creado");
+  }
+
+  // === Default WhatsApp Config ===
+  const existingWhatsAppConfig = await prisma.whatsAppConfig.findFirst();
+  if (!existingWhatsAppConfig) {
+    await prisma.whatsAppConfig.create({
+      data: {
+        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+        accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+        verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || "",
+        businessPhone: "+50230903172",
+        webhookUrl: "",
+        qrCodeUrl: "",
+        isActive: false,
+      },
+    });
+    console.log("Default WhatsApp config creado");
+  }
+
+  // === Default System Configs ===
+  const defaultConfigs = [
+    { key: "company.name", value: "Live Productions Guatemala", description: "Nombre de la empresa" },
+    { key: "company.slogan", value: "Producción de eventos en vivo", description: "Eslogan de la empresa" },
+    { key: "company.phone", value: "+50230903172", description: "Teléfono principal" },
+    { key: "system.timezone", value: "America/Guatemala", description: "Zona horaria" },
+    { key: "system.currency", value: "GTQ", description: "Moneda principal" },
+    { key: "notifications.overdue_hours_1", value: "1", description: "Horas para primera alerta de vencimiento" },
+    { key: "notifications.overdue_hours_2", value: "3", description: "Horas para segunda alerta de vencimiento" },
+    { key: "notifications.overdue_hours_escalate", value: "6", description: "Horas para escalar a administradores" },
+    { key: "compliance.min_completion_rate", value: "50", description: "Tasa mínima de completación esperada" },
+  ];
+
+  for (const cfg of defaultConfigs) {
+    const existing = await prisma.systemConfig.findUnique({ where: { key: cfg.key } });
+    if (!existing) {
+      await prisma.systemConfig.create({ data: cfg });
+      console.log(`SystemConfig creado: ${cfg.key}`);
+    }
+  }
 }
 
 main()
