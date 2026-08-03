@@ -5,8 +5,8 @@ const prisma = new PrismaClient();
 
 async function createOrSyncFirebaseUser(adminEmail: string, adminPassword: string, userId: string) {
   try {
-    const admin = require("firebase-admin");
-    if (!admin.apps.length) {
+    const admin = await import("firebase-admin");
+    if (!admin.apps || !admin.apps.length) {
       const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
       if (!privateKey || !process.env.FIREBASE_ADMIN_PROJECT_ID || !process.env.FIREBASE_ADMIN_CLIENT_EMAIL) {
         console.warn("Firebase Admin vars missing, skipping Firebase Auth sync");
@@ -20,7 +20,7 @@ async function createOrSyncFirebaseUser(adminEmail: string, adminPassword: strin
         }),
       });
     }
-    const auth = admin.auth();
+    const auth = admin.getAuth();
     try {
       const fbUser = await auth.getUserByEmail(adminEmail);
       console.log(`Usuario Firebase ya existe: ${fbUser.uid}`);
