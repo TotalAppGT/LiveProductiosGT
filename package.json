@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start -p $PORT",
+    "start": "npx prisma db push --accept-data-loss && next start -p $PORT",
     "lint": "next lint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -26,6 +26,7 @@
     "next": "^15.2.4",
     "next-auth": "^4.24.11",
     "openai": "^4.90.0",
+    "prisma": "^6.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-hot-toast": "^2.5.2",
@@ -45,7 +46,6 @@
     "eslint": "^9.23.0",
     "eslint-config-next": "^15.2.4",
     "postcss": "^8.5.3",
-    "prisma": "^6.5.0",
     "tailwindcss": "^4.0.17",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
