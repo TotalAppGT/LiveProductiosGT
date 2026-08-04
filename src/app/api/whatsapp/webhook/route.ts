@@ -166,7 +166,7 @@ async function handleCommand(
   }
 
   if (cmd === "ayuda") {
-    return `🤖 *LUNA - Asistente Live Productions*\n\n*Comandos disponibles:*\n• *tareas* - Ver tus tareas pendientes\n• *pendientes* - Ver tus tareas pendientes (versión compacta)\n• *eventos* - Ver tus próximos eventos\n• *evento [nombre]* - Buscar un evento específico\n• *resumen* - Resumen completo de tu actividad\n• *ayuda* - Mostrar esta ayuda\n\nTambién puedes escribir cualquier pregunta en lenguaje natural y LUNA te responderá con inteligencia artificial.\n\n📞 +502 3090-3172\n🌐 liveproductionsgt.com`;
+    return `🤖 *LUNA - Asistente Live Productions*\n\n*Comandos disponibles:*\n• *tareas* - Ver tus tareas pendientes\n• *pendientes* - Ver tus tareas pendientes (versión compacta)\n• *eventos* - Ver tus próximos eventos\n• *evento [nombre]* - Buscar un evento específico\n• *resumen* - Resumen completo de tu actividad\n• *ayuda* - Mostrar esta ayuda\n\nTambién puedes escribir cualquier pregunta en lenguaje natural y LUNA te responderá con inteligencia artificial.\n\n📞 +502 3090-3172\n🌐 liveproductionsgt.com\n\nAccede al sistema: https://liveproductiosgt-production.up.railway.app`;
   }
 
   return null;
@@ -324,7 +324,7 @@ export async function POST(request: NextRequest) {
                     "¡Hola! 👋 Soy *LUNA*, la asistente virtual de Live Productions. " +
                     "Tu número no está registrado en nuestro sistema.\n\n" +
                     "Si eres parte del equipo, por favor pide a tu administrador que registre tu número de WhatsApp.\n\n" +
-                    "📞 Teléfono: +502 3090-3172\n🌐 liveproductionsgt.com\n📍 16 avenida A 28-76 zona 13 Elgin 2, Guatemala";
+                    "📞 Teléfono: +502 3090-3172\n🌐 liveproductionsgt.com\n🔗 Accede al sistema: https://liveproductiosgt-production.up.railway.app\n📍 16 avenida A 28-76 zona 13 Elgin 2, Guatemala";
 
                   await sendMessage(fromNumber, welcomeMsg);
 

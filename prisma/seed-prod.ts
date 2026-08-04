@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-async function createOrSyncFirebaseUser(adminEmail: string, adminPassword: string, userId: string) {
+async function createOrSyncFirebaseUser(email: string, password: string, userId: string, displayName: string) {
   try {
     const fbAdmin = await import("firebase-admin");
     const admin = fbAdmin.default || fbAdmin;
@@ -24,61 +24,109 @@ async function createOrSyncFirebaseUser(adminEmail: string, adminPassword: strin
     const { getAuth } = await import("firebase-admin/auth");
     const auth = getAuth();
     try {
-      const fbUser = await auth.getUserByEmail(adminEmail);
-      console.log(`Usuario Firebase ya existe: ${fbUser.uid}`);
+      const fbUser = await auth.getUserByEmail(email);
+      console.log(`Usuario Firebase ya existe: ${fbUser.uid} (${email})`);
       await prisma.user.update({
         where: { id: userId },
         data: { firebaseUid: fbUser.uid },
       });
     } catch {
       const fbUser = await auth.createUser({
-        email: adminEmail,
-        password: adminPassword,
-        displayName: "Administrador General",
+        email,
+        password,
+        displayName,
       });
-      console.log(`Usuario Firebase creado: ${fbUser.uid}`);
+      console.log(`Usuario Firebase creado: ${fbUser.uid} (${email})`);
       await prisma.user.update({
         where: { id: userId },
         data: { firebaseUid: fbUser.uid },
       });
     }
   } catch (e: any) {
-    console.warn(`Firebase Auth sync: ${e.message}`);
+    console.warn(`Firebase Auth sync (${email}): ${e.message}`);
   }
 }
 
+function getNextDayOfWeek(targetDay: number, fromDate: Date): Date {
+  const result = new Date(fromDate);
+  const currentDay = result.getDay();
+  const daysUntil = (targetDay - currentDay + 7) % 7 || 7;
+  result.setDate(result.getDate() + daysUntil);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
 async function main() {
-  const adminEmail = process.env.ADMIN_EMAIL || "totalappgt@gmail.com";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const thisFriday = getNextDayOfWeek(5, today);
+  const nextMonday = getNextDayOfWeek(1, today);
+  const nextThursday = getNextDayOfWeek(4, today);
+  const nextFriday = getNextDayOfWeek(5, today);
+
+  // === 1. Daniel (ADMIN - creador del sistema) ===
+  const adminEmail = "totalappgt@gmail.com";
   const adminPassword = process.env.ADMIN_PASSWORD || "admintotal";
 
-  let adminUser = await prisma.user.findUnique({
-    where: { email: adminEmail },
-  });
+  let adminUser = await prisma.user.findUnique({ where: { email: adminEmail } });
 
   if (adminUser) {
     console.log(`Admin ${adminEmail} ya existe en BD`);
-    if (adminUser.role !== "DUENO") {
-      await prisma.user.update({
-        where: { id: adminUser.id },
-        data: { role: "DUENO" },
-      });
-      console.log(`Rol actualizado a DUENO`);
-    }
     await prisma.user.update({
       where: { id: adminUser.id },
       data: {
-        phone: "+50230903172",
-        whatsappNumber: "+50230903172",
-        name: "Jorge Mérida",
+        name: "Daniel",
+        role: "ADMIN",
+        phone: "+50235187153",
+        whatsappNumber: "+50235187153",
       },
     });
-    console.log(`Teléfono admin actualizado: +50230903172`);
+    console.log(`Admin actualizado: Daniel (ADMIN) con teléfono +50235187153`);
   } else {
     const hashedPassword = await bcrypt.hash(adminPassword, 12);
     adminUser = await prisma.user.create({
       data: {
-        name: "Administrador General",
+        name: "Daniel",
         email: adminEmail,
+        password: hashedPassword,
+        role: "ADMIN",
+        phone: "+50235187153",
+        whatsappNumber: "+50235187153",
+        active: true,
+      },
+    });
+    console.log(`Admin creado: Daniel (ADMIN) - ${adminEmail}`);
+  }
+
+  await createOrSyncFirebaseUser(adminEmail, adminPassword, adminUser.id, "Daniel");
+
+  // === 2. Jorge Mérida (DUENO) ===
+  const jorgeEmail = "adminlive@gmail.com";
+  const jorgePassword = "Live2024!";
+
+  let jorgeUser = await prisma.user.findUnique({ where: { email: jorgeEmail } });
+
+  if (jorgeUser) {
+    console.log(`Jorge ${jorgeEmail} ya existe en BD`);
+    await prisma.user.update({
+      where: { id: jorgeUser.id },
+      data: {
+        name: "Jorge Mérida",
+        role: "DUENO",
+        phone: "+50230903172",
+        whatsappNumber: "+50230903172",
+        active: true,
+      },
+    });
+    console.log(`Jorge actualizado: Jorge Mérida (DUENO) con teléfono +50230903172`);
+  } else {
+    const hashedPassword = await bcrypt.hash(jorgePassword, 12);
+    jorgeUser = await prisma.user.create({
+      data: {
+        name: "Jorge Mérida",
+        email: jorgeEmail,
         password: hashedPassword,
         role: "DUENO",
         phone: "+50230903172",
@@ -86,23 +134,20 @@ async function main() {
         active: true,
       },
     });
-    console.log(`Admin DUENO creado en BD: ${adminEmail}`);
+    console.log(`Jorge creado: Jorge Mérida (DUENO) - ${jorgeEmail}`);
   }
 
-  await createOrSyncFirebaseUser(adminEmail, adminPassword, adminUser.id);
+  await createOrSyncFirebaseUser(jorgeEmail, jorgePassword, jorgeUser.id, "Jorge Mérida");
 
-  // === Sample Workers with real phones ===
+  // === 3. Workers ===
   const sampleWorkers = [
-    { name: "Diana Mérida", email: "diana@liveproductions.com.gt", role: "JEFE" as const, phone: "+50230132528" },
-    { name: "Brenda Lopez", email: "brenda@liveproductions.com.gt", role: "JEFE" as const, phone: "+50255550002" },
-    { name: "Abel Perez", email: "abel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550003" },
-    { name: "Selvin Garcia", email: "selvin@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550004" },
-    { name: "Exequiel Lopez", email: "exequiel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550005" },
-    { name: "Javier Perez", email: "javier@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550008" },
-    { name: "Daniel", email: "prueba@liveproductions.com.gt", role: "ADMIN" as const, phone: "+50235187153" },
+    { name: "Diana", email: "diana@liveproductions.com.gt", role: "JEFE" as const, phone: "+50230132528" },
+    { name: "Brenda", email: "brenda@liveproductions.com.gt", role: "JEFE" as const, phone: "+50255550002" },
+    { name: "Abel", email: "abel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550003" },
+    { name: "Selvin", email: "selvin@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550004" },
+    { name: "Exequiel", email: "exequiel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550005" },
+    { name: "Javier", email: "javier@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550008" },
   ];
-
-  let javierUser: typeof adminUser | null = null;
 
   for (const worker of sampleWorkers) {
     const existing = await prisma.user.findUnique({ where: { email: worker.email } });
@@ -119,23 +164,22 @@ async function main() {
           active: true,
         },
       });
-      console.log(`Trabajador ${worker.name} creado en BD`);
-      if (worker.email === "javier@liveproductions.com.gt") {
-        javierUser = await prisma.user.findUnique({ where: { email: worker.email } });
-      }
+      console.log(`Trabajador ${worker.name} (${worker.role}) creado`);
     } else {
       await prisma.user.update({
         where: { id: existing.id },
-        data: { phone: worker.phone, whatsappNumber: worker.phone, name: worker.name },
+        data: {
+          name: worker.name,
+          phone: worker.phone,
+          whatsappNumber: worker.phone,
+          role: worker.role,
+        },
       });
-      console.log(`Trabajador ${worker.name} actualizado con teléfono ${worker.phone}`);
-      if (worker.email === "javier@liveproductions.com.gt") {
-        javierUser = existing;
-      }
+      console.log(`Trabajador ${worker.name} (${worker.role}) actualizado`);
     }
   }
 
-  // === Default AI Settings ===
+  // === 4. Default AI Settings ===
   const existingAISettings = await prisma.aISettings.findFirst();
   if (!existingAISettings) {
     await prisma.aISettings.create({
@@ -153,7 +197,7 @@ async function main() {
     console.log("Default AI settings creado");
   }
 
-  // === Default WhatsApp Config ===
+  // === 5. Default WhatsApp Config ===
   const existingWhatsAppConfig = await prisma.whatsAppConfig.findFirst();
   if (existingWhatsAppConfig) {
     await prisma.whatsAppConfig.update({
@@ -183,7 +227,7 @@ async function main() {
     console.log("Default WhatsApp config creado");
   }
 
-  // === Default System Configs ===
+  // === 6. Default System Configs ===
   const defaultConfigs = [
     { key: "company.name", value: "Live Productions Guatemala", description: "Nombre de la empresa" },
     { key: "company.slogan", value: "Producción de eventos en vivo", description: "Eslogan de la empresa" },
@@ -204,89 +248,159 @@ async function main() {
     }
   }
 
-  // === Sample Income Records ===
-  if (javierUser) {
-    const existingIncome = await prisma.incomeRecord.findFirst({
-      where: { userId: javierUser.id },
+  // === 7. Sample Income Records ===
+  const existingIncome = await prisma.incomeRecord.findFirst();
+  if (!existingIncome && jorgeUser && adminUser) {
+    await prisma.incomeRecord.create({
+      data: {
+        amount: 500.00,
+        description: "Cobro evento fin de semana",
+        type: "COBRO",
+        userId: jorgeUser.id,
+        recordedById: adminUser.id,
+      },
     });
-
-    if (!existingIncome) {
-      await prisma.incomeRecord.create({
-        data: {
-          amount: 500.00,
-          description: "Cobro evento fin de semana",
-          type: "COBRO",
-          userId: javierUser.id,
-          recordedById: adminUser.id,
-        },
-      });
-
-      await prisma.incomeRecord.create({
-        data: {
-          amount: 250.00,
-          description: "Comisión por montaje",
-          type: "COMISION",
-          userId: javierUser.id,
-          recordedById: adminUser.id,
-        },
-      });
-
-      await prisma.incomeRecord.create({
-        data: {
-          amount: 150.00,
-          description: "Bono por puntualidad",
-          type: "BONO",
-          userId: adminUser.id,
-          recordedById: adminUser.id,
-        },
-      });
-
-      console.log("Registros de ingreso de muestra creados");
-    }
+    await prisma.incomeRecord.create({
+      data: {
+        amount: 250.00,
+        description: "Comisión por montaje",
+        type: "COMISION",
+        userId: jorgeUser.id,
+        recordedById: adminUser.id,
+      },
+    });
+    await prisma.incomeRecord.create({
+      data: {
+        amount: 150.00,
+        description: "Bono por puntualidad",
+        type: "BONO",
+        userId: adminUser.id,
+        recordedById: adminUser.id,
+      },
+    });
+    console.log("Registros de ingreso de muestra creados");
   }
 
-  // === Test Tasks basadas en los sheets reales ===
+  // === 8. Real Test Tasks ===
   const users = await prisma.user.findMany({ where: { active: true } });
-  const dianaId = users.find(u => u.email === "diana@liveproductions.com.gt")?.id;
-  const adminId = adminUser!.id;
+  const getUser = (email: string) => users.find(u => u.email === email);
 
-  if (dianaId && adminId) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-    const nextMonday = new Date(today); nextMonday.setDate(nextMonday.getDate() + (8 - nextMonday.getDay()) % 7 || 7);
+  const dianaUser = getUser("diana@liveproductions.com.gt");
+  const brendaUser = getUser("brenda@liveproductions.com.gt");
+  const abelUser = getUser("abel@liveproductions.com.gt");
+  const selvinUser = getUser("selvin@liveproductions.com.gt");
+  const exequielUser = getUser("exequiel@liveproductions.com.gt");
+  const javierUser = getUser("javier@liveproductions.com.gt");
 
-    const testTasks = [
-      { title: "Reconfirmar staff de la semana", assignedToId: dianaId, category: "PRE_EVENTO", dueDate: today, priority: "ALTA" },
-      { title: "Revisar cuadros de equipo con Selvin", assignedToId: dianaId, category: "PRE_EVENTO", dueDate: today, priority: "ALTA" },
-      { title: "Hacer cobro de eventos de la semana", assignedToId: dianaId, category: "COBRO", dueDate: today, priority: "URGENTE" },
-      { title: "Enviar resumen de lugares y horarios", assignedToId: dianaId, category: "ADMINISTRACION", dueDate: today, priority: "MEDIA" },
-      { title: "Reporte equipo dañado post-evento", assignedToId: adminId, category: "POST_EVENTO", dueDate: today, priority: "ALTA" },
-      { title: "Seguimiento vehículos con Abel", assignedToId: adminId, category: "VEHICULO", dueDate: today, priority: "MEDIA" },
-      { title: "Actualizar inventario bodega Elgin", assignedToId: adminId, category: "INVENTARIO", dueDate: tomorrow, priority: "MEDIA" },
-      { title: "Seguimiento reparaciones equipo percusión", assignedToId: adminId, category: "MANTENIMIENTO", dueDate: nextMonday, priority: "BAJA" },
-      { title: "Reporte de ingresos personal Casa Nómada", assignedToId: adminId, category: "ADMINISTRACION", dueDate: today, priority: "MEDIA" },
-      { title: "Verificar pago músicos y staff", assignedToId: dianaId, category: "COBRO", dueDate: tomorrow, priority: "ALTA" },
-    ];
+  const tasksToCreate: {
+    title: string;
+    category: string;
+    priority: string;
+    dueDate: Date;
+    assignedToId: string;
+    status: string;
+  }[] = [];
 
-    for (const task of testTasks) {
-      const exists = await prisma.task.findFirst({
-        where: { title: task.title, assignedToId: task.assignedToId, status: "PENDIENTE" },
-      });
-      if (!exists) {
-        await prisma.task.create({
-          data: {
-            ...task,
-            assignedById: adminId,
-            type: "DINAMICA",
-            frequency: "DIARIA",
-            dueDate: task.dueDate,
-          } as any,
-        });
-      }
-    }
-    console.log("Tareas de prueba creadas/actualizadas");
+  if (jorgeUser) {
+    tasksToCreate.push(
+      { title: "Revisar reporte de ingresos de la semana", category: "COBRO", priority: "ALTA", dueDate: today, assignedToId: jorgeUser.id, status: "PENDIENTE" },
+      { title: "Llamada con Diana y Abel para ver logística", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: jorgeUser.id, status: "EN_PROCESO" },
+      { title: "Seguimiento a reparaciones de equipo con Exequiel", category: "MANTENIMIENTO", priority: "MEDIA", dueDate: today, assignedToId: jorgeUser.id, status: "PENDIENTE" },
+      { title: "Ver avance de cotizaciones pendientes", category: "COTIZACION", priority: "MEDIA", dueDate: tomorrow, assignedToId: jorgeUser.id, status: "PENDIENTE" },
+      { title: "Autorizar pagos a músicos y proveedores", category: "COBRO", priority: "ALTA", dueDate: tomorrow, assignedToId: jorgeUser.id, status: "PENDIENTE" },
+      { title: "Seguimiento vehículos: camión, panel, combustible", category: "VEHICULO", priority: "MEDIA", dueDate: nextMonday, assignedToId: jorgeUser.id, status: "PENDIENTE" },
+      { title: "Revisar licencias ambientales (no caer en multas)", category: "ADMINISTRACION", priority: "ALTA", dueDate: thisFriday, assignedToId: jorgeUser.id, status: "PENDIENTE" },
+    );
   }
+
+  if (dianaUser) {
+    tasksToCreate.push(
+      { title: "Tener llamada con Selvin, Abel y Jorge para cuadro de staff", category: "PRE_EVENTO", priority: "URGENTE", dueDate: today, assignedToId: dianaUser.id, status: "EN_PROCESO" },
+      { title: "Reconfirmar staff semana de eventos", category: "PRE_EVENTO", priority: "ALTA", dueDate: today, assignedToId: dianaUser.id, status: "PENDIENTE" },
+      { title: "Hacer cobro de eventos de la semana", category: "COBRO", priority: "URGENTE", dueDate: today, assignedToId: dianaUser.id, status: "PENDIENTE" },
+      { title: "Revisar que no haya traslape en horarios de shows", category: "PRE_EVENTO", priority: "ALTA", dueDate: today, assignedToId: dianaUser.id, status: "PENDIENTE" },
+      { title: "Reconfirmar proveedores externos y diseños de pista", category: "PRE_EVENTO", priority: "MEDIA", dueDate: tomorrow, assignedToId: dianaUser.id, status: "PENDIENTE" },
+      { title: "Enviar resumen de lugares y horarios de presentaciones", category: "ADMINISTRACION", priority: "ALTA", dueDate: tomorrow, assignedToId: dianaUser.id, status: "PENDIENTE" },
+      { title: "Hacer lista de staff para revisar", category: "PERSONAL", priority: "MEDIA", dueDate: thisFriday, assignedToId: dianaUser.id, status: "PENDIENTE" },
+      { title: "Actualizar drive de eventos de la semana", category: "ADMINISTRACION", priority: "MEDIA", dueDate: nextFriday, assignedToId: dianaUser.id, status: "PENDIENTE" },
+    );
+  }
+
+  if (adminUser) {
+    tasksToCreate.push(
+      { title: "Verificar funcionamiento de recordatorios automáticos", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "EN_PROCESO" },
+      { title: "Revisar monitoreo de accesos del equipo", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
+      { title: "Probar respuestas de LUNA por WhatsApp", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
+    );
+  }
+
+  if (abelUser) {
+    tasksToCreate.push(
+      { title: "Confirmar disponibilidad de pilotos para eventos", category: "PRE_EVENTO", priority: "ALTA", dueDate: tomorrow, assignedToId: abelUser.id, status: "PENDIENTE" },
+      { title: "Revisar niveles de combustible de vehículos", category: "VEHICULO", priority: "MEDIA", dueDate: nextMonday, assignedToId: abelUser.id, status: "PENDIENTE" },
+      { title: "Entregar viáticos a responsables de montaje", category: "PRE_EVENTO", priority: "ALTA", dueDate: nextThursday, assignedToId: abelUser.id, status: "PENDIENTE" },
+    );
+  }
+
+  if (selvinUser) {
+    tasksToCreate.push(
+      { title: "Revisar cuadros de equipo con Diana", category: "PRE_EVENTO", priority: "ALTA", dueDate: today, assignedToId: selvinUser.id, status: "EN_PROCESO" },
+      { title: "Verificar equipo de audio para evento del viernes", category: "PRE_EVENTO", priority: "ALTA", dueDate: tomorrow, assignedToId: selvinUser.id, status: "PENDIENTE" },
+      { title: "Reporte de equipo en reparación", category: "MANTENIMIENTO", priority: "MEDIA", dueDate: nextMonday, assignedToId: selvinUser.id, status: "PENDIENTE" },
+    );
+  }
+
+  if (exequielUser) {
+    tasksToCreate.push(
+      { title: "Hacer inventario de consumibles", category: "INVENTARIO", priority: "ALTA", dueDate: today, assignedToId: exequielUser.id, status: "EN_PROCESO" },
+      { title: "Revisar equipo dañado post-evento", category: "POST_EVENTO", priority: "ALTA", dueDate: tomorrow, assignedToId: exequielUser.id, status: "PENDIENTE" },
+      { title: "Reporte de equipo perdido/dañado", category: "INVENTARIO", priority: "ALTA", dueDate: nextMonday, assignedToId: exequielUser.id, status: "PENDIENTE" },
+    );
+  }
+
+  if (brendaUser) {
+    tasksToCreate.push(
+      { title: "Enviar retroalimentación a proveedores", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: brendaUser.id, status: "PENDIENTE" },
+      { title: "Agregar eventos nuevos al Excel", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: brendaUser.id, status: "PENDIENTE" },
+      { title: "Reservar DJ para octubre, noviembre y diciembre", category: "PRE_EVENTO", priority: "MEDIA", dueDate: thisFriday, assignedToId: brendaUser.id, status: "PENDIENTE" },
+    );
+  }
+
+  if (javierUser) {
+    tasksToCreate.push(
+      { title: "Confirmar asistencia para evento del sábado", category: "PRE_EVENTO", priority: "MEDIA", dueDate: today, assignedToId: javierUser.id, status: "PENDIENTE" },
+      { title: "Llevar equipo de percusión a mantenimiento", category: "MANTENIMIENTO", priority: "MEDIA", dueDate: tomorrow, assignedToId: javierUser.id, status: "PENDIENTE" },
+    );
+  }
+
+  const assignedById = (jorgeUser || adminUser)!.id;
+
+  const validCategories: string[] = ["PRE_EVENTO", "POST_EVENTO", "COTIZACION", "COBRO", "INVENTARIO", "VEHICULO", "PERSONAL", "BODEGA", "MANTENIMIENTO", "ADMINISTRACION", "OTRO"];
+  const validPriorities: string[] = ["BAJA", "MEDIA", "ALTA", "URGENTE"];
+  const validStatuses: string[] = ["PENDIENTE", "EN_PROCESO"];
+
+  for (const task of tasksToCreate) {
+    const exists = await prisma.task.findFirst({
+      where: { title: task.title, assignedToId: task.assignedToId },
+    });
+    if (!exists) {
+      await prisma.task.create({
+        data: {
+          title: task.title,
+          assignedToId: task.assignedToId,
+          assignedById,
+          category: validCategories.includes(task.category) ? task.category as any : "OTRO",
+          priority: validPriorities.includes(task.priority) ? task.priority as any : "MEDIA",
+          status: validStatuses.includes(task.status) ? task.status as any : "PENDIENTE",
+          dueDate: task.dueDate,
+          type: "DINAMICA",
+          frequency: "DIARIA",
+        },
+      });
+    }
+  }
+
+  console.log(`${tasksToCreate.length} tareas de prueba procesadas`);
 }
 
 main()
