@@ -62,6 +62,8 @@ export async function getAIClient(): Promise<{
   systemPrompt: string;
   temperature: number;
   maxTokens: number;
+  provider: string;
+  topP: number;
 }> {
   const settings = await getAISettings();
   const provider = settings?.provider || "DEEPSEEK";
@@ -96,7 +98,7 @@ export async function getAIClient(): Promise<{
     DEEPSEEK: "deepseek-chat",
     OPENAI: "gpt-4o",
     OPENROUTER: "openai/gpt-4o",
-    NVIDIA: "meta/llama-3.3-70b-instruct",
+    NVIDIA: "deepseek-ai/deepseek-v4-pro",
   };
 
   const client = await getOpenAIClient({ apiKey, baseUrl });
@@ -106,8 +108,9 @@ export async function getAIClient(): Promise<{
     "Eres el asistente de Live Productions Guatemala...";
   const temperature = settings?.temperature ?? 0.7;
   const maxTokens = settings?.maxTokens ?? 2000;
+  const topP = 0.95;
 
-  return { client, model, systemPrompt, temperature, maxTokens };
+  return { client, model, systemPrompt, temperature, maxTokens, provider, topP };
 }
 
 export async function askAI(
@@ -115,7 +118,7 @@ export async function askAI(
   options?: AIOptions
 ): Promise<string> {
   try {
-    const { client, model, systemPrompt, temperature, maxTokens } =
+    const { client, model, systemPrompt, temperature, maxTokens, provider, topP } =
       await getAIClient();
 
     const fullMessages: AIMessage[] =
@@ -123,15 +126,24 @@ export async function askAI(
         ? messages
         : [{ role: "system", content: systemPrompt }, ...messages];
 
-    const response = await client.chat.completions.create({
+    const baseParams: any = {
       model,
       messages: fullMessages,
       temperature: options?.temperature ?? temperature,
+      top_p: topP,
       max_tokens: options?.maxTokens ?? maxTokens,
-      ...(options?.responseFormat === "json"
-        ? { response_format: { type: "json_object" } }
-        : {}),
-    });
+      stream: false as const,
+    };
+
+    if (provider === "NVIDIA") {
+      baseParams.extra_body = { chat_template_kwargs: { thinking: false } };
+    }
+
+    if (options?.responseFormat === "json") {
+      baseParams.response_format = { type: "json_object" as const };
+    }
+
+    const response = await client.chat.completions.create(baseParams);
 
     return response.choices[0]?.message?.content || "";
   } catch (error) {
