@@ -381,7 +381,6 @@ export async function POST(request: NextRequest) {
                       await sendMessage(fromNumber, "🎤 No pude entender el audio. ¿Podrías escribirlo?").catch(() => {});
                       continue;
                     }
-                    await sendMessage(fromNumber, `🎤 _Audio transcrito:_ "${text.length > 100 ? text.slice(0, 100) + '...' : text}"`).catch(() => {});
                   } catch {
                     await sendMessage(fromNumber, "🎤 Lo siento, no pude procesar tu audio en este momento. Escríbeme por texto.").catch(() => {});
                     continue;
