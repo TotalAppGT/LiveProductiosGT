@@ -97,7 +97,7 @@ async function handleCommand(
 ): Promise<string | null> {
   const cmd = command.toLowerCase().trim();
 
-  if (cmd === "tareas") {
+  if (cmd === "tareas" || cmd === "mis tareas" || cmd.includes("tarea") || cmd.includes("pendiente")) {
     const tasks = await formatTasksForUser(user.id);
     if (!tasks) return `Hola ${user.name}, no tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
     return `📋 *Tareas Pendientes - ${user.name}*\n\n${tasks}\n\n_Responde directamente para hablar con LUNA, tu asistente IA._`;
