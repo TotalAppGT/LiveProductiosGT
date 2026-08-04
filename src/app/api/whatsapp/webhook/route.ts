@@ -48,6 +48,7 @@ async function formatTasksForUser(userId: string) {
     orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
     take: 15,
   });
+  console.log(`[Tasks] userId=${userId}, found=${tasks.length}`);
   return tasks
     .map(
       (t) =>
@@ -252,6 +253,7 @@ export async function POST(request: NextRequest) {
                 });
 
                 if (user) {
+                  console.log(`[WhatsApp] Usuario encontrado: ${user.name} (${user.role}) id=${user.id}`);
                   const commandResponse = await handleCommand(text, user);
 
                   if (commandResponse) {
