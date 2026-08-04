@@ -4,6 +4,56 @@ import { handleWhatsAppMessage } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 
+async function transcribeAudio(mediaId: string): Promise<string | null> {
+  try {
+    const config = await prisma.whatsAppConfig.findFirst({
+      orderBy: { updatedAt: "desc" },
+    });
+    if (!config?.accessToken) return null;
+
+    const mediaRes = await fetch(
+      `https://graph.facebook.com/v22.0/${mediaId}`,
+      { headers: { Authorization: `Bearer ${config.accessToken}` } }
+    );
+    const mediaData = await mediaRes.json() as { url?: string; error?: { message: string } };
+    if (!mediaData.url) {
+      console.error("WhatsApp media URL error:", mediaData.error?.message);
+      return null;
+    }
+
+    const audioRes = await fetch(mediaData.url, {
+      headers: { Authorization: `Bearer ${config.accessToken}` },
+    });
+    const audioBuffer = await audioRes.arrayBuffer();
+
+    const formData = new FormData();
+    const blob = new Blob([audioBuffer], { type: "audio/ogg" });
+    formData.append("file", blob, "audio.ogg");
+    formData.append("model", "whisper-1");
+    formData.append("language", "es");
+
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) return null;
+
+    const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${openaiKey}` },
+      body: formData,
+    });
+
+    const whisperData = await whisperRes.json() as { text?: string; error?: { message: string } };
+    if (whisperData.error) {
+      console.error("Whisper error:", whisperData.error.message);
+      return null;
+    }
+
+    return whisperData.text || null;
+  } catch (error) {
+    console.error("transcribeAudio error:", error);
+    return null;
+  }
+}
+
 async function getVerifyToken(): Promise<string> {
   const config = await prisma.whatsAppConfig.findFirst({
     orderBy: { updatedAt: "desc" },
@@ -323,30 +373,45 @@ export async function POST(request: NextRequest) {
               });
 
               if (messageType && messageType !== "text") {
-                const mediaTypeLabels: Record<string, string> = {
-                  audio: "audio",
-                  image: "imagen",
-                  video: "video",
-                  document: "documento",
-                  sticker: "sticker",
-                  location: "ubicación",
-                };
-                const mediaLabel = mediaTypeLabels[messageType] || messageType;
-                const mediaMsg = `¡Hola! 📱 Soy LUNA, tu asistente de Live Productions. Por el momento no puedo procesar mensajes de *${mediaLabel}*.\n\nEnvíame un mensaje de *texto* y con gusto te ayudaré con:\n• Tus tareas pendientes\n• Próximos eventos\n• Resúmenes de actividad\n• Preguntas sobre procesos de la empresa\n\nEscribe *ayuda* para ver todos los comandos disponibles.`;
+                // Handle audio with speech-to-text via OpenAI Whisper
+                if (messageType === "audio" && message.audio?.id) {
+                  try {
+                    text = await transcribeAudio(message.audio.id);
+                    if (!text) {
+                      await sendMessage(fromNumber, "🎤 No pude entender el audio. ¿Podrías escribirlo?").catch(() => {});
+                      continue;
+                    }
+                    await sendMessage(fromNumber, `🎤 _Audio transcrito:_ "${text.length > 100 ? text.slice(0, 100) + '...' : text}"`).catch(() => {});
+                  } catch {
+                    await sendMessage(fromNumber, "🎤 Lo siento, no pude procesar tu audio en este momento. Escríbeme por texto.").catch(() => {});
+                    continue;
+                  }
+                } else {
+                  const mediaTypeLabels: Record<string, string> = {
+                    audio: "audio",
+                    image: "imagen",
+                    video: "video",
+                    document: "documento",
+                    sticker: "sticker",
+                    location: "ubicación",
+                  };
+                  const mediaLabel = mediaTypeLabels[messageType] || messageType;
+                  const mediaMsg = `¡Hola! 📱 Soy LUNA, tu asistente de Live Productions. Por el momento no puedo procesar mensajes de *${mediaLabel}*.\n\nEnvíame un mensaje de *texto* y con gusto te ayudaré con:\n• Tus tareas pendientes\n• Próximos eventos\n• Resúmenes de actividad\n• Preguntas sobre procesos de la empresa\n\nEscribe *ayuda* para ver todos los comandos disponibles.`;
 
-                await sendMessage(fromNumber, mediaMsg).catch(() => {});
+                  await sendMessage(fromNumber, mediaMsg).catch(() => {});
 
-                await prisma.whatsAppMessage.create({
-                  data: {
-                    userId: "system",
-                    toNumber: fromNumber,
-                    message: `[RECIBIDO ${messageType.toUpperCase()}] No procesable`,
-                    type: "CHAT",
-                    status: "DELIVERED",
-                  },
-                }).catch(() => {});
+                  await prisma.whatsAppMessage.create({
+                    data: {
+                      userId: "system",
+                      toNumber: fromNumber,
+                      message: `[RECIBIDO ${messageType.toUpperCase()}] No procesable`,
+                      type: "CHAT",
+                      status: "DELIVERED",
+                    },
+                  }).catch(() => {});
 
-                continue;
+                  continue;
+                }
               }
 
               if (!text) continue;
