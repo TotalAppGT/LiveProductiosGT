@@ -76,8 +76,8 @@ export async function getAIClient(): Promise<{
   };
 
   const apiKey =
-    settings?.apiKey ||
     envApiKeys[provider] ||
+    settings?.apiKey ||
     envApiKeys["DEEPSEEK"] ||
     process.env.DEEPSEEK_API_KEY ||
     "";

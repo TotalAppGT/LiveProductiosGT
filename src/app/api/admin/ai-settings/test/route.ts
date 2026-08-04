@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       NVIDIA: process.env.NVIDIA_API_KEY,
     };
 
-    const apiKey = dbApiKey || envApiKeys[effectiveProvider] || "";
+    const apiKey = envApiKeys[effectiveProvider] || dbApiKey || "";
     console.log(`[AI Test] Provider: ${effectiveProvider}, Key ends: ${apiKey.slice(-8)}, Using model: ${effectiveModel}`);
 
     if (!apiKey) {
