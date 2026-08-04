@@ -64,6 +64,15 @@ async function main() {
       });
       console.log(`Rol actualizado a DUENO`);
     }
+    await prisma.user.update({
+      where: { id: adminUser.id },
+      data: {
+        phone: "+50230903172",
+        whatsappNumber: "+50230903172",
+        name: "Jorge Mérida",
+      },
+    });
+    console.log(`Teléfono admin actualizado: +50230903172`);
   } else {
     const hashedPassword = await bcrypt.hash(adminPassword, 12);
     adminUser = await prisma.user.create({
@@ -82,14 +91,15 @@ async function main() {
 
   await createOrSyncFirebaseUser(adminEmail, adminPassword, adminUser.id);
 
-  // === Sample Workers ===
+  // === Sample Workers with real phones ===
   const sampleWorkers = [
-    { name: "Diana Mérida", email: "diana@liveproductions.com.gt", role: "JEFE" as const, phone: "+50255550001" },
+    { name: "Diana Mérida", email: "diana@liveproductions.com.gt", role: "JEFE" as const, phone: "+50230132528" },
     { name: "Brenda Lopez", email: "brenda@liveproductions.com.gt", role: "JEFE" as const, phone: "+50255550002" },
     { name: "Abel Perez", email: "abel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550003" },
     { name: "Selvin Garcia", email: "selvin@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550004" },
     { name: "Exequiel Lopez", email: "exequiel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550005" },
     { name: "Javier Perez", email: "javier@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550008" },
+    { name: "Daniel", email: "prueba@liveproductions.com.gt", role: "ADMIN" as const, phone: "+50235187153" },
   ];
 
   let javierUser: typeof adminUser | null = null;
@@ -114,6 +124,11 @@ async function main() {
         javierUser = await prisma.user.findUnique({ where: { email: worker.email } });
       }
     } else {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { phone: worker.phone, whatsappNumber: worker.phone, name: worker.name },
+      });
+      console.log(`Trabajador ${worker.name} actualizado con teléfono ${worker.phone}`);
       if (worker.email === "javier@liveproductions.com.gt") {
         javierUser = existing;
       }
@@ -228,6 +243,49 @@ async function main() {
 
       console.log("Registros de ingreso de muestra creados");
     }
+  }
+
+  // === Test Tasks basadas en los sheets reales ===
+  const users = await prisma.user.findMany({ where: { active: true } });
+  const dianaId = users.find(u => u.email === "diana@liveproductions.com.gt")?.id;
+  const adminId = adminUser!.id;
+
+  if (dianaId && adminId) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    const nextMonday = new Date(today); nextMonday.setDate(nextMonday.getDate() + (8 - nextMonday.getDay()) % 7 || 7);
+
+    const testTasks = [
+      { title: "Reconfirmar staff de la semana", assignedToId: dianaId, category: "PRE_EVENTO", dueDate: today, priority: "ALTA" },
+      { title: "Revisar cuadros de equipo con Selvin", assignedToId: dianaId, category: "PRE_EVENTO", dueDate: today, priority: "ALTA" },
+      { title: "Hacer cobro de eventos de la semana", assignedToId: dianaId, category: "COBRO", dueDate: today, priority: "URGENTE" },
+      { title: "Enviar resumen de lugares y horarios", assignedToId: dianaId, category: "ADMINISTRACION", dueDate: today, priority: "MEDIA" },
+      { title: "Reporte equipo dañado post-evento", assignedToId: adminId, category: "POST_EVENTO", dueDate: today, priority: "ALTA" },
+      { title: "Seguimiento vehículos con Abel", assignedToId: adminId, category: "VEHICULO", dueDate: today, priority: "MEDIA" },
+      { title: "Actualizar inventario bodega Elgin", assignedToId: adminId, category: "INVENTARIO", dueDate: tomorrow, priority: "MEDIA" },
+      { title: "Seguimiento reparaciones equipo percusión", assignedToId: adminId, category: "MANTENIMIENTO", dueDate: nextMonday, priority: "BAJA" },
+      { title: "Reporte de ingresos personal Casa Nómada", assignedToId: adminId, category: "ADMINISTRACION", dueDate: today, priority: "MEDIA" },
+      { title: "Verificar pago músicos y staff", assignedToId: dianaId, category: "COBRO", dueDate: tomorrow, priority: "ALTA" },
+    ];
+
+    for (const task of testTasks) {
+      const exists = await prisma.task.findFirst({
+        where: { title: task.title, assignedToId: task.assignedToId, status: "PENDIENTE" },
+      });
+      if (!exists) {
+        await prisma.task.create({
+          data: {
+            ...task,
+            assignedById: adminId,
+            type: "DINAMICA",
+            frequency: "DIARIA",
+            dueDate: task.dueDate,
+          } as any,
+        });
+      }
+    }
+    console.log("Tareas de prueba creadas/actualizadas");
   }
 }
 
