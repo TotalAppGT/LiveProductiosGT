@@ -141,12 +141,12 @@ async function main() {
 
   // === 3. Workers ===
   const sampleWorkers = [
-    { name: "Diana", email: "diana@liveproductions.com.gt", role: "JEFE" as const, phone: "+50230132528" },
-    { name: "Brenda", email: "brenda@liveproductions.com.gt", role: "JEFE" as const, phone: "+50255550002" },
-    { name: "Abel", email: "abel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550003" },
-    { name: "Selvin", email: "selvin@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550004" },
-    { name: "Exequiel", email: "exequiel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550005" },
-    { name: "Javier", email: "javier@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550008" },
+    { name: "Diana", email: "diana@liveproductions.com", role: "JEFE" as const, phone: "+50230132528" },
+    { name: "Brenda", email: "brenda@liveproductions.com", role: "JEFE" as const, phone: "+50255550002" },
+    { name: "Abel", email: "abel@liveproductions.com", role: "EMPLEADO" as const, phone: "+50255550003" },
+    { name: "Selvin", email: "selvin@liveproductions.com", role: "EMPLEADO" as const, phone: "+50255550004" },
+    { name: "Exequiel", email: "exequiel@liveproductions.com", role: "EMPLEADO" as const, phone: "+50255550005" },
+    { name: "Javier", email: "javier@liveproductions.com", role: "EMPLEADO" as const, phone: "+50255550008" },
   ];
 
   for (const worker of sampleWorkers) {
@@ -285,12 +285,12 @@ async function main() {
   const users = await prisma.user.findMany({ where: { active: true } });
   const getUser = (email: string) => users.find(u => u.email === email);
 
-  const dianaUser = getUser("diana@liveproductions.com.gt");
-  const brendaUser = getUser("brenda@liveproductions.com.gt");
-  const abelUser = getUser("abel@liveproductions.com.gt");
-  const selvinUser = getUser("selvin@liveproductions.com.gt");
-  const exequielUser = getUser("exequiel@liveproductions.com.gt");
-  const javierUser = getUser("javier@liveproductions.com.gt");
+  const dianaUser = getUser("diana@liveproductions.com");
+  const brendaUser = getUser("brenda@liveproductions.com");
+  const abelUser = getUser("abel@liveproductions.com");
+  const selvinUser = getUser("selvin@liveproductions.com");
+  const exequielUser = getUser("exequiel@liveproductions.com");
+  const javierUser = getUser("javier@liveproductions.com");
 
   const tasksToCreate: {
     title: string;
