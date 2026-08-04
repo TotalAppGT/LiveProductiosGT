@@ -82,6 +82,28 @@ async function main() {
 
   await createOrSyncFirebaseUser(adminEmail, adminPassword, adminUser.id);
 
+  // === Sample Workers ===
+  const javierEmail = "javier@liveproductions.com.gt";
+  let javierUser = await prisma.user.findUnique({
+    where: { email: javierEmail },
+  });
+
+  if (!javierUser) {
+    const hashedPassword = await bcrypt.hash("Live2024!", 12);
+    javierUser = await prisma.user.create({
+      data: {
+        name: "Javier Perez",
+        email: javierEmail,
+        password: hashedPassword,
+        role: "EMPLEADO",
+        phone: "+50255550008",
+        whatsappNumber: "+50255550008",
+        active: true,
+      },
+    });
+    console.log("Trabajador Javier Perez creado en BD");
+  }
+
   // === Default AI Settings ===
   const existingAISettings = await prisma.aISettings.findFirst();
   if (!existingAISettings) {
@@ -135,6 +157,47 @@ async function main() {
     if (!existing) {
       await prisma.systemConfig.create({ data: cfg });
       console.log(`SystemConfig creado: ${cfg.key}`);
+    }
+  }
+
+  // === Sample Income Records ===
+  if (javierUser) {
+    const existingIncome = await prisma.incomeRecord.findFirst({
+      where: { userId: javierUser.id },
+    });
+
+    if (!existingIncome) {
+      await prisma.incomeRecord.create({
+        data: {
+          amount: 500.00,
+          description: "Cobro evento fin de semana",
+          type: "COBRO",
+          userId: javierUser.id,
+          recordedById: adminUser.id,
+        },
+      });
+
+      await prisma.incomeRecord.create({
+        data: {
+          amount: 250.00,
+          description: "Comisión por montaje",
+          type: "COMISION",
+          userId: javierUser.id,
+          recordedById: adminUser.id,
+        },
+      });
+
+      await prisma.incomeRecord.create({
+        data: {
+          amount: 150.00,
+          description: "Bono por puntualidad",
+          type: "BONO",
+          userId: adminUser.id,
+          recordedById: adminUser.id,
+        },
+      });
+
+      console.log("Registros de ingreso de muestra creados");
     }
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
+import { sendMessage } from "@/lib/whatsapp";
 
 export async function PUT(
   request: NextRequest,
@@ -17,7 +18,12 @@ export async function PUT(
 
     const { id } = await params;
 
-    const existingTask = await prisma.task.findUnique({ where: { id } });
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+      include: {
+        assignedTo: { select: { id: true, name: true, whatsappNumber: true, phone: true } },
+      },
+    });
     if (!existingTask) {
       return NextResponse.json(
         { success: false, error: "Tarea no encontrada" },
@@ -26,7 +32,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { status, confirmed } = body;
+    const { status, confirmed, postponeReason, rescheduledTo } = body;
 
     if (!status) {
       return NextResponse.json(
@@ -61,17 +67,38 @@ export async function PUT(
       );
     }
 
+    if (status === "REPROGRAMADA" && !postponeReason) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Se requiere una razón para reprogramar la tarea",
+        },
+        { status: 400 }
+      );
+    }
+
     const previousStatus = existingTask.status;
+
+    const updateData: Record<string, unknown> = {
+      status,
+      confirmedAt: status === "COMPLETADA" ? new Date() : existingTask.confirmedAt,
+    };
+
+    if (status === "REPROGRAMADA") {
+      updateData.postponeReason = postponeReason;
+      updateData.postponeCount = existingTask.postponeCount + 1;
+      if (rescheduledTo) {
+        updateData.rescheduledTo = new Date(rescheduledTo);
+        updateData.dueDate = new Date(rescheduledTo);
+      }
+    }
 
     const task = await prisma.task.update({
       where: { id },
-      data: {
-        status,
-        confirmedAt: status === "COMPLETADA" ? new Date() : existingTask.confirmedAt,
-      },
+      data: updateData,
       include: {
         assignedTo: {
-          select: { id: true, name: true, email: true },
+          select: { id: true, name: true, email: true, whatsappNumber: true, phone: true },
         },
         assignedBy: {
           select: { id: true, name: true },
@@ -79,11 +106,17 @@ export async function PUT(
       },
     });
 
+    const historyAction = status === "REPROGRAMADA" ? "REPROGRAMACIÓN" : "CAMBIO_ESTADO";
+    const historyDetails =
+      status === "REPROGRAMADA"
+        ? `Tarea reprogramada (${existingTask.postponeCount + 1}ª vez): ${postponeReason}`
+        : undefined;
+
     await prisma.taskHistory.create({
       data: {
         taskId: id,
         userId: auth.payload.userId,
-        action: "CAMBIO_ESTADO",
+        action: historyAction,
         previousStatus,
         newStatus: status,
       },
@@ -97,15 +130,38 @@ export async function PUT(
       CANCELADA: "Cancelada",
     };
 
+    const activityDetails =
+      status === "REPROGRAMADA"
+        ? `Tarea "${task.title}" reprogramada por ${auth.payload.userId}: ${postponeReason}`
+        : `Tarea "${task.title}" cambió de ${statusLabels[previousStatus] || previousStatus} a ${statusLabels[status] || status}`;
+
     await prisma.activity.create({
       data: {
         userId: auth.payload.userId,
-        action: "CAMBIAR_ESTADO_TAREA",
+        action: status === "REPROGRAMADA" ? "REPROGRAMAR_TAREA" : "CAMBIAR_ESTADO_TAREA",
         resource: "TASK",
         resourceId: id,
-        details: `Tarea "${task.title}" cambió de ${statusLabels[previousStatus] || previousStatus} a ${statusLabels[status] || status}`,
+        details: activityDetails,
       },
     });
+
+    if (status === "REPROGRAMADA" && (task.assignedTo?.whatsappNumber || task.assignedTo?.phone)) {
+      const to = task.assignedTo.whatsappNumber || task.assignedTo.phone;
+      if (to) {
+        const newDate = rescheduledTo
+          ? new Date(rescheduledTo).toLocaleDateString("es-GT")
+          : "Pendiente";
+        sendMessage(
+          to,
+          `🔁 *Tarea Reprogramada*\n\n` +
+            `Tarea: ${task.title}\n` +
+            `Nueva fecha: ${newDate}\n` +
+            `Razón: ${postponeReason}\n` +
+            `Veces reprogramada: ${task.postponeCount}\n\n` +
+            `Revisa la aplicación para más detalles.`
+        ).catch((err) => console.warn("Error al enviar WhatsApp (postpone):", err));
+      }
+    }
 
     return NextResponse.json(
       {
