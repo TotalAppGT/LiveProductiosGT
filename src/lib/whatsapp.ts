@@ -261,12 +261,13 @@ interface UserWithWhatsApp {
   name: string;
   phone: string | null;
   whatsappNumber: string | null;
+  role?: string;
 }
 
 interface TaskWithDetails {
-  id: string;
+  id?: string;
   title: string;
-  description: string | null;
+  description?: string | null;
   priority: string;
   dueDate: Date | null;
   status: string;
@@ -454,6 +455,175 @@ async function sendEventReminder(
   return sent;
 }
 
+interface AIAssistantContext {
+  user: UserWithWhatsApp;
+  pendingTasks: TaskWithDetails[];
+  upcomingEvents: { name: string; clientName: string; date: Date }[];
+  complianceRate: number;
+}
+
+async function sendAIAssistantReply(
+  to: string,
+  context: AIAssistantContext
+): Promise<boolean> {
+  const { user, pendingTasks, upcomingEvents, complianceRate } = context;
+
+  const taskLines = pendingTasks
+    .slice(0, 10)
+    .map((t) => `${t.title} | Estado: ${t.status} | Prioridad: ${t.priority} | Vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT") : "Sin fecha"}`)
+    .join("\n");
+
+  const eventLines = upcomingEvents
+    .slice(0, 5)
+    .map((e) => `${e.name} | Cliente: ${e.clientName} | Fecha: ${new Date(e.date).toLocaleDateString("es-GT")}`)
+    .join("\n");
+
+  const prompt = `Eres el asistente inteligente de WhatsApp de Live Productions. Genera un resumen proactivo para ${user.name} (rol: ${user.role || "Empleado"}).
+
+Tareas pendientes: ${taskLines || "Ninguna"}
+Próximos eventos: ${eventLines || "Ninguno"}
+Cumplimiento 30d: ${complianceRate}%
+
+Genera un mensaje motivador, conciso y profesional en español (máximo 3 párrafos) que incluya un resumen de sus tareas, eventos y cumplimiento.`;
+
+  try {
+    const { askAI } = await import("@/lib/ai-brain");
+    const reply = await askAI(
+      [{ role: "user", content: prompt }],
+      { temperature: 0.7, maxTokens: 800 }
+    );
+
+    const fullMessage = `🤖 *Asistente Live Productions*\n\n${reply}`;
+    const result = await sendMessage(to, fullMessage);
+
+    if (result?.messages?.[0]?.id) {
+      await prisma.whatsAppMessage.create({
+        data: {
+          userId: user.id,
+          toNumber: to,
+          message: fullMessage,
+          type: "NOTIFICATION",
+          status: "SENT",
+        },
+      });
+      return true;
+    }
+
+    await prisma.whatsAppMessage.create({
+      data: {
+        userId: user.id,
+        toNumber: to,
+        message: fullMessage,
+        type: "NOTIFICATION",
+        status: "FAILED",
+      },
+    });
+    return false;
+  } catch (error) {
+    console.error("sendAIAssistantReply error:", error);
+
+    const fallback = `🤖 *Asistente Live Productions*\n\nHola ${user.name}, tienes ${pendingTasks.length} tareas pendientes y ${upcomingEvents.length} eventos próximos. Tu cumplimiento en los últimos 30 días es del ${complianceRate}%. ¡Sigue así! 💪`;
+    await sendMessage(to, fallback).catch(() => {});
+    return false;
+  }
+}
+
+async function sendAutomatedReminder(
+  user: UserWithWhatsApp,
+  context: {
+    trigger: "morning_briefing" | "evening_recap" | "overdue" | "inactivity";
+    pendingTasks?: TaskWithDetails[];
+    upcomingEvents?: { name: string; clientName: string; date: Date }[];
+    completedToday?: number;
+    complianceRate?: number;
+  }
+): Promise<boolean> {
+  const to = user.whatsappNumber || user.phone;
+  if (!to) {
+    console.warn(`No WhatsApp number for user ${user.name}`);
+    return false;
+  }
+
+  const tasks = context.pendingTasks || [];
+  const events = context.upcomingEvents || [];
+
+  const taskLines = tasks
+    .map((t) => `• ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : "🔵"} ${t.title}${t.dueDate ? ` (${new Date(t.dueDate).toLocaleDateString("es-GT")})` : ""}`)
+    .join("\n");
+
+  const eventLines = events
+    .map((e) => `• 🎪 ${e.name} - ${e.clientName} - ${new Date(e.date).toLocaleDateString("es-GT")}`)
+    .join("\n");
+
+  let aiPrompt = "";
+  let title = "";
+
+  if (context.trigger === "morning_briefing") {
+    title = "☀️ *Briefing Matutino*";
+    aiPrompt = `Genera un mensaje motivador de buenos días para ${user.name}. Tiene ${tasks.length} tareas pendientes y ${events.length} eventos. Sé breve, energético y profesional. Máximo 2 oraciones en español.`;
+  } else if (context.trigger === "evening_recap") {
+    title = "🌙 *Recap de la Tarde*";
+    const completed = context.completedToday || 0;
+    aiPrompt = `Genera un mensaje de cierre de jornada para ${user.name}. Completaste ${completed} tareas hoy. Quedan ${tasks.length} pendientes. Sé motivador y reconoce el esfuerzo. Máximo 2 oraciones en español.`;
+  } else if (context.trigger === "overdue") {
+    title = "⏰ *Tareas Vencidas*";
+    aiPrompt = `Genera un mensaje de alerta para ${user.name} que tiene ${tasks.length} tareas vencidas. Sé urgente pero profesional. Máximo 2 oraciones en español.`;
+  } else if (context.trigger === "inactivity") {
+    title = "👋 *Te Extrañamos*";
+    aiPrompt = `Genera un mensaje para motivar a ${user.name} que no ha accedido al sistema. Su tasa de cumplimiento es del ${context.complianceRate || 0}%. Sé amable y motivador. Máximo 2 oraciones en español.`;
+  }
+
+  let aiMessage = "";
+  try {
+    const { askAI } = await import("@/lib/ai-brain");
+    aiMessage = await askAI(
+      [{ role: "user", content: aiPrompt }],
+      { temperature: 0.7, maxTokens: 300 }
+    );
+  } catch {
+    aiMessage = "";
+  }
+
+  let fullMessage = title;
+
+  if (context.trigger === "morning_briefing") {
+    if (taskLines) fullMessage += `\n\n📋 *Tareas (${tasks.length})*\n${taskLines}`;
+    if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
+    if (aiMessage) fullMessage += `\n\n${aiMessage}`;
+    if (!taskLines && !eventLines) fullMessage += `\n\n${aiMessage || "¡Que tengas un excelente día! 💪"}`;
+  } else if (context.trigger === "evening_recap") {
+    fullMessage += `\n\n✅ Completadas hoy: ${context.completedToday || 0}\n📋 Pendientes: ${tasks.length}`;
+    if (taskLines) fullMessage += `\n\n${taskLines}`;
+    if (aiMessage) fullMessage += `\n\n${aiMessage}`;
+  } else if (context.trigger === "overdue") {
+    fullMessage += `\n\n${taskLines}`;
+    if (aiMessage) fullMessage += `\n\n${aiMessage}`;
+  } else if (context.trigger === "inactivity") {
+    fullMessage += `\n\nCumplimiento 30d: ${context.complianceRate || 0}%\nTareas pendientes: ${tasks.length}`;
+    if (aiMessage) fullMessage += `\n\n${aiMessage}`;
+  }
+
+  try {
+    const result = await sendMessage(to, fullMessage);
+    const status = result?.messages?.[0]?.id ? "SENT" : "FAILED";
+
+    await prisma.whatsAppMessage.create({
+      data: {
+        userId: user.id,
+        toNumber: to,
+        message: fullMessage,
+        type: "NOTIFICATION",
+        status,
+      },
+    });
+
+    return status === "SENT";
+  } catch (error) {
+    console.error("sendAutomatedReminder error:", error);
+    return false;
+  }
+}
+
 export {
   sendMessage,
   sendTemplateMessage,
@@ -461,6 +631,8 @@ export {
   sendDailySummary,
   sendAlert,
   sendEventReminder,
+  sendAIAssistantReply,
+  sendAutomatedReminder,
 };
 export type {
   WhatsAppApiResponse,

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendMessage } from "@/lib/whatsapp";
+import { sendMessage, sendAutomatedReminder } from "@/lib/whatsapp";
 import { generateSmartAlert, detectAnomalies, summarizeCompany, weeklyPerformanceReport } from "@/lib/ai-brain";
 import { startOfDay, endOfDay, subDays, addDays, differenceInHours } from "date-fns";
 
@@ -510,11 +510,148 @@ export async function runAllChecks(): Promise<Record<string, any>> {
   return results;
 }
 
+export async function sendMorningBriefing(): Promise<{
+  briefingsSent: number;
+}> {
+  try {
+    const today = startOfDay(new Date());
+    const endToday = endOfDay(new Date());
+
+    const users = await prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, role: true, phone: true, whatsappNumber: true },
+    });
+
+    let briefingsSent = 0;
+
+    for (const user of users) {
+      const to = user.whatsappNumber || user.phone;
+      if (!to) continue;
+
+      const [pendingTasks, upcomingEvents] = await Promise.all([
+        prisma.task.findMany({
+          where: {
+            assignedToId: user.id,
+            status: { in: ["PENDIENTE", "EN_PROCESO"] },
+          },
+          orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+          take: 10,
+          select: { title: true, status: true, priority: true, dueDate: true },
+        }),
+        prisma.event.findMany({
+          where: {
+            date: { gte: today, lte: endToday },
+            OR: [{ plannerId: user.id }, { responsibleId: user.id }],
+          },
+          select: { name: true, clientName: true, date: true },
+          take: 5,
+        }),
+      ]);
+
+      const thirtyDaysAgo = subDays(new Date(), 30);
+      const completedCount = await prisma.task.count({
+        where: { assignedToId: user.id, status: "COMPLETADA", updatedAt: { gte: thirtyDaysAgo } },
+      });
+      const assignedCount = await prisma.task.count({
+        where: { assignedToId: user.id, createdAt: { gte: thirtyDaysAgo } },
+      });
+      const complianceRate = assignedCount > 0 ? Math.round((completedCount / assignedCount) * 100) : 100;
+
+      const sent = await sendAutomatedReminder(user, {
+        trigger: "morning_briefing",
+        pendingTasks,
+        upcomingEvents,
+        complianceRate,
+      });
+
+      if (sent) briefingsSent++;
+
+      await logActivity(
+        "MORNING_BRIEFING",
+        "USER",
+        user.id,
+        `Briefing matutino enviado a ${user.name} (${pendingTasks.length} tareas, ${upcomingEvents.length} eventos)`,
+        "system"
+      );
+    }
+
+    return { briefingsSent };
+  } catch (error) {
+    console.error("sendMorningBriefing error:", error);
+    return { briefingsSent: 0 };
+  }
+}
+
+export async function sendEveningRecap(): Promise<{
+  recapsSent: number;
+}> {
+  try {
+    const today = startOfDay(new Date());
+    const endToday = endOfDay(new Date());
+
+    const users = await prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, role: true, phone: true, whatsappNumber: true },
+    });
+
+    let recapsSent = 0;
+
+    for (const user of users) {
+      const to = user.whatsappNumber || user.phone;
+      if (!to) continue;
+
+      const [completedToday, pendingTasks] = await Promise.all([
+        prisma.task.count({
+          where: {
+            assignedToId: user.id,
+            status: "COMPLETADA",
+            updatedAt: { gte: today, lte: endToday },
+          },
+        }),
+        prisma.task.findMany({
+          where: {
+            assignedToId: user.id,
+            status: { in: ["PENDIENTE", "EN_PROCESO"] },
+          },
+          orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+          take: 10,
+          select: { title: true, status: true, priority: true, dueDate: true },
+        }),
+      ]);
+
+      if (completedToday === 0 && pendingTasks.length === 0) continue;
+
+      const sent = await sendAutomatedReminder(user, {
+        trigger: "evening_recap",
+        completedToday,
+        pendingTasks,
+      });
+
+      if (sent) recapsSent++;
+
+      await logActivity(
+        "EVENING_RECAP",
+        "USER",
+        user.id,
+        `Recap vespertino enviado a ${user.name} (${completedToday} completadas, ${pendingTasks.length} pendientes)`,
+        "system"
+      );
+    }
+
+    return { recapsSent };
+  } catch (error) {
+    console.error("sendEveningRecap error:", error);
+    return { recapsSent: 0 };
+  }
+}
+
 export function getSmartCronSchedule(): Record<string, string> {
   return {
     checkInactivity: "0 8 * * *",
     checkOverdueTasks: "0 */2 * * *",
     dailyBriefing: "0 6 * * *",
+    morningBriefing: "0 7 * * *",
+    eveningRecap: "0 18 * * *",
     detectFallingBehind: "0 10 * * *",
     weeklyCompliance: "0 8 * * 1",
     eventReminders: "0 7 * * *",

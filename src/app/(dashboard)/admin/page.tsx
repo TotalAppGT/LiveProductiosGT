@@ -715,46 +715,83 @@ export default function AdminPage() {
                 )}
 
                 {waProvider === "META" && (
-                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center gap-2 mb-3">
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700 space-y-4">
+                    <div className="flex items-center gap-2">
                       <Webhook className="h-5 w-5 text-blue-500" />
                       <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
                         Configuración del Webhook
                       </h4>
                     </div>
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">URL del Webhook (copia esta URL en Meta Developer Console)</p>
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded px-2 py-1.5 flex-1 break-all">
-                            {whatsappSettings.webhookUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/whatsapp`}
-                          </code>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const url = whatsappSettings.webhookUrl || `${window.location.origin}/api/webhooks/whatsapp`;
-                              navigator.clipboard.writeText(url);
-                              toast.success("URL copiada al portapapeles");
-                            }}
-                          >
-                            Copiar
-                          </Button>
-                        </div>
+
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-300 mb-1">
+                        Guía paso a paso para configurar Meta WhatsApp Business API:
+                      </p>
+                      <ol className="list-decimal ml-4 text-xs text-yellow-700 dark:text-yellow-400 space-y-0.5">
+                        <li>Ve a <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">Meta Developer Console</a></li>
+                        <li>Crea una app con producto "WhatsApp" o usa una existente</li>
+                        <li>Ve a WhatsApp &gt; API Setup en el panel izquierdo</li>
+                        <li>Copia el <strong>Phone Number ID</strong> y <strong>Access Token</strong> (temporal o permanente) en los campos de arriba</li>
+                        <li>En Configuration, configura el webhook con la URL y el Verify Token de abajo</li>
+                        <li>Suscríbete a los eventos <strong>messages</strong></li>
+                        <li>Verifica tu número de negocio en Meta Business Suite</li>
+                      </ol>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1.5 font-medium">URL del Webhook</p>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-gray-800 dark:bg-gray-900 text-green-300 dark:text-green-400 rounded px-3 py-2 flex-1 break-all font-mono">
+                          https://liveproductiosgt-production.up.railway.app/api/whatsapp/webhook
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText("https://liveproductiosgt-production.up.railway.app/api/whatsapp/webhook");
+                            toast.success("URL copiada al portapapeles");
+                          }}
+                        >
+                          Copiar
+                        </Button>
                       </div>
-                      <div className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                        <div className="flex-shrink-0 mt-0.5">
-                          <Webhook className="h-4 w-4 text-blue-500" />
-                        </div>
-                        <div className="text-xs text-blue-700 dark:text-blue-400">
-                          <p className="font-medium mb-1">Instrucciones:</p>
-                          <ol className="list-decimal ml-3 space-y-0.5">
-                            <li>Ve a Meta Developer Console &gt; WhatsApp &gt; Configuration</li>
-                            <li>Pega la URL del webhook en el campo "Callback URL"</li>
-                            <li>Ingresa el Verify Token configurado arriba</li>
-                            <li>Suscríbete a los eventos "messages"</li>
-                          </ol>
-                        </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Pega esta URL exacta en el campo "Callback URL" de Meta Developer Console.
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1.5 font-medium">Verify Token</p>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded px-3 py-2 flex-1 break-all">
+                          {whatsappSettings.verifyToken || "live-productions-webhook-token"}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(whatsappSettings.verifyToken || "live-productions-webhook-token");
+                            toast.success("Token copiado al portapapeles");
+                          }}
+                        >
+                          Copiar
+                        </Button>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Este token debe coincidir con el Verify Token configurado arriba y en Meta.
+                      </p>
+                    </div>
+
+                    <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <Info className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                      <div className="text-xs text-blue-700 dark:text-blue-400">
+                        <p className="font-medium mb-1">Requisitos adicionales:</p>
+                        <ul className="list-disc ml-3 space-y-0.5">
+                          <li>Tu negocio debe estar verificado en Meta Business Suite</li>
+                          <li>El número de teléfono debe ser un número de negocio (no personal)</li>
+                          <li>En modo desarrollo, solo puedes enviar mensajes a números registrados como testers</li>
+                          <li>Para producción, debes completar la verificación de negocio de Meta</li>
+                        </ul>
                       </div>
                     </div>
                   </div>

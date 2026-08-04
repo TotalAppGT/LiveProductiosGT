@@ -96,7 +96,7 @@ export async function getAIClient(): Promise<{
 
   const defaultModels: Record<string, string> = {
     DEEPSEEK: "deepseek-chat",
-    OPENAI: "gpt-4o",
+    OPENAI: "gpt-4o-mini",
     OPENROUTER: "openai/gpt-4o",
     NVIDIA: "deepseek-ai/deepseek-v4-pro",
   };
