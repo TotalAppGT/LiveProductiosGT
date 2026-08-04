@@ -15,6 +15,7 @@ import {
   Cpu,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useApp } from "@/contexts/AppContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
@@ -33,25 +34,42 @@ const QUICK_ACTIONS = [
   { label: "Eventos esta semana", prompt: "¿Cuáles son los eventos programados para esta semana y qué personal está asignado?" },
 ];
 
-const SYSTEM_PROMPT = `Eres el asistente inteligente de Live Productions, una empresa de producción de eventos en vivo ubicada en Guatemala. 
-La empresa se especializa en servicios de audio profesional, iluminación escénica, alquiler de instrumentos musicales, servicios de DJ, 
-mobiliario para eventos, y producción completa de eventos sociales y corporativos.
+const SYSTEM_PROMPT = `Eres el asistente inteligente de Live Productions, una empresa guatemalteca de producción de eventos en vivo. La empresa se especializa en audio profesional, iluminación escénica, instrumentos musicales, DJ, mobiliario y producción completa de eventos sociales y corporativos.
 
-Tu función es ayudar al personal a gestionar tareas, eventos, cobros, inventario y personal de manera eficiente.
-Responde siempre en español, sé conciso pero amable, y proporciona información útil basada en los datos disponibles.
-Cuando no tengas suficiente información, indica claramente qué datos necesitarías para ayudar mejor.`;
+ESTRUCTURA SEMANAL:
+- Lunes: facturación y cotizaciones pendientes
+- Martes: revisión de inventario y vehículos
+- Miércoles: pagos y coordinación de músicos
+- Jueves: preparación de eventos del fin de semana
+- Viernes: carga de equipo y eventos del fin de semana
+- Fines de semana: ejecución de eventos (bodas, quinceañeras, corporativos, conciertos)
+
+PERSONAL CLAVE:
+- Jorge (Dueño): dirección general
+- Diana/Brenda (Coordinación): planificación, cotizaciones, clientes
+- Abel (Logística): transporte, montaje/desmontaje
+- Selvin (Técnico): audio, iluminación, mantenimiento
+- Exequiel (Bodega): control de inventario, limpieza, organización
+
+EQUIPO DE AUDIO: QSC (alta gama), T4/JBL (media), Turbosound (media)
+UBICACIONES: Bodega Elgin, Bodega PP
+TIPOS DE EVENTO: DJ COMPLETO, SAXOFONIC, SUNDAY FUNDAY
+CICLO DE COBROS: depósitos pre-evento + saldo post-evento
+
+Responde siempre en español, sé conciso y útil. Si necesitas más datos para ayudar, indícalo claramente.`;
 
 interface AIChatContext {
   user: { name: string; role: string };
   todayTasks: { title: string; status: string; assignedTo?: string }[];
   upcomingEvents: { name: string; date: string; status: string }[];
+  compliance?: { totalComplianceRate: number; activeUsers: number; inactiveUsers: number } | null;
   provider?: string;
   model?: string;
 }
 
 export function AIChat() {
   const { user, token } = useAuth();
-  const [isOpen, setIsOpen] = useState(false);
+  const { isAIChatOpen: isOpen, toggleAIChat } = useApp();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -108,14 +126,35 @@ export function AIChat() {
       if (eRes.ok) {
         const eJson = await eRes.json();
         if (eJson.success && eJson.data) {
-          ctx.upcomingEvents = eJson.data.map((e: { name: string; date: string; status: string }) => ({
-            name: e.name,
-            date: e.date,
-            status: e.status,
-          }));
+          ctx.upcomingEvents = Array.isArray(eJson.data)
+            ? eJson.data.map((e: any) => ({
+                name: e.name,
+                date: e.date ? e.date.split("T")[0] : "",
+                status: e.status,
+              }))
+            : [];
         }
       }
     } catch { /* */ }
+
+    const isManager = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
+    if (isManager) {
+      try {
+        const cRes = await fetch("/api/compliance?filter=today", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (cRes.ok) {
+          const cJson = await cRes.json();
+          if (cJson.success && cJson.data) {
+            ctx.compliance = {
+              totalComplianceRate: cJson.data.totalComplianceRate || 0,
+              activeUsers: cJson.data.activeUsers || 0,
+              inactiveUsers: cJson.data.inactiveUsers || 0,
+            };
+          }
+        }
+      } catch { /* */ }
+    }
 
     return ctx;
   }, [token, user]);
@@ -214,7 +253,7 @@ export function AIChat() {
   return (
     <>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleAIChat}
         className={cn(
           "fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300",
           isOpen
@@ -262,7 +301,7 @@ export function AIChat() {
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={toggleAIChat}
                 className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <X className="h-4 w-4" />

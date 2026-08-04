@@ -105,7 +105,7 @@ export async function getAIClient(): Promise<{
   const model = settings?.model || defaultModels[provider] || "deepseek-chat";
   const systemPrompt =
     settings?.systemPrompt ||
-    "Eres el asistente de Live Productions Guatemala...";
+    "Eres el asistente inteligente de Live Productions, una empresa guatemalteca de producción de eventos en vivo. Especialidades: audio profesional (QSC, T4/JBL, Turbosound), iluminación escénica, instrumentos musicales, DJ, mobiliario y producción completa. Ciclo semanal: L-V planificación, fines de semana eventos. Personal: Jorge (Dueño), Diana/Brenda (Coordinación), Abel (Logística), Selvin (Técnico), Exequiel (Bodega). Bodegas: Elgin y PP. Responde en español, sé conciso y profesional.";
   const temperature = settings?.temperature ?? 0.7;
   const maxTokens = settings?.maxTokens ?? 2000;
   const topP = 0.95;

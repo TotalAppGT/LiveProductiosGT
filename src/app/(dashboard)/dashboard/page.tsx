@@ -113,7 +113,7 @@ export default function DashboardPage() {
     const fetchCompliance = async () => {
       if (!token || !isAdminOrOwner) return;
       try {
-        const res = await fetch("/api/cumplimiento?filter=today", {
+        const res = await fetch("/api/compliance?filter=today", {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {

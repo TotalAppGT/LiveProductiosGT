@@ -25,6 +25,9 @@ interface AppContextValue {
   companyInfo: CompanyInfo;
   setCompanyInfo: (info: CompanyInfo) => void;
   isMobile: boolean;
+  isAIChatOpen: boolean;
+  toggleAIChat: () => void;
+  setAIChatOpen: (open: boolean) => void;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -55,6 +58,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     slug: "live-productions",
   });
   const [isMobile, setIsMobile] = useState(false);
+  const [isAIChatOpen, setAIChatOpenState] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -113,6 +117,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCompanyInfoState(info);
   }, []);
 
+  const toggleAIChat = useCallback(() => {
+    setAIChatOpenState((prev) => !prev);
+  }, []);
+
+  const setAIChatOpen = useCallback((open: boolean) => {
+    setAIChatOpenState(open);
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -129,6 +141,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         companyInfo,
         setCompanyInfo,
         isMobile,
+        isAIChatOpen,
+        toggleAIChat,
+        setAIChatOpen,
       }}
     >
       {children}

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { AIChat } from "@/components/dashboard/AIChat";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -35,6 +36,7 @@ function MainLayout({ children, title, className }: MainLayoutProps) {
           {children}
         </main>
       </div>
+      <AIChat />
       <Toaster
         position="top-right"
         toastOptions={{

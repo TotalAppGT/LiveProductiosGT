@@ -76,7 +76,7 @@ export default function CumplimientoPage() {
         if (customFrom) params.set("from", customFrom);
         if (customTo) params.set("to", customTo);
       }
-      const res = await fetch(`/api/cumplimiento?${params.toString()}`, {
+      const res = await fetch(`/api/compliance?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Error al cargar datos de cumplimiento");

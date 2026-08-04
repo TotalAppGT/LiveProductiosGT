@@ -20,88 +20,90 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const dateFrom = searchParams.get("dateFrom");
-    const dateTo = searchParams.get("dateTo");
+    const filter = searchParams.get("filter") || "today";
+    const fromParam = searchParams.get("from");
+    const toParam = searchParams.get("to");
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayEnd = new Date(today);
     todayEnd.setHours(23, 59, 59, 999);
 
-    const from = dateFrom ? new Date(dateFrom) : today;
-    from.setHours(0, 0, 0, 0);
-    const to = dateTo ? new Date(dateTo) : todayEnd;
-    to.setHours(23, 59, 59, 999);
+    let from: Date;
+    let to: Date;
+
+    switch (filter) {
+      case "yesterday":
+        from = new Date(today);
+        from.setDate(from.getDate() - 1);
+        from.setHours(0, 0, 0, 0);
+        to = new Date(from);
+        to.setHours(23, 59, 59, 999);
+        break;
+      case "week": {
+        const dayOfWeek = today.getDay();
+        from = new Date(today);
+        from.setDate(from.getDate() - dayOfWeek);
+        from.setHours(0, 0, 0, 0);
+        to = todayEnd;
+        break;
+      }
+      case "custom":
+        from = fromParam ? new Date(fromParam) : today;
+        from.setHours(0, 0, 0, 0);
+        to = toParam ? new Date(toParam) : todayEnd;
+        to.setHours(23, 59, 59, 999);
+        break;
+      default: // today
+        from = today;
+        to = todayEnd;
+    }
 
     const users = await prisma.user.findMany({
       where: { active: true },
       select: {
         id: true,
         name: true,
-        email: true,
         role: true,
         avatar: true,
-        phone: true,
-        whatsappNumber: true,
-        _count: {
-          select: {
-            assignedTasks: {
-              where: {
-                createdAt: { gte: from, lte: to },
-              },
-            },
-          },
-        },
       },
       orderBy: { name: "asc" },
     });
 
     const complianceData = await Promise.all(
       users.map(async (user) => {
-        const [totalAssigned, completed, pending, inProcess, cancelled, reprogrammed] =
-          await Promise.all([
-            prisma.task.count({
-              where: {
-                assignedToId: user.id,
-                createdAt: { gte: from, lte: to },
-              },
-            }),
-            prisma.task.count({
-              where: {
-                assignedToId: user.id,
-                status: "COMPLETADA",
-                updatedAt: { gte: from, lte: to },
-              },
-            }),
-            prisma.task.count({
-              where: {
-                assignedToId: user.id,
-                status: "PENDIENTE",
-                createdAt: { gte: from, lte: to },
-              },
-            }),
-            prisma.task.count({
-              where: {
-                assignedToId: user.id,
-                status: "EN_PROCESO",
-                createdAt: { gte: from, lte: to },
-              },
-            }),
-            prisma.task.count({
-              where: {
-                assignedToId: user.id,
-                status: "CANCELADA",
-                updatedAt: { gte: from, lte: to },
-              },
-            }),
-            prisma.task.count({
-              where: {
-                assignedToId: user.id,
-                status: "REPROGRAMADA",
-                updatedAt: { gte: from, lte: to },
-              },
-            }),
-          ]);
+        const [tasksAssigned, tasksCompleted, pendingTasks] = await Promise.all([
+          prisma.task.count({
+            where: {
+              assignedToId: user.id,
+              createdAt: { gte: from, lte: to },
+            },
+          }),
+          prisma.task.count({
+            where: {
+              assignedToId: user.id,
+              status: "COMPLETADA",
+              updatedAt: { gte: from, lte: to },
+            },
+          }),
+          prisma.task.findMany({
+            where: {
+              assignedToId: user.id,
+              status: { in: ["PENDIENTE", "EN_PROCESO"] },
+            },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              priority: true,
+              category: true,
+              comments: true,
+              dueDate: true,
+            },
+            orderBy: { createdAt: "desc" },
+            take: 20,
+          }),
+        ]);
 
         const lastActivity = await prisma.activity.findFirst({
           where: { userId: user.id },
@@ -110,65 +112,55 @@ export async function GET(request: NextRequest) {
         });
 
         const completionRate =
-          totalAssigned > 0
-            ? Math.round(
-                ((completed + cancelled) / totalAssigned) * 100
-              )
+          tasksAssigned > 0
+            ? Math.round((tasksCompleted / tasksAssigned) * 100)
             : 0;
-
-        const neverAccessed =
-          !lastActivity || lastActivity.createdAt < from;
-
-        const overdueComments = await prisma.task.findMany({
-          where: {
-            assignedToId: user.id,
-            status: { in: ["PENDIENTE", "EN_PROCESO"] },
-            dueDate: { lt: new Date() },
-            comments: { not: null },
-          },
-          select: { title: true, comments: true },
-        });
 
         return {
           userId: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          avatar: user.avatar,
-          totalAssigned,
-          completed,
-          pending,
-          inProcess,
-          cancelled,
-          reprogrammed,
+          user: {
+            id: user.id,
+            name: user.name,
+            avatar: user.avatar,
+            role: user.role,
+          },
+          tasksAssigned,
+          tasksCompleted,
+          tasksPending: pendingTasks.length,
           completionRate,
-          neverAccessed,
           lastAccess: lastActivity?.createdAt?.toISOString() || null,
-          overdueComments: overdueComments.filter((t) => t.comments),
-          period: { from: from.toISOString(), to: to.toISOString() },
+          pendingTasks,
         };
       })
     );
 
-    const summary = {
-      totalUsers: complianceData.length,
-      avgCompletionRate:
-        complianceData.length > 0
-          ? Math.round(
-              complianceData.reduce((sum, u) => sum + u.completionRate, 0) /
-                complianceData.length
-            )
-          : 0,
-      usersNeverAccessed: complianceData.filter((u) => u.neverAccessed).length,
-      totalTasksAssigned: complianceData.reduce((sum, u) => sum + u.totalAssigned, 0),
-      totalTasksCompleted: complianceData.reduce((sum, u) => sum + u.completed, 0),
-    };
+    const activeUsers = complianceData.filter(
+      (u) => u.lastAccess && new Date(u.lastAccess) >= from
+    ).length;
+
+    const totalPendingTasks = complianceData.reduce(
+      (sum, u) => sum + u.tasksPending,
+      0
+    );
+
+    const totalComplianceRate =
+      complianceData.length > 0
+        ? Math.round(
+            complianceData.reduce((sum, u) => sum + u.completionRate, 0) /
+              complianceData.length
+          )
+        : 0;
 
     return NextResponse.json(
       {
         success: true,
-        data: complianceData,
-        summary,
+        data: {
+          totalComplianceRate,
+          activeUsers,
+          inactiveUsers: complianceData.length - activeUsers,
+          totalPendingTasks,
+          staff: complianceData,
+        },
       },
       { status: 200 }
     );

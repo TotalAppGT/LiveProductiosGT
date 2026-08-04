@@ -29,6 +29,7 @@ function Header({ title, className }: HeaderProps) {
     isMobile,
     notificationsCount,
     clearNotifications,
+    toggleAIChat,
   } = useApp();
   const { user, logout } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -89,9 +90,13 @@ function Header({ title, className }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors relative">
+          <button
+            onClick={toggleAIChat}
+            className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors relative"
+          >
             <Brain className="h-5 w-5" />
             <span className="sr-only">Asistente IA</span>
+            <span className="absolute -top-0.5 -right-0.5 h-3 w-3 bg-purple-500 rounded-full border-2 border-white dark:border-gray-900 animate-pulse" />
           </button>
 
           <button
