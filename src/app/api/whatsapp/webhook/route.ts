@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { askAI } from "@/lib/ai-brain";
+import { handleWhatsAppMessage } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 
 async function getVerifyToken(): Promise<string> {
@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       return new NextResponse(challenge, { status: 200 });
     }
 
+    console.warn(`Verificación webhook fallida: token recibido "${token}", esperado "${verifyToken}"`);
     return NextResponse.json(
       { success: false, error: "Token de verificación inválido" },
       { status: 403 }
@@ -49,7 +50,7 @@ async function formatTasksForUser(userId: string) {
   return tasks
     .map(
       (t) =>
-        `${t.title} | Estado: ${t.status} | Prioridad: ${t.priority} | Vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT") : "Sin fecha"}`
+        `• ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪"} *${t.title}* - ${t.status === "PENDIENTE" ? "Pendiente" : "En proceso"}${t.dueDate ? ` - Vence: ${new Date(t.dueDate).toLocaleDateString("es-GT")}` : ""}`
     )
     .join("\n");
 }
@@ -71,7 +72,7 @@ async function formatEventsForUser(userId: string) {
   return events
     .map(
       (e) =>
-        `${e.name} | Cliente: ${e.clientName} | Fecha: ${new Date(e.date).toLocaleDateString("es-GT")}`
+        `• 🎪 *${e.name}* - Cliente: ${e.clientName} - ${new Date(e.date).toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })} - ${e.location || "Sin ubicación"}`
     )
     .join("\n");
 }
@@ -97,14 +98,59 @@ async function handleCommand(
 
   if (cmd === "tareas") {
     const tasks = await formatTasksForUser(user.id);
-    if (!tasks) return `Hola ${user.name}, no tienes tareas pendientes. ¡Buen trabajo! 🎉`;
-    return `📋 *Tus Tareas Pendientes - ${user.name}*\n\n${tasks}`;
+    if (!tasks) return `Hola ${user.name}, no tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
+    return `📋 *Tareas Pendientes - ${user.name}*\n\n${tasks}\n\n_Responde directamente para hablar con LUNA, tu asistente IA._`;
+  }
+
+  if (cmd === "pendientes") {
+    const tasks = await formatTasksForUser(user.id);
+    if (!tasks) return `${user.name}, no tienes tareas pendientes. ¡Todo al día! ✅`;
+    return `📋 *Tareas Pendientes - ${user.name}*\n\n${tasks}`;
   }
 
   if (cmd === "eventos") {
     const events = await formatEventsForUser(user.id);
     if (!events) return `Hola ${user.name}, no tienes eventos próximos registrados.`;
-    return `🎪 *Tus Próximos Eventos - ${user.name}*\n\n${events}`;
+    return `🎪 *Próximos Eventos - ${user.name}*\n\n${events}`;
+  }
+
+  if (cmd.startsWith("evento ")) {
+    const eventName = cmd.replace("evento ", "").trim();
+    if (!eventName) return "Por favor especifica el nombre del evento. Ejemplo: *evento Boda Pérez*";
+
+    const events = await prisma.event.findMany({
+      where: {
+        name: { contains: eventName, mode: "insensitive" },
+        OR: [
+          { plannerId: user.id },
+          { responsibleId: user.id },
+        ],
+      },
+      orderBy: { date: "desc" },
+      take: 5,
+      include: {
+        planner: { select: { name: true } },
+        responsible: { select: { name: true } },
+        tasks: {
+          where: { status: { in: ["PENDIENTE", "EN_PROCESO"] } },
+          select: { title: true, status: true, assignedTo: { select: { name: true } } },
+          take: 10,
+        },
+      },
+    });
+
+    if (events.length === 0) {
+      return `No encontré ningún evento con "${eventName}" asignado a ti. Verifica el nombre e intenta de nuevo.`;
+    }
+
+    const lines = events.map((e) => {
+      const taskLines = e.tasks
+        .map((t) => `  • ${t.title} [${t.status}] -> ${t.assignedTo?.name || "Sin asignar"}`)
+        .join("\n");
+      return `🎪 *${e.name}*\n📅 ${new Date(e.date).toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}\n📍 ${e.location || "Sin ubicación"}\n👤 Cliente: ${e.clientName}\n📊 Estado: ${e.status}\n👥 Planner: ${e.planner?.name || "N/A"} | Responsable: ${e.responsible?.name || "N/A"}\n📋 Tareas (${e.tasks.length}):\n${taskLines || "  Ninguna pendiente"}`;
+    });
+
+    return lines.join("\n\n---\n\n");
   }
 
   if (cmd === "resumen") {
@@ -115,46 +161,14 @@ async function handleCommand(
     ]);
     const tasksStr = tasks || "Sin tareas pendientes";
     const eventsStr = events || "Sin eventos próximos";
-    return `📊 *Resumen - ${user.name}*\n\n📋 *Tareas:*\n${tasksStr}\n\n🎪 *Eventos:*\n${eventsStr}\n\n📈 *Cumplimiento:*\n${compliance}`;
+    return `📊 *Resumen de ${user.name}*\n\n📋 *Tareas:*\n${tasksStr}\n\n🎪 *Eventos:*\n${eventsStr}\n\n📈 *Cumplimiento:*\n${compliance}`;
   }
 
   if (cmd === "ayuda") {
-    return `🤖 *Asistente Live Productions*\n\nComandos disponibles:\n• *tareas* - Ver tus tareas pendientes\n• *eventos* - Ver tus próximos eventos\n• *resumen* - Resumen completo de tu actividad\n• *ayuda* - Mostrar esta ayuda\n\nTambién puedes escribir cualquier pregunta y te responderé con IA.`;
+    return `🤖 *LUNA - Asistente Live Productions*\n\n*Comandos disponibles:*\n• *tareas* - Ver tus tareas pendientes\n• *pendientes* - Ver tus tareas pendientes (versión compacta)\n• *eventos* - Ver tus próximos eventos\n• *evento [nombre]* - Buscar un evento específico\n• *resumen* - Resumen completo de tu actividad\n• *ayuda* - Mostrar esta ayuda\n\nTambién puedes escribir cualquier pregunta en lenguaje natural y LUNA te responderá con inteligencia artificial.\n\n📞 +502 3090-3172\n🌐 liveproductionsgt.com`;
   }
 
   return null;
-}
-
-async function generateAIAssistantReply(
-  user: { id: string; name: string; role: string },
-  messageText: string
-): Promise<string> {
-  const [tasks, events, compliance] = await Promise.all([
-    formatTasksForUser(user.id),
-    formatEventsForUser(user.id),
-    getComplianceSummary(user.id),
-  ]);
-
-  const prompt = `Eres el asistente inteligente de WhatsApp de Live Productions, una empresa guatemalteca de producción de eventos en vivo. Responde al usuario "${user.name}" (rol: ${user.role}) de forma concisa, profesional y en español.
-
-Información del usuario:
-- Tareas pendientes: ${tasks || "Ninguna"}
-- Próximos eventos: ${events || "Ninguno"}
-- Cumplimiento 30d: ${compliance}
-
-Mensaje del usuario: "${messageText}"
-
-Responde directamente al usuario con información útil basada en su contexto. Máximo 3 párrafos cortos.`;
-
-  try {
-    const response = await askAI(
-      [{ role: "user", content: prompt }],
-      { temperature: 0.7, maxTokens: 800 }
-    );
-    return response;
-  } catch {
-    return `¡Hola ${user.name}! Soy el asistente de Live Productions. Escribe *ayuda* para ver qué puedo hacer por ti.`;
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -171,21 +185,52 @@ export async function POST(request: NextRequest) {
 
             for (const message of messages) {
               const fromNumber = message.from;
-              const text = message.text?.body?.trim() || "";
               const contact = contacts.find(
-                (c: any) => c.wa_id === fromNumber
+                (c: unknown) => (c as Record<string, unknown>).wa_id === fromNumber
               );
-              const contactName = contact?.profile?.name || "Desconocido";
+              const contactName =
+                (contact as unknown as { profile?: { name?: string } })?.profile?.name ||
+                "Desconocido";
+
+              const messageType = message.type;
+              const text = message.text?.body?.trim() || "";
 
               console.log("Mensaje recibido de WhatsApp:", {
                 from: fromNumber,
                 contactName,
-                text,
-                type: message.type,
+                type: messageType,
+                hasText: !!text,
                 timestamp: message.timestamp,
               });
 
-              if (!text || message.type !== "text") continue;
+              if (messageType && messageType !== "text") {
+                const mediaTypeLabels: Record<string, string> = {
+                  audio: "audio",
+                  image: "imagen",
+                  video: "video",
+                  document: "documento",
+                  sticker: "sticker",
+                  location: "ubicación",
+                };
+                const mediaLabel = mediaTypeLabels[messageType] || messageType;
+                const mediaMsg = `¡Hola! 📱 Soy LUNA, tu asistente de Live Productions. Por el momento no puedo procesar mensajes de *${mediaLabel}*.\n\nEnvíame un mensaje de *texto* y con gusto te ayudaré con:\n• Tus tareas pendientes\n• Próximos eventos\n• Resúmenes de actividad\n• Preguntas sobre procesos de la empresa\n\nEscribe *ayuda* para ver todos los comandos disponibles.`;
+
+                await sendMessage(fromNumber, mediaMsg).catch(() => {});
+
+                await prisma.whatsAppMessage.create({
+                  data: {
+                    userId: "system",
+                    toNumber: fromNumber,
+                    message: `[RECIBIDO ${messageType.toUpperCase()}] No procesable`,
+                    type: "CHAT",
+                    status: "DELIVERED",
+                  },
+                }).catch(() => {});
+
+                continue;
+              }
+
+              if (!text) continue;
 
               try {
                 const normalizedFrom = fromNumber.replace(/[^0-9]/g, "");
@@ -204,44 +249,78 @@ export async function POST(request: NextRequest) {
 
                 if (user) {
                   const commandResponse = await handleCommand(text, user);
-                  const reply = commandResponse || await generateAIAssistantReply(user, text);
 
-                  const sendResult = await sendMessage(fromNumber, reply);
+                  if (commandResponse) {
+                    const sendResult = await sendMessage(fromNumber, commandResponse);
 
-                  await prisma.whatsAppMessage.create({
-                    data: {
-                      userId: user.id,
-                      toNumber: fromNumber,
-                      message: `[RECIBIDO] ${text}`,
-                      type: "CHAT",
-                      status: "DELIVERED",
-                    },
-                  });
+                    await prisma.whatsAppMessage.create({
+                      data: {
+                        userId: user.id,
+                        toNumber: fromNumber,
+                        message: `[RECIBIDO] ${text}`,
+                        type: "CHAT",
+                        status: "DELIVERED",
+                      },
+                    });
 
-                  await prisma.whatsAppMessage.create({
-                    data: {
-                      userId: user.id,
-                      toNumber: fromNumber,
-                      message: `[RESPUESTA AI] ${reply}`,
-                      type: "CHAT",
-                      status: sendResult ? "SENT" : "FAILED",
-                    },
-                  });
+                    await prisma.whatsAppMessage.create({
+                      data: {
+                        userId: user.id,
+                        toNumber: fromNumber,
+                        message: `[RESPUESTA COMANDO] ${commandResponse.slice(0, 500)}`,
+                        type: "CHAT",
+                        status: sendResult ? "SENT" : "FAILED",
+                      },
+                    });
 
-                  await prisma.activity.create({
-                    data: {
-                      userId: user.id,
-                      action: "WHATSAPP_AI_REPLY",
-                      resource: "WHATSAPP",
-                      details: `Mensaje de WhatsApp respondido con IA para ${user.name} (${fromNumber})`,
-                    },
-                  });
+                    await prisma.activity.create({
+                      data: {
+                        userId: user.id,
+                        action: "WHATSAPP_COMMAND",
+                        resource: "WHATSAPP",
+                        details: `Comando "${text}" ejecutado por ${user.name} (${fromNumber})`,
+                      },
+                    });
+                  } else {
+                    const aiReply = await handleWhatsAppMessage(fromNumber, text);
+
+                    const sendResult = await sendMessage(fromNumber, aiReply);
+
+                    await prisma.whatsAppMessage.create({
+                      data: {
+                        userId: user.id,
+                        toNumber: fromNumber,
+                        message: `[RECIBIDO] ${text}`,
+                        type: "CHAT",
+                        status: "DELIVERED",
+                      },
+                    });
+
+                    await prisma.whatsAppMessage.create({
+                      data: {
+                        userId: user.id,
+                        toNumber: fromNumber,
+                        message: `[RESPUESTA LUNA] ${aiReply.slice(0, 500)}`,
+                        type: "CHAT",
+                        status: sendResult ? "SENT" : "FAILED",
+                      },
+                    });
+
+                    await prisma.activity.create({
+                      data: {
+                        userId: user.id,
+                        action: "WHATSAPP_AI_REPLY",
+                        resource: "WHATSAPP",
+                        details: `LUNA respondió a ${user.name} (${fromNumber}): "${text.slice(0, 100)}"`,
+                      },
+                    });
+                  }
                 } else {
                   const welcomeMsg =
-                    "¡Hola! 👋 Soy el asistente virtual de *Live Productions*. " +
-                    "Parece que tu número no está registrado en nuestro sistema. " +
-                    "Por favor contacta a tu administrador para que te agregue con tu número de WhatsApp.\n\n" +
-                    "📞 Teléfono: +502 3090-3172\n🌐 liveproductionsgt.com";
+                    "¡Hola! 👋 Soy *LUNA*, la asistente virtual de Live Productions. " +
+                    "Tu número no está registrado en nuestro sistema.\n\n" +
+                    "Si eres parte del equipo, por favor pide a tu administrador que registre tu número de WhatsApp.\n\n" +
+                    "📞 Teléfono: +502 3090-3172\n🌐 liveproductionsgt.com\n📍 16 avenida A 28-76 zona 13 Elgin 2, Guatemala";
 
                   await sendMessage(fromNumber, welcomeMsg);
 
@@ -249,6 +328,13 @@ export async function POST(request: NextRequest) {
                 }
               } catch (err) {
                 console.error("Error al procesar mensaje entrante:", err);
+
+                try {
+                  await sendMessage(
+                    fromNumber,
+                    "Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo más tarde. Si el problema persiste, contáctanos al +502 3090-3172."
+                  );
+                } catch { /* */ }
               }
             }
           }

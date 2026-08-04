@@ -15,11 +15,16 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Crown,
+  UserCog,
+  UserCheck,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge, roleColor, roleLabel } from "@/components/ui/Badge";
 import type { UserRole } from "@/types";
 
 interface NavItem {
@@ -200,17 +205,20 @@ function Sidebar() {
               />
               {!sidebarCollapsed && (
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {user.name}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {user.role === "DUENO"
-                      ? "Dueño"
-                      : user.role === "ADMIN"
-                      ? "Administrador"
-                      : user.role === "JEFE"
-                      ? "Jefe"
-                      : "Empleado"}
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {user.name}
+                    </p>
+                    <Badge
+                      color={roleColor(user.role)}
+                      size="sm"
+                      className="flex-shrink-0"
+                    >
+                      {roleLabel(user.role)}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                    Live Productions
                   </p>
                 </div>
               )}

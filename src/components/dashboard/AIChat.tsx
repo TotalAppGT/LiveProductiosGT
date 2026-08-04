@@ -9,10 +9,9 @@ import {
   Loader2,
   MessageSquare,
   Zap,
-  Mic,
   Maximize2,
   Minimize2,
-  Cpu,
+  Bot,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useApp } from "@/contexts/AppContext";
@@ -28,35 +27,22 @@ interface Message {
 }
 
 const QUICK_ACTIONS = [
-  { label: "Resumen de hoy", prompt: "Genera un resumen de las tareas y eventos del día de hoy." },
-  { label: "Tareas atrasadas", prompt: "¿Qué tareas están atrasadas o pendientes? ¿Quién las tiene asignadas?" },
-  { label: "¿Quién no ha entrado hoy?", prompt: "¿Qué usuarios no han iniciado sesión o no han completado tareas hoy?" },
-  { label: "Eventos esta semana", prompt: "¿Cuáles son los eventos programados para esta semana y qué personal está asignado?" },
+  { label: "¿Qué tengo que hacer hoy?", prompt: "¿Qué tareas tengo pendientes para hoy?" },
+  { label: "¿Qué eventos hay esta semana?", prompt: "¿Cuáles son los eventos programados para esta semana y qué personal está asignado?" },
+  { label: "¿Quién no ha completado sus tareas?", prompt: "¿Qué usuarios del equipo no han completado sus tareas asignadas?" },
+  { label: "Resumen de cumplimiento", prompt: "Genera un resumen de cumplimiento del equipo con porcentajes y detalles por persona." },
+  { label: "Tareas urgentes", prompt: "¿Cuáles son las tareas urgentes y vencidas? ¿Quién las tiene asignadas?" },
 ];
 
-const SYSTEM_PROMPT = `Eres el asistente inteligente de Live Productions, una empresa guatemalteca de producción de eventos en vivo. La empresa se especializa en audio profesional, iluminación escénica, instrumentos musicales, DJ, mobiliario y producción completa de eventos sociales y corporativos.
+const LUNA_GREETING = `Hola, soy *LUNA*, tu asistente de inteligencia artificial de Live Productions. Estoy aquí para ayudarte con:
 
-ESTRUCTURA SEMANAL:
-- Lunes: facturación y cotizaciones pendientes
-- Martes: revisión de inventario y vehículos
-- Miércoles: pagos y coordinación de músicos
-- Jueves: preparación de eventos del fin de semana
-- Viernes: carga de equipo y eventos del fin de semana
-- Fines de semana: ejecución de eventos (bodas, quinceañeras, corporativos, conciertos)
+- Tus tareas diarias y pendientes
+- Información de eventos próximos
+- Cumplimiento del equipo
+- Procesos de la empresa
+- Planificación semanal
 
-PERSONAL CLAVE:
-- Jorge (Dueño): dirección general
-- Diana/Brenda (Coordinación): planificación, cotizaciones, clientes
-- Abel (Logística): transporte, montaje/desmontaje
-- Selvin (Técnico): audio, iluminación, mantenimiento
-- Exequiel (Bodega): control de inventario, limpieza, organización
-
-EQUIPO DE AUDIO: QSC (alta gama), T4/JBL (media), Turbosound (media)
-UBICACIONES: Bodega Elgin, Bodega PP
-TIPOS DE EVENTO: DJ COMPLETO, SAXOFONIC, SUNDAY FUNDAY
-CICLO DE COBROS: depósitos pre-evento + saldo post-evento
-
-Responde siempre en español, sé conciso y útil. Si necesitas más datos para ayudar, indícalo claramente.`;
+¿En qué puedo ayudarte hoy?`;
 
 interface AIChatContext {
   user: { name: string; role: string };
@@ -75,7 +61,7 @@ export function AIChat() {
     {
       id: "welcome",
       role: "assistant",
-      content: `¡Hola ${user?.name?.split(" ")[0] || ""}! Soy tu asistente inteligente de Live Productions. Puedo ayudarte con:\n\n• Resumen de tareas y eventos del día\n• Análisis de cumplimiento del equipo\n• Sugerencias de asignación de personal\n• Estado de cobros y facturación\n• Consultas sobre inventario y equipo\n\n¿En qué puedo ayudarte hoy?`,
+      content: LUNA_GREETING,
       timestamp: new Date(),
     },
   ]);
@@ -127,7 +113,7 @@ export function AIChat() {
         const eJson = await eRes.json();
         if (eJson.success && eJson.data) {
           ctx.upcomingEvents = Array.isArray(eJson.data)
-            ? eJson.data.map((e: any) => ({
+            ? eJson.data.map((e: { name: string; date: string; status: string }) => ({
                 name: e.name,
                 date: e.date ? e.date.split("T")[0] : "",
                 status: e.status,
@@ -170,10 +156,10 @@ export function AIChat() {
           const json = await res.json();
           if (json.success && json.data) {
             const providers: Record<string, string> = {
-              deepseek: "DeepSeek",
-              openai: "OpenAI",
-              openrouter: "OpenRouter",
-              nvidia: "NVIDIA NIM",
+              DEEPSEEK: "DeepSeek",
+              OPENAI: "OpenAI",
+              OPENROUTER: "OpenRouter",
+              NVIDIA: "NVIDIA NIM",
             };
             setAIInfo({
               provider: providers[json.data.provider] || json.data.provider || "DeepSeek",
@@ -211,7 +197,6 @@ export function AIChat() {
         },
         body: JSON.stringify({
           message: content.trim(),
-          systemPrompt: SYSTEM_PROMPT,
           context,
         }),
       });
@@ -236,7 +221,7 @@ export function AIChat() {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "Lo siento, hubo un error al comunicarme con el asistente. Verifica tu conexión e intenta de nuevo.",
+        content: "Lo siento, hubo un error al comunicarme con LUNA. Verifica tu conexión e intenta de nuevo.",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -255,20 +240,25 @@ export function AIChat() {
       <button
         onClick={toggleAIChat}
         className={cn(
-          "fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300",
+          "fixed bottom-6 right-6 z-50 rounded-full shadow-xl flex items-center justify-center gap-2 transition-all duration-300 group",
           isOpen
-            ? "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
-            : "bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500"
+            ? "h-14 w-14 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+            : "h-16 w-16 bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 hover:h-16 hover:w-[140px] px-4"
         )}
-        title="Asistente IA"
+        title="LUNA - Asistente IA"
       >
         {isOpen ? (
           <X className="h-6 w-6 text-gray-700 dark:text-gray-300" />
         ) : (
-          <Brain className="h-6 w-6 text-white" />
-        )}
-        {!isOpen && (
-          <span className="absolute -top-1 -right-1 h-4 w-4 bg-green-400 rounded-full border-2 border-white dark:border-gray-900 animate-pulse" />
+          <>
+            <Bot className="h-7 w-7 text-white" />
+            <span className="hidden group-hover:inline text-sm font-semibold text-white whitespace-nowrap">
+              LUNA AI
+            </span>
+            <span className="absolute -top-1 -right-1 h-5 w-5 bg-green-400 rounded-full border-2 border-white dark:border-gray-900">
+              <span className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75" />
+            </span>
+          </>
         )}
       </button>
 
@@ -278,31 +268,34 @@ export function AIChat() {
             "fixed z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden animate-slide-up",
             isFullscreen
               ? "inset-4 rounded-none sm:inset-6"
-              : "bottom-24 right-6 w-[380px] max-w-[calc(100vw-2rem)] h-[600px] max-h-[calc(100vh-8rem)]"
+              : "bottom-24 right-6 w-[420px] max-w-[calc(100vw-2rem)] h-[650px] max-h-[calc(100vh-8rem)]"
           )}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-600 to-blue-600">
             <div className="flex items-center gap-2">
-              <Brain className="h-5 w-5 text-white" />
+              <div className="h-9 w-9 rounded-full bg-white/20 flex items-center justify-center">
+                <Bot className="h-5 w-5 text-white" />
+              </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">Asistente IA</h3>
+                <h3 className="text-sm font-semibold text-white">LUNA</h3>
                 <p className="text-xs text-purple-200 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3" />
                   {aiInfo.provider} · {aiInfo.model}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <span className="flex h-2 w-2 rounded-full bg-green-400" />
+              <span className="flex h-2.5 w-2.5 rounded-full bg-green-400 animate-pulse" />
               <button
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
                 title={isFullscreen ? "Reducir" : "Pantalla completa"}
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
               <button
                 onClick={toggleAIChat}
-                className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -320,7 +313,7 @@ export function AIChat() {
               >
                 {msg.role === "assistant" && (
                   <div className="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0 mt-1">
-                    <Brain className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <Bot className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                   </div>
                 )}
                 <div
@@ -357,11 +350,11 @@ export function AIChat() {
             {isLoading && (
               <div className="flex gap-2 justify-start">
                 <div className="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
-                  <Brain className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <Bot className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div className="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-bl-md px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mr-2">Pensando...</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mr-2">LUNA está pensando...</p>
                     <span className="h-2 w-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                     <span className="h-2 w-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
                     <span className="h-2 w-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
@@ -374,17 +367,17 @@ export function AIChat() {
           </div>
 
           {messages.length <= 1 && (
-            <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
-                <Zap className="h-3 w-3 text-yellow-500" />
-                Acciones rápidas
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 mb-2 flex items-center gap-1 font-medium">
+                <Zap className="h-3.5 w-3.5 text-yellow-500" />
+                Preguntas frecuentes
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {QUICK_ACTIONS.map((action) => (
                   <button
                     key={action.label}
                     onClick={() => sendMessage(action.prompt)}
-                    className="px-2.5 py-1.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                    className="px-3 py-2 text-xs rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 transition-colors"
                   >
                     {action.label}
                   </button>
@@ -395,29 +388,22 @@ export function AIChat() {
 
           <form
             onSubmit={handleSubmit}
-            className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700"
+            className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
           >
-            <button
-              type="button"
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              title="Nota de voz (próximamente)"
-            >
-              <Mic className="h-4 w-4" />
-            </button>
             <Input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Escribe tu mensaje..."
+              placeholder="Escribe tu mensaje para LUNA..."
               disabled={isLoading}
-              className="flex-1 border-0 bg-gray-100 dark:bg-gray-700 focus:ring-0"
+              className="flex-1 border-0 bg-white dark:bg-gray-700 focus:ring-0 text-sm"
             />
             <Button
               type="submit"
               variant="primary"
               size="sm"
               disabled={!input.trim() || isLoading}
-              className="rounded-xl"
+              className="rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500"
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

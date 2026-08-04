@@ -79,6 +79,15 @@ export default function DashboardPage() {
   } | null>(null);
 
   const today = new Date();
+  const hour = today.getHours();
+  const greetingEmoji =
+    hour < 12 ? "☀️" : hour < 18 ? "🌤️" : "🌙";
+  const greeting =
+    hour < 12
+      ? "Buenos días"
+      : hour < 18
+      ? "Buenas tardes"
+      : "Buenas noches";
   const formattedDate = `${getDayName(today)}, ${formatDate(today)}`;
 
   const fetchDashboard = useCallback(async () => {
@@ -209,7 +218,7 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Bienvenido, {user?.name?.split(" ")[0]}
+            {greetingEmoji} {greeting}, {user?.name?.split(" ")[0]}
           </h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
             {formattedDate}

@@ -489,6 +489,17 @@ export default function AdminPage() {
                 </h3>
               </div>
 
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg p-4 mb-6 border border-purple-200 dark:border-purple-800">
+                <div className="flex items-start gap-2">
+                  <Info className="h-5 w-5 text-purple-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-purple-700 dark:text-purple-300 space-y-1">
+                    <p><strong>Proveedor recomendado:</strong> DeepSeek (principal) - mejor relación costo-rendimiento para español.</p>
+                    <p><strong>Respaldo automático:</strong> Si DeepSeek no tiene API key configurada, el sistema usará OpenAI → NVIDIA como fallback en ese orden.</p>
+                    <p>El sistema prioriza la API key de la base de datos. Si no encuentra una, busca en variables de entorno.</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
