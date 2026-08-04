@@ -496,13 +496,13 @@ async function endOfDayTaskCheck() {
 }
 
 const jobs: CronJob[] = [
-  { name: "morningBriefing", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing },
+  { name: "morningBriefing", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing },
   { name: "dailyDigest", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: dailyDigest },
   { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck },
-  { name: "afternoonAccessCheck", schedule: { hour: 15, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck },
+  { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck },
   { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck },
-  { name: "eveningAccessCheck", schedule: { hour: 18, minute: 0 }, timezone: "America/Guatemala", handler: eveningAccessCheck },
-  { name: "eveningRecap", schedule: { hour: 18, minute: 0 }, timezone: "America/Guatemala", handler: eveningRecap },
+  { name: "eveningAccessCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: eveningAccessCheck },
+  { name: "eveningRecap", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: eveningRecap },
   { name: "checkOverdueTasks", schedule: { hour: 0, minute: 0 }, timezone: "America/Guatemala", handler: checkOverdueTasks },
 ];
 
