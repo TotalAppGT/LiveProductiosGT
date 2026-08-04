@@ -51,8 +51,8 @@ async function formatTasksForUser(userId: string) {
   console.log(`[Tasks] userId=${userId}, found=${tasks.length}`);
   return tasks
     .map(
-      (t) =>
-        `• ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪"} *${t.title}* - ${t.status === "PENDIENTE" ? "Pendiente" : "En proceso"}${t.dueDate ? ` - Vence: ${new Date(t.dueDate).toLocaleDateString("es-GT")}` : ""}`
+      (t, i) =>
+        `${i + 1}. ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪"} *${t.title}* - ${t.status === "PENDIENTE" ? "Pendiente" : "En proceso"}${t.dueDate ? ` - Vence: ${new Date(t.dueDate).toLocaleDateString("es-GT")}` : ""}`
     )
     .join("\n");
 }
@@ -79,6 +79,55 @@ async function formatEventsForUser(userId: string) {
     .join("\n");
 }
 
+async function getPendingTasks(userId: string) {
+  return prisma.task.findMany({
+    where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO"] } },
+    orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+    take: 20,
+  });
+}
+
+async function completeTask(taskId: string, user: { id: string; name: string }) {
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!task) throw new Error("Tarea no encontrada");
+  await prisma.task.update({ where: { id: taskId }, data: { status: "COMPLETADA" } });
+  await prisma.taskHistory.create({
+    data: { taskId, userId: user.id, action: "COMPLETADA via WhatsApp", previousStatus: task.status, newStatus: "COMPLETADA" },
+  });
+  await prisma.activity.create({
+    data: { userId: user.id, action: "TASK_COMPLETED_WHATSAPP", resource: "TASK", resourceId: taskId, details: `Tarea completada via WhatsApp por ${user.name}` },
+  });
+}
+
+async function postponeTask(taskId: string, newDate: Date, reason: string, user: { id: string; name: string }) {
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!task) throw new Error("Tarea no encontrada");
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { status: "REPROGRAMADA", postponeReason: reason, postponeCount: { increment: 1 }, rescheduledTo: newDate, dueDate: newDate },
+  });
+  await prisma.taskHistory.create({
+    data: { taskId, userId: user.id, action: `REPROGRAMADA via WhatsApp: ${reason}`, previousStatus: task.status, newStatus: "REPROGRAMADA" },
+  });
+}
+
+async function addTaskComment(taskId: string, userId: string, content: string) {
+  await prisma.taskComment.create({ data: { taskId, userId, content } });
+}
+
+async function delegateTask(taskId: string, newUserId: string, reason: string, fromUser: { id: string; name: string }) {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, include: { assignedTo: { select: { name: true } } } });
+  if (!task) throw new Error("Tarea no encontrada");
+  await prisma.task.update({ where: { id: taskId }, data: { assignedToId: newUserId, postponeReason: `Transferida por ${fromUser.name}: ${reason}` } });
+  await prisma.taskHistory.create({
+    data: { taskId, userId: fromUser.id, action: `TRANSFERIDA a ${newUserId} via WhatsApp`, previousStatus: task.status, newStatus: task.status },
+  });
+  const newUser = await prisma.user.findUnique({ where: { id: newUserId } });
+  if (newUser?.whatsappNumber) {
+    await sendMessage(newUser.whatsappNumber, `📩 ${fromUser.name} te ha transferido la tarea *${task.title}*\nRazón: ${reason}\n\nAccede al sistema: https://liveproductiosgt-production.up.railway.app`);
+  }
+}
+
 async function getComplianceSummary(userId: string) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -97,6 +146,74 @@ async function handleCommand(
   user: { id: string; name: string; role: string }
 ): Promise<string | null> {
   const cmd = command.toLowerCase().trim();
+
+  // Task interaction commands
+  if (cmd.startsWith("completar ")) {
+    const num = parseInt(cmd.replace("completar ", "").trim());
+    if (isNaN(num)) return "¿Cuál tarea? Ejemplo: *completar 3*";
+    const tasks = await getPendingTasks(user.id);
+    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas. Elige un número del 1 al ${tasks.length}.`;
+    const task = tasks[num - 1];
+    await completeTask(task.id, user);
+    return `✅ Tarea *${task.title}* completada. ¡Buen trabajo ${user.name}!`;
+  }
+
+  if (cmd.startsWith("posponer ")) {
+    const parts = cmd.replace("posponer ", "").trim().split(" ");
+    const num = parseInt(parts[0]);
+    if (isNaN(num)) return "Formato: *posponer 3 mañana* o *posponer 3 razón aquí*";
+    const reason = parts.slice(1).join(" ") || "Sin razón especificada";
+    const tasks = await getPendingTasks(user.id);
+    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas.`;
+    const task = tasks[num - 1];
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0,0,0,0);
+    await postponeTask(task.id, tomorrow, reason, user);
+    return `⏰ Tarea *${task.title}* pospuesta para mañana. Razón: ${reason}\n_Se notificará al administrador._`;
+  }
+
+  if (cmd.startsWith("comentar ")) {
+    const parts = cmd.replace("comentar ", "").trim().split(" ");
+    const num = parseInt(parts[0]);
+    if (isNaN(num)) return "Formato: *comentar 3 el cliente no contestó*";
+    const comment = parts.slice(1).join(" ") || "Sin comentario";
+    const tasks = await getPendingTasks(user.id);
+    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas.`;
+    const task = tasks[num - 1];
+    await addTaskComment(task.id, user.id, comment);
+    return `💬 Comentario agregado a *${task.title}*: "${comment}"`;
+  }
+
+  if (cmd.startsWith("transferir ")) {
+    const parts = cmd.replace("transferir ", "").trim().split(" ");
+    const num = parseInt(parts[0]);
+    if (isNaN(num)) return "Formato: *transferir 3 a Diana*";
+    const toIndex = parts.indexOf("a");
+    let targetName: string;
+    let reason: string;
+    if (toIndex > 0) {
+      targetName = parts.slice(toIndex + 1).join(" ");
+      reason = parts.slice(1, toIndex).join(" ") || "Transferida";
+    } else {
+      targetName = parts.slice(1).join(" ");
+      reason = "Transferida";
+    }
+    if (!targetName) return "¿A quién? Ejemplo: *transferir 3 a Diana*";
+    const tasks = await getPendingTasks(user.id);
+    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas.`;
+    const task = tasks[num - 1];
+    const targetUser = await prisma.user.findFirst({
+      where: { name: { contains: targetName, mode: "insensitive" }, active: true },
+    });
+    if (!targetUser) return `No encontré a "${targetName}". Usuarios disponibles: usa *equipo* para ver la lista.`;
+    await delegateTask(task.id, targetUser.id, reason, user);
+    return `📤 Tarea *${task.title}* transferida a *${targetUser.name}*. Se le notificará de inmediato.`;
+  }
+
+  if (cmd === "equipo") {
+    const allUsers = await prisma.user.findMany({ where: { active: true }, select: { name: true, role: true, phone: true }, take: 20 });
+    const list = allUsers.map(u => `• ${u.name} (${u.role})${u.phone ? ` - ${u.phone.slice(-8)}` : ""}`).join("\n");
+    return `👥 *Equipo Live Productions*\n\n${list}\n\n_Para transferir una tarea: *transferir 2 a [nombre]*_`;
+  }
 
   if (cmd === "tareas" || cmd === "mis tareas" || cmd.includes("tarea") || cmd.includes("pendiente")) {
     const tasks = await formatTasksForUser(user.id);
@@ -167,7 +284,7 @@ async function handleCommand(
   }
 
   if (cmd === "ayuda") {
-    return `🤖 *LUNA - Asistente Live Productions*\n\n*Comandos disponibles:*\n• *tareas* - Ver tus tareas pendientes\n• *pendientes* - Ver tus tareas pendientes (versión compacta)\n• *eventos* - Ver tus próximos eventos\n• *evento [nombre]* - Buscar un evento específico\n• *resumen* - Resumen completo de tu actividad\n• *ayuda* - Mostrar esta ayuda\n\nTambién puedes escribir cualquier pregunta en lenguaje natural y LUNA te responderá con inteligencia artificial.\n\n📞 +502 3090-3172\n🌐 liveproductionsgt.com\n\nAccede al sistema: https://liveproductiosgt-production.up.railway.app`;
+    return `🤖 *LUNA - Asistente Live Productions*\n\n📊 *Prioridades:*\n🔴 URGENTE | 🟠 ALTA | 🔵 MEDIA | ⚪ BAJA\n\n*Comandos:*\n• *tareas* - Ver tus tareas pendientes\n• *completar 3* - Completar tarea #3\n• *posponer 3 razón* - Posponer tarea #3\n• *comentar 3 texto* - Agregar comentario\n• *transferir 3 a Diana* - Pasar tarea a otro\n• *equipo* - Ver compañeros\n• *eventos* - Ver tus próximos eventos\n• *evento [nombre]* - Buscar un evento\n• *resumen* - Resumen completo\n• *ayuda* - Mostrar esta ayuda\n\nTambién puedes escribir cualquier pregunta y LUNA te responderá con IA.\n\n📞 +502 3090-3172\n🌐 liveproductionsgt.com\n\nAccede al sistema: https://liveproductiosgt-production.up.railway.app`;
   }
 
   return null;
@@ -233,6 +350,16 @@ export async function POST(request: NextRequest) {
               }
 
               if (!text) continue;
+
+              // Check if message is from a WhatsApp group
+              const isGroupMessage = !!(message as Record<string, unknown>)?.context;
+              if (isGroupMessage) {
+                await sendMessage(
+                  fromNumber,
+                  "LUNA no puede procesar mensajes de grupo aún. Para interactuar, escríbeme por mensaje privado."
+                ).catch(() => {});
+                continue;
+              }
 
               try {
                 const normalizedFrom = normalizeGTPhone(fromNumber);

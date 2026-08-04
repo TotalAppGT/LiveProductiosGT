@@ -239,6 +239,7 @@ async function main() {
     { key: "notifications.overdue_hours_escalate", value: "6", description: "Horas para escalar a administradores" },
     { key: "compliance.min_completion_rate", value: "50", description: "Tasa mínima de completación esperada" },
     { key: "access.min_daily", value: "4", description: "Mínimo de accesos diarios requeridos por usuario" },
+    { key: "whatsapp.welcome", value: "¡Bienvenido a Live Productions! 🎉\n\nSoy *LUNA*, tu asistente IA.\n\n📊 *Prioridades:*\n🔴 URGENTE\n🟠 ALTA\n🔵 MEDIA\n⚪ BAJA\n\n*Comandos:*\n• tareas - ver tus tareas\n• completar 3 - completar tarea #3\n• posponer 5 mañana - posponer con razón\n• comentar 4 texto - agregar comentario\n• transferir 2 a Diana - pasar tarea\n• equipo - ver compañeros\n• eventos - próximos eventos\n• ayuda - esta ayuda\n\nAccede: https://liveproductiosgt-production.up.railway.app", description: "Mensaje de bienvenida de WhatsApp" },
   ];
 
   for (const cfg of defaultConfigs) {
