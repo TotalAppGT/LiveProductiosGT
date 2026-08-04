@@ -93,7 +93,7 @@ async function formatTasksForUser(userId: string) {
   const tasks = await prisma.task.findMany({
     where: {
       assignedToId: userId,
-      status: { in: ["PENDIENTE", "EN_PROCESO"] },
+      status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
     },
     orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
     take: 15,
@@ -101,8 +101,14 @@ async function formatTasksForUser(userId: string) {
   console.log(`[Tasks] userId=${userId}, found=${tasks.length}`);
   return tasks
     .map(
-      (t, i) =>
-        `${i + 1}. ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪"} *${t.title}* - ${t.status === "PENDIENTE" ? "Pendiente" : "En proceso"}${t.dueDate ? ` - Vence: ${new Date(t.dueDate).toLocaleDateString("es-GT")}` : ""}`
+      (t, i) => {
+        const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪";
+        const statusText = t.status === "REPROGRAMADA" 
+          ? `Reprogramada → ${t.rescheduledTo ? new Date(t.rescheduledTo).toLocaleDateString("es-GT") : new Date(t.dueDate!).toLocaleDateString("es-GT")}`
+          : t.status === "EN_PROCESO" ? "En proceso" : "Pendiente";
+        const reason = t.status === "REPROGRAMADA" && t.postponeReason ? `\n   _Razón: ${t.postponeReason}_` : "";
+        return `${i + 1}. ${prio} *${t.title}* - ${statusText}${t.dueDate && t.status !== "REPROGRAMADA" ? ` - Vence: ${new Date(t.dueDate).toLocaleDateString("es-GT")}` : ""}${reason}`;
+      }
     )
     .join("\n");
 }
@@ -131,7 +137,7 @@ async function formatEventsForUser(userId: string) {
 
 async function getPendingTasks(userId: string) {
   return prisma.task.findMany({
-    where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO"] } },
+    where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
     take: 20,
   });
