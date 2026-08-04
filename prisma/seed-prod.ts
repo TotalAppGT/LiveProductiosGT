@@ -378,6 +378,16 @@ async function main() {
     );
   }
 
+  // Daniel's tasks (creator, ADMIN)
+  if (adminUser) {
+    tasksToCreate.push(
+      { title: "Probar transferencia de tareas entre usuarios", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
+      { title: "Verificar bitácora de actividades del equipo", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
+      { title: "Revisar cumplimiento de accesos diarios", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
+      { title: "Probar respuestas de LUNA en WhatsApp", category: "ADMINISTRACION", priority: "MEDIA", dueDate: tomorrow, assignedToId: adminUser.id, status: "PENDIENTE" },
+    );
+  }
+
   const assignedById = (jorgeUser || adminUser)!.id;
 
   const validCategories: string[] = ["PRE_EVENTO", "POST_EVENTO", "COTIZACION", "COBRO", "INVENTARIO", "VEHICULO", "PERSONAL", "BODEGA", "MANTENIMIENTO", "ADMINISTRACION", "OTRO"];
