@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateToken, hashPassword } from "@/lib/auth";
 import { getAdminAuth } from "@/lib/firebase-admin";
+import { normalizeGTPhone } from "@/lib/phone";
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,13 +47,16 @@ export async function POST(request: NextRequest) {
 
     const hashedPassword = await hashPassword(password);
 
+    const normalizedPhone = phone ? normalizeGTPhone(phone) : null;
+    const normalizedWhatsapp = whatsappNumber ? normalizeGTPhone(whatsappNumber) : null;
+
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        phone: phone || null,
-        whatsappNumber: whatsappNumber || null,
+        phone: normalizedPhone,
+        whatsappNumber: normalizedWhatsapp,
         firebaseUid: firebaseUid || null,
         role: "EMPLEADO",
       },

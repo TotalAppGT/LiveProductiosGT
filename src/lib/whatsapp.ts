@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { generateWhatsAppMessage } from "@/lib/deepseek";
+import { normalizeGTPhone } from "@/lib/phone";
 
 interface WhatsAppApiResponse {
   messaging_product: string;
@@ -63,7 +64,7 @@ async function sendMetaMessage(
   const WHATSAPP_API_VERSION = "v22.0";
 
   try {
-    const normalizedNumber = to.replace(/[^0-9]/g, "");
+    const normalizedNumber = normalizeGTPhone(to).replace(/\D/g, "");
 
     const response = await fetch(
       `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${phoneNumberId}/messages`,
@@ -204,7 +205,7 @@ async function sendTemplateMessage(
   const WHATSAPP_API_VERSION = "v22.0";
 
   try {
-    const normalizedNumber = to.replace(/[^0-9]/g, "");
+    const normalizedNumber = normalizeGTPhone(to).replace(/\D/g, "");
 
     const components = params.length > 0
       ? [
@@ -624,8 +625,16 @@ async function sendAutomatedReminder(
   }
 }
 
+async function sendTextMessage(
+  to: string,
+  message: string
+): Promise<WhatsAppApiResponse | null> {
+  return sendMessage(to, message);
+}
+
 export {
   sendMessage,
+  sendTextMessage,
   sendTemplateMessage,
   sendTaskReminder,
   sendDailySummary,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
+import { normalizeGTPhone } from "@/lib/phone";
 
 export async function GET(
   request: NextRequest,
@@ -125,9 +126,9 @@ export async function PUT(
       data: {
         name: name !== undefined ? name : undefined,
         email: email !== undefined ? email : undefined,
-        phone: phone !== undefined ? phone : undefined,
+        phone: phone !== undefined ? (phone ? normalizeGTPhone(phone) : null) : undefined,
         role: role !== undefined ? role : undefined,
-        whatsappNumber: whatsappNumber !== undefined ? whatsappNumber : undefined,
+        whatsappNumber: whatsappNumber !== undefined ? (whatsappNumber ? normalizeGTPhone(whatsappNumber) : null) : undefined,
         avatar: avatar !== undefined ? avatar : undefined,
         active: active !== undefined ? active : undefined,
         tenantId: tenantId !== undefined ? tenantId : undefined,

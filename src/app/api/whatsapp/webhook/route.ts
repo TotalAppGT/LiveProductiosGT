@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { handleWhatsAppMessage } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
+import { normalizeGTPhone } from "@/lib/phone";
 
 async function getVerifyToken(): Promise<string> {
   const config = await prisma.whatsAppConfig.findFirst({
@@ -233,14 +234,17 @@ export async function POST(request: NextRequest) {
               if (!text) continue;
 
               try {
-                const normalizedFrom = fromNumber.replace(/[^0-9]/g, "");
+                const normalizedFrom = normalizeGTPhone(fromNumber);
+                const normalizedFromDigits = normalizedFrom.replace(/\D/g, "");
 
                 const user = await prisma.user.findFirst({
                   where: {
                     OR: [
                       { whatsappNumber: normalizedFrom },
+                      { whatsappNumber: normalizedFromDigits },
                       { whatsappNumber: fromNumber },
                       { phone: normalizedFrom },
+                      { phone: normalizedFromDigits },
                       { phone: fromNumber },
                     ],
                   },

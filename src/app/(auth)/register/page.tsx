@@ -16,6 +16,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { normalizeGTPhone } from "@/lib/phone";
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -51,12 +52,13 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
+      const normalizedPhone = normalizeGTPhone(phone.trim());
       await register({
         name: name.trim(),
         email: email.trim(),
         password,
-        phone: phone.trim(),
-        whatsappNumber: phone.trim(),
+        phone: normalizedPhone,
+        whatsappNumber: normalizedPhone,
       });
       toast.success("Registro exitoso. Redirigiendo al inicio de sesión...");
       setTimeout(() => router.push("/login"), 1500);
@@ -111,7 +113,7 @@ export default function RegisterPage() {
         <Input
           label="Teléfono (WhatsApp)"
           type="tel"
-          placeholder="+502 5555-5555"
+          placeholder="Solo los 8 dígitos, sin guiones"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           leftIcon={<Phone className="h-4 w-4" />}

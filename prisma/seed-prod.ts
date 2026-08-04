@@ -83,25 +83,41 @@ async function main() {
   await createOrSyncFirebaseUser(adminEmail, adminPassword, adminUser.id);
 
   // === Sample Workers ===
-  const javierEmail = "javier@liveproductions.com.gt";
-  let javierUser = await prisma.user.findUnique({
-    where: { email: javierEmail },
-  });
+  const sampleWorkers = [
+    { name: "Diana Mérida", email: "diana@liveproductions.com.gt", role: "JEFE" as const, phone: "+50255550001" },
+    { name: "Brenda Lopez", email: "brenda@liveproductions.com.gt", role: "JEFE" as const, phone: "+50255550002" },
+    { name: "Abel Perez", email: "abel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550003" },
+    { name: "Selvin Garcia", email: "selvin@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550004" },
+    { name: "Exequiel Lopez", email: "exequiel@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550005" },
+    { name: "Javier Perez", email: "javier@liveproductions.com.gt", role: "EMPLEADO" as const, phone: "+50255550008" },
+  ];
 
-  if (!javierUser) {
-    const hashedPassword = await bcrypt.hash("Live2024!", 12);
-    javierUser = await prisma.user.create({
-      data: {
-        name: "Javier Perez",
-        email: javierEmail,
-        password: hashedPassword,
-        role: "EMPLEADO",
-        phone: "+50255550008",
-        whatsappNumber: "+50255550008",
-        active: true,
-      },
-    });
-    console.log("Trabajador Javier Perez creado en BD");
+  let javierUser: typeof adminUser | null = null;
+
+  for (const worker of sampleWorkers) {
+    const existing = await prisma.user.findUnique({ where: { email: worker.email } });
+    if (!existing) {
+      const hashedPassword = await bcrypt.hash("Live2024!", 12);
+      await prisma.user.create({
+        data: {
+          name: worker.name,
+          email: worker.email,
+          password: hashedPassword,
+          role: worker.role,
+          phone: worker.phone,
+          whatsappNumber: worker.phone,
+          active: true,
+        },
+      });
+      console.log(`Trabajador ${worker.name} creado en BD`);
+      if (worker.email === "javier@liveproductions.com.gt") {
+        javierUser = await prisma.user.findUnique({ where: { email: worker.email } });
+      }
+    } else {
+      if (worker.email === "javier@liveproductions.com.gt") {
+        javierUser = existing;
+      }
+    }
   }
 
   // === Default AI Settings ===
@@ -124,16 +140,29 @@ async function main() {
 
   // === Default WhatsApp Config ===
   const existingWhatsAppConfig = await prisma.whatsAppConfig.findFirst();
-  if (!existingWhatsAppConfig) {
+  if (existingWhatsAppConfig) {
+    await prisma.whatsAppConfig.update({
+      where: { id: existingWhatsAppConfig.id },
+      data: {
+        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "1244681988728884",
+        accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+        verifyToken: "live_productions_gt_webhook",
+        businessPhone: "+50230840447",
+        webhookUrl: "https://liveproductiosgt-production.up.railway.app/api/whatsapp/webhook",
+        isActive: true,
+      },
+    });
+    console.log("WhatsApp config actualizado");
+  } else {
     await prisma.whatsAppConfig.create({
       data: {
-        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "1244681988728884",
         accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
-        verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || "",
-        businessPhone: "+50230903172",
-        webhookUrl: "",
+        verifyToken: "live_productions_gt_webhook",
+        businessPhone: "+50230840447",
+        webhookUrl: "https://liveproductiosgt-production.up.railway.app/api/whatsapp/webhook",
         qrCodeUrl: "",
-        isActive: false,
+        isActive: true,
       },
     });
     console.log("Default WhatsApp config creado");

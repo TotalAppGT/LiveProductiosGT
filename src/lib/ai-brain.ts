@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
+import { normalizeGTPhone } from "@/lib/phone";
 
 export const LUNA_SYSTEM_PROMPT = `Eres LUNA, la asistente de inteligencia artificial de Live Productions, 
 una empresa líder en producción de eventos en Guatemala. 
@@ -620,14 +621,17 @@ export async function handleWhatsAppMessage(
   message: string
 ): Promise<string> {
   try {
-    const normalizedFrom = phoneNumber.replace(/[^0-9]/g, "");
+    const normalizedFrom = normalizeGTPhone(phoneNumber);
+    const normalizedFromDigits = normalizedFrom.replace(/\D/g, "");
 
     const user = await prisma.user.findFirst({
       where: {
         OR: [
           { whatsappNumber: normalizedFrom },
+          { whatsappNumber: normalizedFromDigits },
           { whatsappNumber: phoneNumber },
           { phone: normalizedFrom },
+          { phone: normalizedFromDigits },
           { phone: phoneNumber },
         ],
       },

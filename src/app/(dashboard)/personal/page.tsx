@@ -33,6 +33,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn, formatCurrency } from "@/lib/utils";
+import { normalizeGTPhone } from "@/lib/phone";
 import type { User, ApiResponse, PaginatedResponse, UserRole } from "@/types";
 
 interface WorkerStats {
@@ -585,6 +586,7 @@ function AddWorkerModal({
     if (!name.trim() || !email.trim() || !password.trim()) return;
     setSaving(true);
     try {
+      const normalizedPhone = phone.trim() ? normalizeGTPhone(phone.trim()) : undefined;
       const res = await fetch("/api/users", {
         method: "POST",
         headers: {
@@ -595,8 +597,8 @@ function AddWorkerModal({
           name: name.trim(),
           email: email.trim(),
           password,
-          phone: phone.trim() || undefined,
-          whatsappNumber: phone.trim() || undefined,
+          phone: normalizedPhone,
+          whatsappNumber: normalizedPhone,
           role,
         }),
       });
@@ -620,7 +622,7 @@ function AddWorkerModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label="Nombre completo" value={name} onChange={(e) => setName(e.target.value)} required />
         <Input label="Correo electrónico" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <Input label="Teléfono (WhatsApp)" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+502 5555-5555" />
+        <Input label="Teléfono (WhatsApp)" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Solo los 8 dígitos, sin guiones" />
         <Input label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rol</label>
@@ -670,6 +672,7 @@ function EditUserModal({
     e.preventDefault();
     setSaving(true);
     try {
+      const normalizedPhone = phone.trim() ? normalizeGTPhone(phone.trim()) : undefined;
       const res = await fetch(`/api/users/${user.id}`, {
         method: "PATCH",
         headers: {
@@ -679,8 +682,8 @@ function EditUserModal({
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim(),
-          phone: phone.trim() || undefined,
-          whatsappNumber: phone.trim() || undefined,
+          phone: normalizedPhone,
+          whatsappNumber: normalizedPhone,
           role,
         }),
       });
@@ -704,7 +707,7 @@ function EditUserModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label="Nombre completo" value={name} onChange={(e) => setName(e.target.value)} required />
         <Input label="Correo electrónico" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <Input label="WhatsApp" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+502 5555-5555" />
+        <Input label="WhatsApp" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Solo los 8 dígitos, sin guiones" />
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rol</label>
           <select
