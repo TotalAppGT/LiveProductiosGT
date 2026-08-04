@@ -36,12 +36,10 @@ export async function POST(request: NextRequest) {
     };
 
     const apiKey = dbApiKey || envApiKeys[effectiveProvider] || "";
-    console.log(`[AI Test] Provider: ${effectiveProvider}, DB key: ${dbApiKey ? dbApiKey.slice(-8) : 'empty'}, Env key: ${envApiKeys[effectiveProvider] ? envApiKeys[effectiveProvider]!.slice(-8) : 'empty'}, Using: ${apiKey.slice(-8)}`);
+    console.log(`[AI Test] Provider: ${effectiveProvider}, Key ends: ${apiKey.slice(-8)}, Using model: ${effectiveModel}`);
+
     if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: "API Key no configurada. Guárdala primero en la pestaña IA & Modelos." },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "API Key no configurada" }, { status: 400 });
     }
 
     const baseUrls: Record<string, string> = {
@@ -50,28 +48,49 @@ export async function POST(request: NextRequest) {
       OPENROUTER: "https://openrouter.ai/api/v1",
       NVIDIA: "https://integrate.api.nvidia.com/v1",
     };
-    const baseUrl = settings?.baseUrl || baseUrls[effectiveProvider] || "https://integrate.api.nvidia.com/v1";
+    const baseUrl = settings?.baseUrl || baseUrls[effectiveProvider] || baseUrls.NVIDIA;
 
-    const OpenAI = (await import("openai")).default;
-    const client = new OpenAI({ apiKey, baseURL: baseUrl });
-
-    const params: any = {
+    // Use plain fetch instead of OpenAI SDK to eliminate SDK issues
+    const fetchBody: any = {
       model: effectiveModel,
-      messages: [{ role: "user", content: "Hola, responde exactamente 'OK'" }],
+      messages: [{ role: "user", content: "Responde exactamente OK" }],
       max_tokens: 10,
       temperature: 0,
-      top_p: 0.95,
       stream: false,
     };
 
     if (effectiveProvider === "NVIDIA") {
-      params.extra_body = { chat_template_kwargs: { thinking: false } };
+      fetchBody.top_p = 0.95;
+      fetchBody.extra_body = { chat_template_kwargs: { thinking: false } };
     }
 
-    const response = await client.chat.completions.create(params);
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(fetchBody),
+    });
 
+    const data = await response.json();
     const elapsed = Date.now() - startTime;
-    const reply = response.choices[0]?.message?.content || "";
+
+    if (!response.ok) {
+      const errorMsg = data?.error?.message || data?.message || `HTTP ${response.status}`;
+      console.error(`[AI Test] Failed: ${errorMsg}`);
+      return NextResponse.json({
+        success: false,
+        error: response.status === 401
+          ? "API Key inválida. Genera una nueva en build.nvidia.com"
+          : response.status === 404
+            ? `Modelo "${effectiveModel}" no encontrado. Prueba con deepseek-ai/deepseek-v4-flash o deepseek-ai/deepseek-v4-pro`
+            : `Error NVIDIA: ${errorMsg}`,
+        timingMs: elapsed,
+      }, { status: response.status });
+    }
+
+    const reply = data.choices?.[0]?.message?.content || "";
 
     return NextResponse.json({
       success: true,
@@ -80,15 +99,12 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const elapsed = Date.now() - startTime;
     const message = error instanceof Error ? error.message : "Error desconocido";
-    console.error("AI test connection error:", error);
+    console.error("[AI Test] Exception:", message);
 
     return NextResponse.json({
       success: false,
-      error: message.includes("401") ? "API Key inválida. Verifica que sea correcta y no haya expirado." :
-             message.includes("404") ? "Modelo no encontrado. Verifica el nombre del modelo." :
-             message.includes("429") ? "Límite de rate excedido. Intenta en unos segundos." :
-             `Error de conexión: ${message}`,
+      error: `Error de conexión: ${message}`,
       timingMs: elapsed,
-    }, { status: error instanceof Error && (error as any).status ? (error as any).status : 500 });
+    }, { status: 500 });
   }
 }
