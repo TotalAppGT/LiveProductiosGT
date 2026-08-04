@@ -632,6 +632,123 @@ async function sendTextMessage(
   return sendMessage(to, message);
 }
 
+const SYSTEM_URL = process.env.NEXT_PUBLIC_APP_URL || "https://liveproductionsgt.com";
+
+async function sendDelegationNotification(
+  toUser: UserWithWhatsApp,
+  taskTitle: string,
+  fromName: string
+): Promise<boolean> {
+  const to = toUser.whatsappNumber || toUser.phone;
+  if (!to) {
+    console.warn(`No WhatsApp number for user ${toUser.name}`);
+    return false;
+  }
+
+  const message = `📋 *Nueva Tarea Delegada*\n\nHola ${toUser.name}, ${fromName} te ha delegado la tarea:\n\n*${taskTitle}*\n\nRevisa tus tareas en el sistema:\n${SYSTEM_URL}\n\n¡Gracias por tu atención! 💪`;
+
+  const result = await sendMessage(to, message);
+  if (result?.messages?.[0]?.id) {
+    await prisma.whatsAppMessage.create({
+      data: {
+        userId: toUser.id,
+        toNumber: to,
+        message,
+        type: "NOTIFICATION",
+        status: "SENT",
+      },
+    });
+    return true;
+  }
+
+  await prisma.whatsAppMessage.create({
+    data: {
+      userId: toUser.id,
+      toNumber: to,
+      message,
+      type: "NOTIFICATION",
+      status: "FAILED",
+    },
+  });
+  return false;
+}
+
+async function sendAccessAlert(
+  toUser: UserWithWhatsApp,
+  accessCount: number
+): Promise<boolean> {
+  const to = toUser.whatsappNumber || toUser.phone;
+  if (!to) {
+    console.warn(`No WhatsApp number for user ${toUser.name}`);
+    return false;
+  }
+
+  const message = `⚠️ *Alerta de Accesos*\n\nHola ${toUser.name}, solo has ingresado ${accessCount} ${accessCount === 1 ? "vez" : "veces"} hoy al sistema de Live Productions.\n\n*Mínimo requerido: 4 veces al día*\n\nPor favor ingresa para revisar tus tareas pendientes:\n${SYSTEM_URL}`;
+
+  const result = await sendMessage(to, message);
+  if (result?.messages?.[0]?.id) {
+    await prisma.whatsAppMessage.create({
+      data: {
+        userId: toUser.id,
+        toNumber: to,
+        message,
+        type: "ALERT",
+        status: "SENT",
+      },
+    });
+    return true;
+  }
+
+  await prisma.whatsAppMessage.create({
+    data: {
+      userId: toUser.id,
+      toNumber: to,
+      message,
+      type: "ALERT",
+      status: "FAILED",
+    },
+  });
+  return false;
+}
+
+async function sendEndOfDayPendingAlert(
+  toUser: UserWithWhatsApp,
+  pendingCount: number
+): Promise<boolean> {
+  const to = toUser.whatsappNumber || toUser.phone;
+  if (!to) {
+    console.warn(`No WhatsApp number for user ${toUser.name}`);
+    return false;
+  }
+
+  const message = `🌙 *Cierre de Jornada*\n\nHola ${toUser.name}, aún tienes *${pendingCount} ${pendingCount === 1 ? "tarea pendiente" : "tareas pendientes"}* por completar hoy en Live Productions.\n\nPor favor revisa y completa tus tareas:\n${SYSTEM_URL}\n\n¡No dejes pendientes para mañana! 💪`;
+
+  const result = await sendMessage(to, message);
+  if (result?.messages?.[0]?.id) {
+    await prisma.whatsAppMessage.create({
+      data: {
+        userId: toUser.id,
+        toNumber: to,
+        message,
+        type: "NOTIFICATION",
+        status: "SENT",
+      },
+    });
+    return true;
+  }
+
+  await prisma.whatsAppMessage.create({
+    data: {
+      userId: toUser.id,
+      toNumber: to,
+      message,
+      type: "NOTIFICATION",
+      status: "FAILED",
+    },
+  });
+  return false;
+}
+
 export {
   sendMessage,
   sendTextMessage,
@@ -642,6 +759,9 @@ export {
   sendEventReminder,
   sendAIAssistantReply,
   sendAutomatedReminder,
+  sendDelegationNotification,
+  sendAccessAlert,
+  sendEndOfDayPendingAlert,
 };
 export type {
   WhatsAppApiResponse,

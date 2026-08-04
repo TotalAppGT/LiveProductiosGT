@@ -7,107 +7,169 @@ import {
   CheckSquare,
   CalendarCheck,
   Calendar,
-  DollarSign,
-  AlertTriangle,
-  Plus,
-  Brain,
-  Clock,
-  User,
   TrendingUp,
-  ArrowUpRight,
-  Users as UsersIcon,
-  ClipboardCheck,
-  Upload,
-  Wallet,
+  AlertTriangle,
+  MessageCircle,
+  Brain,
+  RefreshCw,
+  Send,
+  User,
+  Users,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from "recharts";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge, taskStatusLabel, taskPriorityLabel, taskPriorityColor, taskStatusColor } from "@/components/ui/Badge";
+import { Badge, taskStatusLabel, taskPriorityColor } from "@/components/ui/Badge";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatDate, formatCurrency, getDayName, cn } from "@/lib/utils";
-import { FileUpload } from "@/components/ui/FileUpload";
-import type { Task, Activity, Event } from "@/types";
+import { Modal } from "@/components/ui/Modal";
+import { Avatar } from "@/components/ui/Avatar";
+import { formatDate, getDayName, cn } from "@/lib/utils";
 
-interface DashboardData {
-  stats: {
-    pendingTasks: number;
-    completedTasksToday: number;
-    eventsThisWeek: number;
-    pendingCobros: number;
-    damagedEquipment: number;
-    cobrosAmount: number;
-  };
-  dailyReport: string;
-  recentActivity: Array<{
-    id: string;
-    user: { name: string; avatar: string | null };
-    action: string;
-    details: string;
-    createdAt: string;
-  }>;
-  tasksDueToday: Array<{
-    id: string;
-    title: string;
-    priority: string;
-    status: string;
-    category: string;
-    dueDate?: string;
-    assignedTo: { name: string } | null;
-  }>;
+interface DashboardStats {
+  pendingTasks: number;
+  urgentTasks: number;
+  completedTasksToday: number;
+  totalTasksToday: number;
+  eventsThisWeek: number;
+  personalCompliance: number;
+}
+
+interface AccessUser {
+  userId: string;
+  name: string;
+  role: string;
+  avatar: string | null;
+  accessCount: number;
+  active: boolean;
+}
+
+interface TaskDueToday {
+  id: string;
+  title: string;
+  priority: string;
+  status: string;
+  category: string;
+  dueDate?: string;
+  assignedTo?: { name: string } | null;
+}
+
+interface ComplianceMember {
+  userId: string;
+  user: { id: string; name: string; avatar: string | null; role: string };
+  tasksCompleted: number;
+  tasksPending: number;
+  completionRate: number;
+  accessCount?: number;
+}
+
+interface AIInsight {
+  summary: string;
+  suggestions: string[];
+  criticalTasks: string[];
+}
+
+interface CommentModalState {
+  open: boolean;
+  taskId: string;
+  taskTitle: string;
 }
 
 export default function DashboardPage() {
   const { user, token } = useAuth();
   const router = useRouter();
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [accessUsers, setAccessUsers] = useState<AccessUser[]>([]);
+  const [todayTasks, setTodayTasks] = useState<TaskDueToday[]>([]);
+  const [compliance, setCompliance] = useState<ComplianceMember[]>([]);
+  const [aiInsight, setAIInsight] = useState<AIInsight | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [compliance, setCompliance] = useState<{
-    totalComplianceRate: number;
-    activeUsers: number;
-    inactiveUsers: number;
-    totalPendingTasks: number;
-  } | null>(null);
+  const [welcomeGreeting, setWelcomeGreeting] = useState("");
+  const [formattedDate, setFormattedDate] = useState("");
+  const [sendingAlert, setSendingAlert] = useState<Set<string>>(new Set());
+  const [sendingMass, setSendingMass] = useState(false);
+  const [postponingTask, setPostponingTask] = useState<Set<string>>(new Set());
+  const [completingTask, setCompletingTask] = useState<Set<string>>(new Set());
+  const [commentModal, setCommentModal] = useState<CommentModalState>({ open: false, taskId: "", taskTitle: "" });
+  const [commentText, setCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [refreshingAI, setRefreshingAI] = useState(false);
 
-  const today = new Date();
-  const hour = today.getHours();
-  const greetingEmoji =
-    hour < 12 ? "☀️" : hour < 18 ? "🌤️" : "🌙";
-  const greeting =
-    hour < 12
-      ? "Buenos días"
-      : hour < 18
-      ? "Buenas tardes"
-      : "Buenas noches";
-  const formattedDate = `${getDayName(today)}, ${formatDate(today)}`;
+  const isAdminOrOwner = user?.role === "DUENO" || user?.role === "ADMIN";
+  const isManager = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
+
+  useEffect(() => {
+    const now = new Date();
+    const hour = now.getHours();
+    if (hour < 12) setWelcomeGreeting("Buenos días");
+    else if (hour < 18) setWelcomeGreeting("Buenas tardes");
+    else setWelcomeGreeting("Buenas noches");
+    setFormattedDate(`${getDayName(now)} ${now.getDate()} de ${now.toLocaleDateString("es-GT", { month: "long" })}, ${now.getFullYear()}`);
+  }, []);
 
   const fetchDashboard = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/dashboard", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Error al cargar el dashboard");
-      const json = await res.json();
-      if (json.success) {
-        setData(json.data);
-      } else {
-        throw new Error(json.error || "Error al cargar datos");
+      const [dashRes, accessRes, tasksRes, complianceRes] = await Promise.all([
+        fetch("/api/dashboard", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/access?filter=today", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/tasks/daily", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/compliance?filter=today", { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+
+      if (dashRes.ok) {
+        const json = await dashRes.json();
+        if (json.success && json.data) {
+          const d = json.data;
+          const totalToday = d.tasksDueToday?.length || 0;
+          const completedToday = d.stats.completedTasksToday || 0;
+          const urgentCount = d.tasksDueToday?.filter((t: TaskDueToday) => t.priority === "URGENTE").length || 0;
+          setTodayTasks(d.tasksDueToday || []);
+          setStats({
+            pendingTasks: d.stats.pendingTasks || 0,
+            urgentTasks: urgentCount,
+            completedTasksToday: completedToday,
+            totalTasksToday: totalToday,
+            eventsThisWeek: d.stats.eventsThisWeek || 0,
+            personalCompliance: totalToday > 0 ? Math.round((completedToday / totalToday) * 100) : 100,
+          });
+        }
+      }
+
+      if (accessRes.ok) {
+        const json = await accessRes.json();
+        if (json.success && json.data) {
+          setAccessUsers(json.data || []);
+        }
+      }
+
+      if (tasksRes.ok) {
+        const json = await tasksRes.json();
+        if (json.success && json.data) {
+          const flat: TaskDueToday[] = [];
+          const tasksObj = json.data.tasks || {};
+          for (const cat of Object.keys(tasksObj)) {
+            for (const t of tasksObj[cat]) {
+              flat.push(t);
+            }
+          }
+          if (flat.length > 0) setTodayTasks(flat);
+        }
+      }
+
+      if (complianceRes.ok) {
+        const json = await complianceRes.json();
+        if (json.success && json.data) {
+          const staff = json.data.staff || [];
+          const enriched = staff.map((m: ComplianceMember) => {
+            const accessUser = accessUsers.find((a) => a.userId === m.userId);
+            return { ...m, accessCount: accessUser?.accessCount || 0 };
+          });
+          setCompliance(enriched);
+        }
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error desconocido");
@@ -120,88 +182,150 @@ export default function DashboardPage() {
     fetchDashboard();
   }, [fetchDashboard]);
 
-  const isAdminOrOwner = user?.role === "DUENO" || user?.role === "ADMIN";
+  const fetchAIInsight = useCallback(async () => {
+    if (!token) return;
+    setRefreshingAI(true);
+    try {
+      const res = await fetch("/api/ai/suggest", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setAIInsight(json.data);
+        }
+      }
+    } catch { /* */ } finally {
+      setRefreshingAI(false);
+    }
+  }, [token]);
 
   useEffect(() => {
-    const fetchCompliance = async () => {
-      if (!token || !isAdminOrOwner) return;
-      try {
-        const res = await fetch("/api/compliance?filter=today", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && json.data) {
-            setCompliance({
-              totalComplianceRate: json.data.totalComplianceRate,
-              activeUsers: json.data.activeUsers,
-              inactiveUsers: json.data.inactiveUsers,
-              totalPendingTasks: json.data.totalPendingTasks,
-            });
-          }
-        }
-      } catch { /* */ }
+    if (!loading) fetchAIInsight();
+  }, [loading, fetchAIInsight]);
+
+  async function sendAlert(userId: string, userName: string) {
+    setSendingAlert((prev) => new Set(prev).add(userId));
+    try {
+      const res = await fetch("/api/whatsapp/send-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId, type: "reminder" }),
+      });
+      if (res.ok) toast.success(`Alerta enviada a ${userName}`);
+      else throw new Error("Error");
+    } catch {
+      toast.error("Error al enviar alerta");
+    } finally {
+      setSendingAlert((prev) => { const n = new Set(prev); n.delete(userId); return n; });
+    }
+  }
+
+  async function sendMassAlert() {
+    const nonCompliant = compliance.filter((m) => m.completionRate < 50);
+    if (nonCompliant.length === 0) { toast.success("Todos están cumpliendo bien"); return; }
+    setSendingMass(true);
+    try {
+      const res = await fetch("/api/whatsapp/send-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userIds: nonCompliant.map((m) => m.userId), type: "mass-reminder" }),
+      });
+      if (res.ok) toast.success(`Alertas enviadas a ${nonCompliant.length} usuarios`);
+      else throw new Error("Error");
+    } catch {
+      toast.error("Error al enviar alertas masivas");
+    } finally {
+      setSendingMass(false);
+    }
+  }
+
+  async function handleComplete(taskId: string) {
+    setCompletingTask((prev) => new Set(prev).add(taskId));
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: "COMPLETADA" }),
+      });
+      if (res.ok) {
+        toast.success("Tarea completada");
+        fetchDashboard();
+      } else throw new Error("Error");
+    } catch {
+      toast.error("Error al completar tarea");
+    } finally {
+      setCompletingTask((prev) => { const n = new Set(prev); n.delete(taskId); return n; });
+    }
+  }
+
+  async function handlePostpone(taskId: string) {
+    setPostponingTask((prev) => new Set(prev).add(taskId));
+    try {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: "REPROGRAMADA", rescheduledTo: tomorrow.toISOString(), dueDate: tomorrow.toISOString() }),
+      });
+      if (res.ok) {
+        toast.success("Tarea pospuesta para mañana");
+        fetchDashboard();
+      } else throw new Error("Error");
+    } catch {
+      toast.error("Error al posponer tarea");
+    } finally {
+      setPostponingTask((prev) => { const n = new Set(prev); n.delete(taskId); return n; });
+    }
+  }
+
+  function openCommentModal(taskId: string, taskTitle: string) {
+    setCommentModal({ open: true, taskId, taskTitle });
+    setCommentText("");
+  }
+
+  async function submitComment() {
+    if (!commentText.trim()) return;
+    setSubmittingComment(true);
+    try {
+      const res = await fetch(`/api/tasks/${commentModal.taskId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content: commentText.trim() }),
+      });
+      if (res.ok) {
+        toast.success("Comentario agregado");
+        setCommentModal({ open: false, taskId: "", taskTitle: "" });
+      } else throw new Error("Error");
+    } catch {
+      toast.error("Error al agregar comentario");
+    } finally {
+      setSubmittingComment(false);
+    }
+  }
+
+  function getPriorityBorder(priority: string): string {
+    const map: Record<string, string> = {
+      URGENTE: "border-l-red-500",
+      ALTA: "border-l-orange-400",
+      MEDIA: "border-l-yellow-400",
+      BAJA: "border-l-gray-400",
     };
-    if (!loading) fetchCompliance();
-  }, [token, loading, isAdminOrOwner]);
+    return map[priority] || "border-l-gray-300";
+  }
 
-  const chartData = [
-    { name: "Pendiente", value: data?.stats.pendingTasks || 0, fill: "#eab308" },
-    { name: "Hoy", value: data?.stats.completedTasksToday || 0, fill: "#22c55e" },
-    { name: "Eventos", value: data?.stats.eventsThisWeek || 0, fill: "#3b82f6" },
-    { name: "Cobros", value: data?.stats.pendingCobros || 0, fill: "#f97316" },
-  ];
+  function getAccessColor(count: number): string {
+    if (count >= 4) return "bg-green-500/10 border-green-200 dark:border-green-800";
+    if (count >= 1) return "bg-yellow-500/10 border-yellow-200 dark:border-yellow-800";
+    return "bg-red-500/10 border-red-200 dark:border-red-800";
+  }
 
-  const statCards = [
-    {
-      label: "Tareas Pendientes",
-      value: data?.stats.pendingTasks ?? 0,
-      icon: CheckSquare,
-      color: "text-yellow-400",
-      bg: "bg-yellow-500/10",
-      href: "/tareas",
-    },
-    {
-      label: "Tareas Completadas Hoy",
-      value: data?.stats.completedTasksToday ?? 0,
-      icon: CalendarCheck,
-      color: "text-green-400",
-      bg: "bg-green-500/10",
-      href: "/tareas",
-    },
-    {
-      label: "Eventos Esta Semana",
-      value: data?.stats.eventsThisWeek ?? 0,
-      icon: Calendar,
-      color: "text-blue-400",
-      bg: "bg-blue-500/10",
-      href: "/eventos",
-    },
-    {
-      label: "Cobros Pendientes",
-      value: formatCurrency(data?.stats.cobrosAmount ?? 0),
-      icon: DollarSign,
-      color: "text-orange-400",
-      bg: "bg-orange-500/10",
-      href: "/cobros",
-    },
-    {
-      label: "Ingresos del Mes",
-      value: formatCurrency(data?.stats.cobrosAmount ?? 0),
-      icon: Wallet,
-      color: "text-green-400",
-      bg: "bg-green-500/10",
-      href: "/cobros",
-    },
-    {
-      label: "Equipo Dañado",
-      value: data?.stats.damagedEquipment ?? 0,
-      icon: AlertTriangle,
-      color: "text-red-400",
-      bg: "bg-red-500/10",
-      href: "/inventario",
-    },
-  ];
+  function getAccessTextColor(count: number): string {
+    if (count >= 4) return "text-green-600 dark:text-green-400";
+    if (count >= 1) return "text-yellow-600 dark:text-yellow-400";
+    return "text-red-600 dark:text-red-400";
+  }
 
   if (loading) {
     return (
@@ -217,295 +341,341 @@ export default function DashboardPage() {
         <div className="text-center">
           <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-4" />
           <p className="text-red-400 mb-4">{error}</p>
-          <Button variant="outline" onClick={fetchDashboard}>
-            Reintentar
-          </Button>
+          <Button variant="outline" onClick={fetchDashboard}>Reintentar</Button>
         </div>
       </div>
     );
   }
 
+  const statCards = [
+    {
+      label: "Tareas Pendientes",
+      value: stats?.pendingTasks ?? 0,
+      icon: CheckSquare,
+      color: "text-yellow-400",
+      bg: "bg-yellow-500/10",
+      badge: stats?.urgentTasks && stats.urgentTasks > 0 ? `${stats.urgentTasks} urgentes` : undefined,
+      badgeColor: "red" as const,
+    },
+    {
+      label: "Tareas Completadas Hoy",
+      value: stats ? `${stats.completedTasksToday}/${stats.totalTasksToday}` : "0/0",
+      icon: CalendarCheck,
+      color: "text-green-400",
+      bg: "bg-green-500/10",
+      subText: stats ? `${stats.personalCompliance}% del total` : "0% del total",
+    },
+    {
+      label: "Eventos Esta Semana",
+      value: stats?.eventsThisWeek ?? 0,
+      icon: Calendar,
+      color: "text-blue-400",
+      bg: "bg-blue-500/10",
+    },
+    {
+      label: "Mi Cumplimiento",
+      value: `${stats?.personalCompliance ?? 100}%`,
+      icon: TrendingUp,
+      color: "text-purple-400",
+      bg: "bg-purple-500/10",
+      progress: stats?.personalCompliance ?? 100,
+    },
+  ];
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {greetingEmoji} {greeting}, {user?.name?.split(" ")[0]}
+            {welcomeGreeting}, {user?.name?.split(" ")[0]}
           </h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {formattedDate}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Plus className="h-4 w-4" />}
-            onClick={() => router.push("/tareas")}
-          >
-            Nueva Tarea
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<Calendar className="h-4 w-4" />}
-            onClick={() => router.push("/eventos")}
-          >
-            Nuevo Evento
-          </Button>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{formattedDate}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         {statCards.map((card) => (
-          <Card
-            key={card.label}
-            variant="bordered"
-            className="p-4 hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => router.push(card.href)}
-          >
+          <Card key={card.label} variant="bordered" className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                {card.label}
-              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">{card.label}</span>
               <div className={cn("p-2 rounded-lg", card.bg)}>
                 <card.icon className={cn("h-4 w-4", card.color)} />
               </div>
             </div>
-            <p className="text-xl font-bold text-gray-900 dark:text-white">
-              {card.value}
-            </p>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card variant="bordered" className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp className="h-5 w-5 text-blue-500" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Resumen de Actividad
-              </h2>
-            </div>
-            <div className="h-48 sm:h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: "#9ca3af", fontSize: 12 }} />
-                  <YAxis tick={{ fill: "#9ca3af", fontSize: 12 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1f2937",
-                      border: "1px solid #374151",
-                      borderRadius: "0.5rem",
-                      color: "#f9fafb",
-                    }}
-                  />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]} fill="var(--bar-fill, #3b82f6)" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          <Card variant="bordered" className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-green-500" />
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Tareas para Hoy
-                </h2>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => router.push("/tareas")}>
-                Ver todas <ArrowUpRight className="h-3 w-3 ml-1" />
-              </Button>
-            </div>
-
-            {(!data?.tasksDueToday || data.tasksDueToday.length === 0) ? (
-              <EmptyState
-                title="Sin tareas para hoy"
-                description="No hay tareas programadas para el día de hoy."
-              />
-            ) : (
-              <div className="space-y-3">
-                {data.tasksDueToday.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
-                    onClick={() => router.push("/tareas")}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={cn(
-                        "h-2 w-2 rounded-full flex-shrink-0",
-                        task.priority === "MEDIA" && "bg-yellow-400",
-                        task.priority === "ALTA" && "bg-orange-400",
-                        task.priority === "URGENTE" && "bg-red-400",
-                        task.priority === "BAJA" && "bg-gray-400",
-                      )} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {task.title}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <Badge
-                            size="sm"
-                            color={taskStatusColor(task.status)}
-                          >
-                            {taskStatusLabel(task.status)}
-                          </Badge>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {task.assignedTo?.name || "Sin asignar"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {task.dueDate && (
-                      <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
-                        {formatDate(task.dueDate)}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card variant="bordered" className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Brain className="h-5 w-5 text-purple-500" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Resumen Diario IA
-              </h2>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-              {data?.dailyReport || "Generando resumen con inteligencia artificial..."}
-            </p>
-          </Card>
-
-          <Card variant="bordered" className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="h-5 w-5 text-gray-500" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Actividad Reciente
-              </h2>
-            </div>
-
-            {(!data?.recentActivity || data.recentActivity.length === 0) ? (
-              <EmptyState
-                title="Sin actividad reciente"
-                description="No hay actividad registrada aún."
-              />
-            ) : (
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                {data.recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex gap-3">
-                    <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                      <User className="h-4 w-4 text-gray-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm text-gray-700 dark:text-gray-300">
-                        <span className="font-medium">{activity.user?.name || "Usuario"}</span>{" "}
-                        {activity.action}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {formatDate(activity.createdAt)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-      </div>
-
-      {isAdminOrOwner && compliance && (
-        <Card variant="bordered" className="p-6">
-          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <ClipboardCheck className="h-5 w-5 text-blue-500" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Cumplimiento del Equipo Hoy
-              </h2>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{card.value}</p>
+              {card.badge && (
+                <Badge size="sm" color={card.badgeColor}>{card.badge}</Badge>
+              )}
             </div>
-            <Button variant="ghost" size="sm" onClick={() => router.push("/cumplimiento")}>
-              Ver detalle <ArrowUpRight className="h-3 w-3 ml-1" />
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {compliance.totalComplianceRate.toFixed(0)}%
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Cumplimiento General</p>
+            {card.subText && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{card.subText}</p>
+            )}
+            {card.progress !== undefined && (
               <div className="mt-2 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full",
-                    compliance.totalComplianceRate >= 80
-                      ? "bg-green-500"
-                      : compliance.totalComplianceRate >= 50
-                      ? "bg-orange-400"
-                      : "bg-red-500"
+                    card.progress >= 80 ? "bg-green-500" : card.progress >= 50 ? "bg-orange-400" : "bg-red-500"
                   )}
-                  style={{ width: `${compliance.totalComplianceRate}%` }}
+                  style={{ width: `${card.progress}%` }}
                 />
               </div>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {compliance.activeUsers}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Usuarios Activos</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                {compliance.inactiveUsers}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Sin Actividad</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                {compliance.totalPendingTasks}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tareas Pendientes</p>
-            </div>
-          </div>
-        </Card>
-      )}
+            )}
+          </Card>
+        ))}
+      </div>
 
       {isAdminOrOwner && (
         <Card variant="bordered" className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Upload className="h-5 w-5 text-blue-500" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Subir Archivos
-            </h2>
+            <Users className="h-5 w-5 text-blue-500" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Control de Accesos</h2>
+            <span className="text-xs text-gray-400 ml-auto">{accessUsers.length} usuarios</span>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-            Adjunta archivos a tareas o eventos rápidamente.
-          </p>
-          <FileUpload
-            onUpload={async (files) => {
-              toast.success(`${files.length} archivo(s) listos para adjuntar`);
-              return files.map((f, i) => ({
-                id: `quick_${Date.now()}_${i}`,
-                fileName: f.name,
-                fileType: f.type,
-                fileSize: f.size,
-                url: URL.createObjectURL(f),
-                uploadedById: user?.id || "",
-                createdAt: new Date().toISOString(),
-              }));
-            }}
-            maxFiles={5}
-            maxSizeMB={10}
-          />
+          {accessUsers.length === 0 ? (
+            <EmptyState title="Sin datos de acceso" description="No hay registros de acceso para hoy." />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              {accessUsers.map((au) => (
+                <Card
+                  key={au.userId}
+                  variant="bordered"
+                  className={cn("p-3", getAccessColor(au.accessCount))}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Avatar name={au.name} src={au.avatar} size="sm" />
+                    <span className="text-xs font-medium text-gray-900 dark:text-white truncate">{au.name.split(" ")[0]}</span>
+                  </div>
+                  <p className={cn("text-lg font-bold", getAccessTextColor(au.accessCount))}>
+                    {au.accessCount} acceso{au.accessCount !== 1 ? "s" : ""}
+                  </p>
+                  {au.accessCount < 4 && (
+                    <Button
+                      variant="warning"
+                      size="sm"
+                      className="mt-2 w-full text-xs"
+                      onClick={() => sendAlert(au.userId, au.name)}
+                      isLoading={sendingAlert.has(au.userId)}
+                      leftIcon={<MessageCircle className="h-3 w-3" />}
+                    >
+                      Enviar alerta
+                    </Button>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )}
         </Card>
       )}
+
+      <Card variant="bordered" className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <CalendarCheck className="h-5 w-5 text-green-500" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Mis Tareas de Hoy</h2>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => router.push("/tareas")}>
+            Ver todas
+          </Button>
+        </div>
+        {todayTasks.length === 0 ? (
+          <EmptyState
+            title="No tienes tareas para hoy"
+            description="¡Buen trabajo! No tienes tareas pendientes programadas para el día de hoy."
+          />
+        ) : (
+          <div className="space-y-3">
+            {todayTasks.map((task) => (
+              <div
+                key={task.id}
+                className={cn(
+                  "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-white dark:bg-gray-800/50 border-l-4 border border-gray-200 dark:border-gray-700 hover:shadow-sm transition-shadow",
+                  getPriorityBorder(task.priority)
+                )}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{task.title}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge size="sm" color={taskPriorityColor(task.priority)}>
+                      {task.priority === "URGENTE" ? "Urgente" : task.priority === "ALTA" ? "Alta" : task.priority === "MEDIA" ? "Media" : "Baja"}
+                    </Badge>
+                    <Badge size="sm" color="gray">
+                      {taskStatusLabel(task.status)}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <Button
+                    variant="success"
+                    size="sm"
+                    onClick={() => handleComplete(task.id)}
+                    isLoading={completingTask.has(task.id)}
+                    leftIcon={<CheckSquare className="h-3.5 w-3.5" />}
+                  >
+                    Completar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePostpone(task.id)}
+                    isLoading={postponingTask.has(task.id)}
+                  >
+                    Posponer
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openCommentModal(task.id, task.title)}
+                    leftIcon={<MessageCircle className="h-3.5 w-3.5" />}
+                  >
+                    Comentar
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {isManager && (
+        <Card variant="bordered" className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Cumplimiento del Equipo</h2>
+            </div>
+            <Button variant="warning" size="sm" onClick={sendMassAlert} isLoading={sendingMass} leftIcon={<Send className="h-4 w-4" />}>
+              Alerta masiva
+            </Button>
+          </div>
+          {compliance.length === 0 ? (
+            <EmptyState title="Sin datos de cumplimiento" description="No hay información de cumplimiento para hoy." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left py-2 px-3 text-gray-500 font-medium">Usuario</th>
+                    <th className="text-center py-2 px-3 text-gray-500 font-medium">Accesos hoy</th>
+                    <th className="text-center py-2 px-3 text-gray-500 font-medium">Tareas</th>
+                    <th className="text-center py-2 px-3 text-gray-500 font-medium">Cumplimiento</th>
+                    <th className="text-center py-2 px-3 text-gray-500 font-medium">Alerta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {compliance.map((m) => (
+                    <tr key={m.userId} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <Avatar name={m.user.name} src={m.user.avatar} size="xs" />
+                          <span className="font-medium text-gray-900 dark:text-white truncate max-w-[120px]">{m.user.name}</span>
+                        </div>
+                      </td>
+                      <td className="text-center py-2.5 px-3">
+                        <span className={cn("font-bold", getAccessTextColor(m.accessCount || 0))}>{m.accessCount || 0}</span>
+                      </td>
+                      <td className="text-center py-2.5 px-3 text-gray-700 dark:text-gray-300">
+                        {m.tasksCompleted}/{m.tasksCompleted + m.tasksPending}
+                      </td>
+                      <td className="text-center py-2.5 px-3">
+                        <div className="flex items-center gap-2 justify-center">
+                          <div className="h-1.5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full",
+                                m.completionRate >= 80 ? "bg-green-500" : m.completionRate >= 50 ? "bg-orange-400" : "bg-red-500"
+                              )}
+                              style={{ width: `${m.completionRate}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium">{m.completionRate}%</span>
+                        </div>
+                      </td>
+                      <td className="text-center py-2.5 px-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => sendAlert(m.userId, m.user.name)}
+                          isLoading={sendingAlert.has(m.userId)}
+                          leftIcon={<MessageCircle className="h-3 w-3" />}
+                        >
+                          {m.completionRate < 50 ? "Alerta" : "Recordar"}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+
+      <Card variant="bordered" className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-purple-500" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Insights de LUNA</h2>
+          </div>
+          <Button variant="ghost" size="sm" onClick={fetchAIInsight} isLoading={refreshingAI} leftIcon={<RefreshCw className="h-4 w-4" />}>
+            Actualizar
+          </Button>
+        </div>
+        {aiInsight ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{aiInsight.summary}</p>
+            {aiInsight.suggestions.length > 0 && (
+              <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 border border-purple-200 dark:border-purple-800">
+                <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 mb-2">Sugerencias</p>
+                <ul className="space-y-1">
+                  {aiInsight.suggestions.map((s, i) => (
+                    <li key={i} className="text-xs text-purple-600 dark:text-purple-400 flex items-start gap-1.5">
+                      <span className="mt-0.5">-</span>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Brain className="h-12 w-12" />}
+            title="Sin insights aún"
+            description="LUNA está analizando los datos del día. Haz clic en Actualizar para obtener insights."
+          />
+        )}
+      </Card>
+
+      <Modal
+        isOpen={commentModal.open}
+        onClose={() => setCommentModal({ open: false, taskId: "", taskTitle: "" })}
+        title={`Comentar: ${commentModal.taskTitle}`}
+      >
+        <div className="space-y-4 p-1">
+          <textarea
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+            rows={3}
+            placeholder="Escribe tu comentario..."
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCommentModal({ open: false, taskId: "", taskTitle: "" })}>
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              onClick={submitComment}
+              isLoading={submittingComment}
+              disabled={!commentText.trim()}
+            >
+              Enviar
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -12,17 +12,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!hasMinRole(auth.payload, "JEFE")) {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId") || undefined;
+
+    const isSelfQuery = userId === auth.payload.userId;
+    if (!isSelfQuery && !hasMinRole(auth.payload, "JEFE")) {
       return NextResponse.json(
         { success: false, error: "No tienes permisos para ver el registro de actividad" },
         { status: 403 }
       );
     }
 
-    const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
-    const userId = searchParams.get("userId") || undefined;
     const dateFrom = searchParams.get("dateFrom") || undefined;
     const dateTo = searchParams.get("dateTo") || undefined;
     const action = searchParams.get("action") || undefined;

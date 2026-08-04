@@ -312,7 +312,7 @@ export function AIChat() {
             ? "h-14 w-14 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
             : "h-16 w-16 bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 hover:h-16 hover:w-[140px] px-4"
         )}
-        title="LUNA - Asistente IA"
+        title="LUNA - Controladora IA"
       >
         {isOpen ? (
           <X className="h-6 w-6 text-gray-700 dark:text-gray-300" />
@@ -340,14 +340,17 @@ export function AIChat() {
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-600 to-blue-600">
             <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-full bg-white/20 flex items-center justify-center">
-                <Bot className="h-5 w-5 text-white" />
+              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center ring-2 ring-white/30">
+                <Bot className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">LUNA</h3>
+                <h3 className="text-sm font-bold text-white flex items-center gap-1">
+                  LUNA
+                  <span className="text-[10px] bg-white/20 text-white/90 px-1.5 py-0.5 rounded-full font-normal">IA</span>
+                </h3>
                 <p className="text-xs text-purple-200 flex items-center gap-1">
                   <Sparkles className="h-3 w-3" />
-                  {aiInfo.provider} · {aiInfo.model}
+                  Controladora de Live Productions · {aiInfo.provider}
                 </p>
               </div>
             </div>
