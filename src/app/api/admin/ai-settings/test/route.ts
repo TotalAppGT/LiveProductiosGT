@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
     };
 
     const apiKey = dbApiKey || envApiKeys[effectiveProvider] || "";
+    console.log(`[AI Test] Provider: ${effectiveProvider}, DB key: ${dbApiKey ? dbApiKey.slice(-8) : 'empty'}, Env key: ${envApiKeys[effectiveProvider] ? envApiKeys[effectiveProvider]!.slice(-8) : 'empty'}, Using: ${apiKey.slice(-8)}`);
     if (!apiKey) {
       return NextResponse.json(
         { success: false, error: "API Key no configurada. Guárdala primero en la pestaña IA & Modelos." },
