@@ -277,7 +277,6 @@ export default function AdminPage() {
         },
         body: JSON.stringify({
           provider: aiSettings.provider,
-          apiKey: aiSettings.apiKey,
           model: aiSettings.model,
         }),
       });
