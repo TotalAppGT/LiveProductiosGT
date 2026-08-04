@@ -119,7 +119,7 @@ export default function PersonalPage() {
   async function toggleActive(user: User) {
     try {
       const res = await fetch(`/api/users/${user.id}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -139,7 +139,7 @@ export default function PersonalPage() {
   async function updateRole(user: User, role: UserRole) {
     try {
       const res = await fetch(`/api/users/${user.id}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -674,7 +674,7 @@ function EditUserModal({
     try {
       const normalizedPhone = phone.trim() ? normalizeGTPhone(phone.trim()) : undefined;
       const res = await fetch(`/api/users/${user.id}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
