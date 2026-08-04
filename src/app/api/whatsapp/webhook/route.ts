@@ -362,7 +362,7 @@ export async function POST(request: NextRequest) {
                 "Desconocido";
 
               const messageType = message.type;
-              const text = message.text?.body?.trim() || "";
+              let text = message.text?.body?.trim() || "";
 
               console.log("Mensaje recibido de WhatsApp:", {
                 from: fromNumber,
