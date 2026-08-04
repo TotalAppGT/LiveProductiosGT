@@ -71,6 +71,11 @@ export async function PUT(
       );
     }
 
+    const delegatorName = (await prisma.user.findUnique({
+      where: { id: auth.payload.userId },
+      select: { name: true },
+    }))?.name || "Un administrador";
+
     const previousAssigneeId = existingTask.assignedToId;
     const previousAssigneeName = existingTask.assignedTo?.name || "Sin asignar";
 
@@ -100,39 +105,33 @@ export async function PUT(
     await prisma.activity.create({
       data: {
         userId: auth.payload.userId,
-        action: "DELEGAR_TAREA",
+        action: "TASK_DELEGATED",
         resource: "TASK",
         resourceId: id,
         details: `Tarea "${task.title}" delegada de ${previousAssigneeName} a ${newAssignee.name}${reason ? ` (${reason})` : ""}`,
       },
     });
 
-    // WhatsApp to new assignee
-    if (newAssignee.whatsappNumber || newAssignee.phone) {
-      const alertMsg = await generateSmartAlert({
-        title: task.title,
-        alertType: "assignment",
-        assigneeName: newAssignee.name,
-        dueDate: task.dueDate?.toISOString(),
-        priority: task.priority,
-      });
+    const systemUrl = process.env.NEXT_PUBLIC_APP_URL || "https://liveproductionsgt.com";
 
+    // WhatsApp to new assignee - immediate
+    if (newAssignee.whatsappNumber || newAssignee.phone) {
       const to = newAssignee.whatsappNumber || newAssignee.phone;
       if (to) {
         sendMessage(
           to,
-          `🔄 *Tarea Delegada*\n\n${alertMsg}\n\nPrioridad: ${task.priority}\nDelegada por: Autorizado${reason ? `\nMotivo: ${reason}` : ""}`
+          `🔄 *Nueva Tarea Asignada*\n\n${delegatorName} te ha asignado la tarea "${task.title}".\n\n📅 Vence: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-GT") : "Sin fecha"}\n⚠️ Prioridad: ${task.priority}\n\nEntra al sistema: ${systemUrl}`
         ).catch((err) => console.warn("WhatsApp error (new assignee):", err));
       }
     }
 
-    // WhatsApp to old assignee
+    // WhatsApp to old assignee - immediate
     if (previousAssigneeId && (existingTask.assignedTo?.whatsappNumber || existingTask.assignedTo?.phone)) {
       const to = existingTask.assignedTo.whatsappNumber || existingTask.assignedTo.phone;
       if (to) {
         sendMessage(
           to,
-          `🔄 *Tarea Reasignada*\n\nLa tarea "${task.title}" ha sido delegada a ${newAssignee.name}.${reason ? `\nMotivo: ${reason}` : ""}`
+          `🔄 *Tarea Reasignada*\n\nLa tarea "${task.title}" fue transferida a ${newAssignee.name}.${reason ? `\nMotivo: ${reason}` : ""}`
         ).catch((err) => console.warn("WhatsApp error (old assignee):", err));
       }
     }
@@ -146,7 +145,7 @@ export async function PUT(
           data: {
             userId: auth.payload.userId,
             toNumber: to,
-            message: `Delegación de tarea "${task.title}"`,
+            message: `Delegación de tarea "${task.title}" a ${newAssignee.name}`,
             type: "NOTIFICATION",
             status: "SENT",
             relatedTaskId: task.id,

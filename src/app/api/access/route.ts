@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
 import { startOfDay, endOfDay, startOfWeek, endOfWeek } from "date-fns";
 
+const MIN_DAILY_ACCESS = 4;
+
 export async function GET(request: NextRequest) {
   try {
     const auth = authenticateRequest(request);
@@ -24,6 +26,12 @@ export async function GET(request: NextRequest) {
     const filter = searchParams.get("filter") || "today";
     const dateFrom = searchParams.get("dateFrom") || undefined;
     const dateTo = searchParams.get("dateTo") || undefined;
+
+    let minDaily = MIN_DAILY_ACCESS;
+    try {
+      const config = await prisma.systemConfig.findUnique({ where: { key: "access.min_daily" } });
+      if (config) minDaily = parseInt(config.value, 10) || MIN_DAILY_ACCESS;
+    } catch {}
 
     let rangeStart: Date;
     let rangeEnd: Date;
@@ -88,6 +96,8 @@ export async function GET(request: NextRequest) {
           tasksViewed: 0,
           tasksCompleted: 0,
           active: false,
+          accessGoal: minDaily,
+          isCompliant: false,
         };
       }
 
@@ -116,6 +126,8 @@ export async function GET(request: NextRequest) {
         tasksViewed,
         tasksCompleted,
         active: true,
+        accessGoal: minDaily,
+        isCompliant: accessCount >= minDaily,
       };
     });
 
@@ -132,6 +144,7 @@ export async function GET(request: NextRequest) {
         },
         totalUsers: users.length,
         activeUsers: accessLog.filter((a) => a.active).length,
+        accessGoal: minDaily,
       },
       { status: 200 }
     );

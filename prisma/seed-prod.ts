@@ -238,6 +238,7 @@ async function main() {
     { key: "notifications.overdue_hours_2", value: "3", description: "Horas para segunda alerta de vencimiento" },
     { key: "notifications.overdue_hours_escalate", value: "6", description: "Horas para escalar a administradores" },
     { key: "compliance.min_completion_rate", value: "50", description: "Tasa mínima de completación esperada" },
+    { key: "access.min_daily", value: "4", description: "Mínimo de accesos diarios requeridos por usuario" },
   ];
 
   for (const cfg of defaultConfigs) {
@@ -331,6 +332,10 @@ async function main() {
       { title: "Verificar funcionamiento de recordatorios automáticos", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "EN_PROCESO" },
       { title: "Revisar monitoreo de accesos del equipo", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
       { title: "Probar respuestas de LUNA por WhatsApp", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
+      { title: "Probar transferencia de tareas entre usuarios", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
+      { title: "Verificar bitácora de actividades del equipo", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
+      { title: "Revisar cumplimiento de accesos diarios", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
+      { title: "Probar respuestas de LUNA en WhatsApp", category: "ADMINISTRACION", priority: "BAJA", dueDate: tomorrow, assignedToId: adminUser.id, status: "PENDIENTE" },
     );
   }
 

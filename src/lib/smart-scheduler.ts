@@ -487,6 +487,205 @@ export async function triggerEventReminders(): Promise<{
   }
 }
 
+export async function checkDailyAccessRequirement(): Promise<{
+  usersChecked: number;
+  belowThreshold: number;
+  alertsSent: number;
+  inactiveToday: number;
+}> {
+  try {
+    const today = startOfDay(new Date());
+    let minDaily = 4;
+
+    try {
+      const config = await prisma.systemConfig.findUnique({ where: { key: "access.min_daily" } });
+      if (config) minDaily = parseInt(config.value, 10) || 4;
+    } catch {}
+
+    const allUsers = await prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, role: true, phone: true, whatsappNumber: true },
+    });
+
+    const activities = await prisma.activity.findMany({
+      where: { createdAt: { gte: today } },
+      select: { userId: true },
+    });
+
+    const usersWithAccess = new Set<string>();
+    const accessCounts = new Map<string, number>();
+
+    for (const a of activities) {
+      usersWithAccess.add(a.userId);
+      accessCounts.set(a.userId, (accessCounts.get(a.userId) || 0) + 1);
+    }
+
+    let alertsSent = 0;
+    let belowThreshold = 0;
+    let inactiveToday = 0;
+
+    for (const user of allUsers) {
+      const count = accessCounts.get(user.id) || 0;
+
+      if (count === 0) {
+        inactiveToday++;
+        const to = user.whatsappNumber || user.phone;
+        if (to) {
+          await sendMessage(
+            to,
+            `⚠️ *Alerta de Inactividad*\n\nNo has ingresado al sistema hoy. Se requieren al menos ${minDaily} accesos diarios para seguimiento de tareas. Por favor ingresa al sistema.`
+          ).catch(() => {});
+          alertsSent++;
+        }
+
+        await logActivity(
+          "DAILY_ACCESS_CHECK",
+          "USER",
+          user.id,
+          `Usuario ${user.name} marcado como INACTIVO_HOY (0 accesos)`,
+          "system"
+        );
+
+        const admins = await getAdmins();
+        for (const admin of admins) {
+          const adminTo = admin.whatsappNumber || admin.phone;
+          if (adminTo) {
+            await sendMessage(
+              adminTo,
+              `🚨 *INACTIVO_HOY: ${user.name}*\n\nEl usuario no ha ingresado al sistema en todo el día. Se requiere acción del dueño.`
+            ).catch(() => {});
+          }
+        }
+      } else if (count < minDaily) {
+        belowThreshold++;
+        const to = user.whatsappNumber || user.phone;
+        if (to) {
+          await sendMessage(
+            to,
+            `⚠️ *Accesos Insuficientes*\n\nSolo has ingresado ${count} veces hoy. Se requieren al menos ${minDaily} accesos diarios para seguimiento de tareas.`
+          ).catch(() => {});
+          alertsSent++;
+        }
+
+        await logActivity(
+          "DAILY_ACCESS_CHECK",
+          "USER",
+          user.id,
+          `Usuario ${user.name} con solo ${count}/${minDaily} accesos hoy`,
+          "system"
+        );
+      }
+    }
+
+    await logActivity(
+      "DAILY_ACCESS_CHECK",
+      "SYSTEM",
+      null,
+      `Chequeo de accesos diarios: ${allUsers.length} usuarios, ${inactiveToday} inactivos, ${belowThreshold} bajo umbral`,
+      "system"
+    );
+
+    return {
+      usersChecked: allUsers.length,
+      belowThreshold,
+      alertsSent,
+      inactiveToday,
+    };
+  } catch (error) {
+    console.error("checkDailyAccessRequirement error:", error);
+    return { usersChecked: 0, belowThreshold: 0, alertsSent: 0, inactiveToday: 0 };
+  }
+}
+
+export async function sendEndOfDayAlerts(): Promise<{
+  usersWithPending: number;
+  tasksRescheduled: number;
+  alertsSent: number;
+}> {
+  try {
+    const today = startOfDay(new Date());
+    const endToday = endOfDay(new Date());
+
+    const pendingTasks = await prisma.task.findMany({
+      where: {
+        dueDate: { gte: today, lte: endToday },
+        status: { in: ["PENDIENTE", "EN_PROCESO"] },
+      },
+      include: {
+        assignedTo: {
+          select: { id: true, name: true, phone: true, whatsappNumber: true },
+        },
+      },
+    });
+
+    const byUser = new Map<string, { user: NonNullable<typeof pendingTasks[0]["assignedTo"]>; tasks: typeof pendingTasks }>();
+
+    for (const task of pendingTasks) {
+      if (!task.assignedTo) continue;
+      const key = task.assignedTo.id;
+      if (!byUser.has(key)) {
+        byUser.set(key, { user: task.assignedTo, tasks: [] });
+      }
+      byUser.get(key)!.tasks.push(task);
+    }
+
+    let alertsSent = 0;
+    let tasksRescheduled = 0;
+
+    const tomorrow = addDays(new Date(), 1);
+    tomorrow.setHours(0, 0, 0, 0);
+
+    for (const [, entry] of byUser) {
+      const to = entry.user.whatsappNumber || entry.user.phone;
+      if (to) {
+        await sendMessage(
+          to,
+          `🌙 *Cierre de Jornada*\n\nAún tienes ${entry.tasks.length} tareas pendientes para hoy. Asegúrate de completarlas o posponerlas con razón.`
+        ).catch(() => {});
+        alertsSent++;
+      }
+
+      for (const task of entry.tasks) {
+        await prisma.task.update({
+          where: { id: task.id },
+          data: {
+            status: "REPROGRAMADA",
+            dueDate: tomorrow,
+            rescheduledTo: tomorrow,
+            postponeReason: "No completada al final del día",
+            postponeCount: { increment: 1 },
+          },
+        });
+
+        await prisma.taskHistory.create({
+          data: {
+            taskId: task.id,
+            userId: "system",
+            action: "REPROGRAMACIÓN_AUTOMATICA",
+            previousStatus: task.status,
+            newStatus: "REPROGRAMADA",
+          },
+        });
+
+        tasksRescheduled++;
+      }
+
+      await logActivity(
+        "END_OF_DAY_ALERT",
+        "TASK",
+        null,
+        `Alerta fin del día enviada a ${entry.user.name} (${entry.tasks.length} tareas reprogramadas)`,
+        "system"
+      );
+    }
+
+    return { usersWithPending: byUser.size, tasksRescheduled, alertsSent };
+  } catch (error) {
+    console.error("sendEndOfDayAlerts error:", error);
+    return { usersWithPending: 0, tasksRescheduled: 0, alertsSent: 0 };
+  }
+}
+
 export async function runAllChecks(): Promise<Record<string, any>> {
   const results: Record<string, any> = {};
 
@@ -656,5 +855,8 @@ export function getSmartCronSchedule(): Record<string, string> {
     weeklyCompliance: "0 8 * * 1",
     eventReminders: "0 7 * * *",
     runAllChecks: "0 12 * * *",
+    checkDailyAccess: "0 15 * * *",
+    endOfDayAlerts: "0 17 * * *",
+    eveningAccessCheck: "0 18 * * *",
   };
 }

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { askAI } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
+import { checkDailyAccessRequirement, sendEndOfDayAlerts } from "@/lib/smart-scheduler";
 
 interface CronJob {
   name: string;
@@ -432,10 +433,75 @@ async function checkOverdueTasks() {
   }
 }
 
+async function afternoonAccessCheck() {
+  console.log("[Cron] Ejecutando chequeo de accesos de media tarde (3:00 PM)");
+  try {
+    const result = await checkDailyAccessRequirement();
+    console.log(`[Cron] Chequeo de accesos: ${result.usersChecked} usuarios, ${result.belowThreshold} bajo umbral, ${result.inactiveToday} inactivos`);
+
+    const admins = await getAdminUsers();
+    for (const admin of admins) {
+      const to = admin.whatsappNumber || admin.phone;
+      if (to) {
+        const msg = `🕒 *Chequeo de Accesos - 3:00 PM*\n\n👥 Usuarios revisados: ${result.usersChecked}\n⚠️ Bajo el umbral: ${result.belowThreshold}\n🚫 Sin accesos hoy: ${result.inactiveToday}\n\nAún hay tiempo de cumplir con el mínimo de accesos diarios.`;
+        await sendMessage(to, msg).catch(() => {});
+      }
+    }
+
+    await logActivity("system", "CRON_AFTERNOON_ACCESS", `Chequeo de accesos: ${result.inactiveToday} inactivos, ${result.belowThreshold} bajo umbral`);
+  } catch (error) {
+    console.error("[Cron] Error afternoonAccessCheck:", error);
+  }
+}
+
+async function eveningAccessCheck() {
+  console.log("[Cron] Ejecutando chequeo de accesos vespertino (6:00 PM)");
+  try {
+    const result = await checkDailyAccessRequirement();
+
+    const admins = await getAdminUsers();
+    for (const admin of admins) {
+      const to = admin.whatsappNumber || admin.phone;
+      if (to) {
+        const msg = `🌆 *Cierre de Accesos - 6:00 PM*\n\n👥 Usuarios revisados: ${result.usersChecked}\n⚠️ Bajo el umbral: ${result.belowThreshold}\n🚫 Sin accesos hoy: ${result.inactiveToday}\n\nLos usuarios sin accesos han sido notificados.`;
+        await sendMessage(to, msg).catch(() => {});
+      }
+    }
+
+    await logActivity("system", "CRON_EVENING_ACCESS", `Cierre de accesos: ${result.inactiveToday} sin accesos hoy`);
+  } catch (error) {
+    console.error("[Cron] Error eveningAccessCheck:", error);
+  }
+}
+
+async function endOfDayTaskCheck() {
+  console.log("[Cron] Ejecutando alertas de fin de día (5:00 PM)");
+  try {
+    const result = await sendEndOfDayAlerts();
+    console.log(`[Cron] Fin de día: ${result.usersWithPending} usuarios con pendientes, ${result.tasksRescheduled} tareas reprogramadas`);
+
+    const admins = await getAdminUsers();
+    for (const admin of admins) {
+      const to = admin.whatsappNumber || admin.phone;
+      if (to) {
+        const msg = `🌙 *Cierre de Tareas - 5:00 PM*\n\n📋 Usuarios con pendientes: ${result.usersWithPending}\n🔄 Tareas reprogramadas para mañana: ${result.tasksRescheduled}\n\nLas tareas no completadas fueron reprogramadas automáticamente.`;
+        await sendMessage(to, msg).catch(() => {});
+      }
+    }
+
+    await logActivity("system", "CRON_END_OF_DAY", `${result.tasksRescheduled} tareas reprogramadas al final del día`);
+  } catch (error) {
+    console.error("[Cron] Error endOfDayTaskCheck:", error);
+  }
+}
+
 const jobs: CronJob[] = [
   { name: "morningBriefing", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing },
   { name: "dailyDigest", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: dailyDigest },
   { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck },
+  { name: "afternoonAccessCheck", schedule: { hour: 15, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck },
+  { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck },
+  { name: "eveningAccessCheck", schedule: { hour: 18, minute: 0 }, timezone: "America/Guatemala", handler: eveningAccessCheck },
   { name: "eveningRecap", schedule: { hour: 18, minute: 0 }, timezone: "America/Guatemala", handler: eveningRecap },
   { name: "checkOverdueTasks", schedule: { hour: 0, minute: 0 }, timezone: "America/Guatemala", handler: checkOverdueTasks },
 ];

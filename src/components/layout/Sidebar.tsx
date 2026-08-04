@@ -20,6 +20,8 @@ import {
   UserCheck,
   User,
   Activity,
+  BookOpen,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -59,6 +61,12 @@ const navItems: NavItem[] = [
     roles: ["DUENO", "ADMIN", "JEFE"],
   },
   {
+    label: "Bitácora",
+    href: "/bitacora",
+    icon: BookOpen,
+    roles: ["DUENO", "ADMIN", "JEFE"],
+  },
+  {
     label: "Eventos",
     href: "/eventos",
     icon: Calendar,
@@ -82,6 +90,17 @@ const navItems: NavItem[] = [
     label: "Vehículos",
     href: "/vehiculos",
     icon: Truck,
+  },
+  {
+    label: "Seguimiento",
+    href: "/seguimiento",
+    icon: Eye,
+  },
+  {
+    label: "Bitácora",
+    href: "/bitacora",
+    icon: BookOpen,
+    roles: ["DUENO", "ADMIN", "JEFE"],
   },
   {
     label: "Admin",

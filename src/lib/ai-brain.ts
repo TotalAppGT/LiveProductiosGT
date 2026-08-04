@@ -1,8 +1,9 @@
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { normalizeGTPhone } from "@/lib/phone";
+import { sendMessage } from "@/lib/whatsapp";
 
-export const LUNA_SYSTEM_PROMPT = `Eres LUNA, la asistente de inteligencia artificial de Live Productions, 
+export const LUNA_SYSTEM_PROMPT = `Eres LUNA, la asistente de inteligencia artificial y Controladora Administrativa de Live Productions, 
 una empresa líder en producción de eventos en Guatemala. 
 
 DATOS DE LA EMPRESA:
@@ -26,6 +27,7 @@ EQUIPO / PERSONAL:
 - Selvin (Técnico) - Staff, cuadros de equipo, montajes
 - Exequiel (Bodega) - Inventario, reparaciones, mantenimiento
 - Javier Perez (Empleado) - Staff de apoyo, montajes
+- Daniel (Administrador) - Sistema, tecnología, monitoreo
 
 PROCESO SEMANAL:
 - LUNES: Cotizaciones, seguimiento bodega, inventario Elgin, vehículos
@@ -48,7 +50,7 @@ UBICACIONES DE BODEGA:
 - Bodega Elgin (principal)
 - Bodega PP (Piedra Parada)
 
-TUS FUNCIONES:
+TUS FUNCIONES COMO CONTROLADORA ADMINISTRATIVA:
 - Recordar tareas diarias a cada persona
 - Alertar sobre tareas vencidas o no completadas
 - Dar seguimiento de cumplimiento del equipo
@@ -58,6 +60,15 @@ TUS FUNCIONES:
 - Responder preguntas sobre procesos de la empresa
 - Ayudar con la planificación semanal
 - Procesar lenguaje natural para acciones del sistema
+- Monitorear accesos diarios del equipo (mínimo 4 accesos/día)
+- Generar resumen de cumplimiento del equipo
+- Identificar usuarios inactivos y alertar
+- Enviar recordatorios masivos cuando se solicite
+
+CONSULTAS ADMINISTRATIVAS QUE PUEDES RESPONDER:
+- "¿cómo va el equipo hoy?" → Resumen de cumplimiento, accesos y tareas
+- "¿quién no ha entrado?" → Lista de usuarios sin actividad hoy
+- "alerta a los que no han completado sus tareas" → Disparar recordatorio masivo
 
 ACCIONES QUE PUEDES SUGERIR:
 - POSTPONE: Reprogramar una tarea para otra fecha
@@ -65,6 +76,7 @@ ACCIONES QUE PUEDES SUGERIR:
 - QUERY_INCOME: Consultar ingresos del equipo
 - DELEGATE: Reasignar una tarea a otra persona
 - STATUS: Cambiar el estado de una tarea
+- ADMIN_OVERVIEW: Resumen administrativo del día
 
 REGLAS:
 - Sé concisa pero útil (máximo 3-4 oraciones en WhatsApp)
@@ -492,6 +504,117 @@ export async function detectAnomalies(): Promise<{
   }
 }
 
+export async function getAdminOverview(): Promise<{
+  summary: string;
+  compliance: number;
+  pendingTasks: number;
+  overdueTasks: number;
+  inactiveUsers: string[];
+  actionItems: string[];
+}> {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    const minDaily = 4;
+
+    const [
+      allUsers,
+      pendingCount,
+      overdueCount,
+      activities,
+      completedToday,
+    ] = await Promise.all([
+      prisma.user.findMany({
+        where: { active: true },
+        select: { id: true, name: true, role: true },
+      }),
+      prisma.task.count({ where: { status: { in: ["PENDIENTE", "EN_PROCESO"] } } }),
+      prisma.task.count({
+        where: {
+          status: { in: ["PENDIENTE", "EN_PROCESO"] },
+          dueDate: { lt: today },
+        },
+      }),
+      prisma.activity.findMany({
+        where: { createdAt: { gte: today } },
+        select: { userId: true },
+      }),
+      prisma.task.count({
+        where: { status: "COMPLETADA", updatedAt: { gte: today } },
+      }),
+    ]);
+
+    const accessCounts = new Map<string, number>();
+    for (const a of activities) {
+      accessCounts.set(a.userId, (accessCounts.get(a.userId) || 0) + 1);
+    }
+
+    const inactiveUsers: string[] = [];
+    const compliantUsers: string[] = [];
+    const nonCompliantUsers: string[] = [];
+
+    for (const user of allUsers) {
+      const count = accessCounts.get(user.id) || 0;
+      if (count === 0) {
+        inactiveUsers.push(user.name);
+      } else if (count < minDaily) {
+        nonCompliantUsers.push(`${user.name} (${count}/${minDaily})`);
+      } else {
+        compliantUsers.push(user.name);
+      }
+    }
+
+    const totalWithAccess = allUsers.length - inactiveUsers.length;
+    const compliance = allUsers.length > 0 ? Math.round((compliantUsers.length / allUsers.length) * 100) : 0;
+
+    const actionItems: string[] = [];
+    if (inactiveUsers.length > 0) {
+      actionItems.push(`Contactar a usuarios inactivos: ${inactiveUsers.join(", ")}`);
+    }
+    if (overdueCount > 0) {
+      actionItems.push(`Revisar ${overdueCount} tareas vencidas`);
+    }
+    if (nonCompliantUsers.length > 0) {
+      actionItems.push(`Dar seguimiento a usuarios con pocos accesos: ${nonCompliantUsers.join(", ")}`);
+    }
+    if (pendingCount > 10) {
+      actionItems.push(`Hay ${pendingCount} tareas pendientes acumuladas - considerar redistribución`);
+    }
+
+    const summaryLines = [
+      `👥 Equipo: ${totalWithAccess}/${allUsers.length} activos hoy (${compliance}% cumplimiento de accesos)`,
+      inactiveUsers.length > 0 ? `🚫 Sin acceso hoy: ${inactiveUsers.join(", ")}` : null,
+      `📋 Tareas pendientes: ${pendingCount} | ⏰ Vencidas: ${overdueCount}`,
+      `✅ Completadas hoy: ${completedToday}`,
+      nonCompliantUsers.length > 0 ? `⚠️ Bajo el mínimo de accesos: ${nonCompliantUsers.join(", ")}` : null,
+      actionItems.length > 0 ? `\n📌 *Acciones sugeridas:*\n${actionItems.map((a) => `• ${a}`).join("\n")}` : null,
+    ].filter(Boolean).join("\n");
+
+    return {
+      summary: summaryLines,
+      compliance,
+      pendingTasks: pendingCount,
+      overdueTasks: overdueCount,
+      inactiveUsers,
+      actionItems,
+    };
+  } catch (error) {
+    console.error("getAdminOverview error:", error);
+    return {
+      summary: "Error al generar resumen administrativo",
+      compliance: 0,
+      pendingTasks: 0,
+      overdueTasks: 0,
+      inactiveUsers: [],
+      actionItems: [],
+    };
+  }
+}
+
 export async function summarizeCompany(): Promise<string> {
   try {
     const [userCount, taskStats, eventStats, inventoryCount, vehicleCount, cobrosSum] =
@@ -645,6 +768,127 @@ export async function handleWhatsAppMessage(
     }
 
     const contextText = await getAIAssistantContext(user.id);
+
+    const lowerMsg = message.toLowerCase();
+    const isAdminQuery =
+      user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+
+    if (isAdminQuery && (
+      lowerMsg.includes("cómo va el equipo") ||
+      lowerMsg.includes("como va el equipo") ||
+      lowerMsg.includes("resumen del equipo") ||
+      lowerMsg.includes("cómo está el equipo")
+    )) {
+      const overview = await getAdminOverview();
+
+      await prisma.activity.create({
+        data: {
+          userId: user.id,
+          action: "WHATSAPP_AI_REPLY",
+          resource: "WHATSAPP",
+          details: `LUNA respondió resumen administrativo a ${user.name}`,
+        },
+      });
+
+      return `📊 *Resumen del Equipo - ${new Date().toLocaleDateString("es-GT")}*\n\n${overview.summary}`;
+    }
+
+    if (isAdminQuery && (
+      lowerMsg.includes("quién no ha entrado") ||
+      lowerMsg.includes("quien no ha entrado") ||
+      lowerMsg.includes("inactivos")
+    )) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const activities = await prisma.activity.findMany({
+        where: { createdAt: { gte: today } },
+        select: { userId: true },
+      });
+
+      const activeIds = new Set(activities.map((a) => a.userId));
+      const allUsers = await prisma.user.findMany({
+        where: { active: true },
+        select: { id: true, name: true },
+      });
+
+      const inactive = allUsers.filter((u) => !activeIds.has(u.id));
+
+      await prisma.activity.create({
+        data: {
+          userId: user.id,
+          action: "WHATSAPP_AI_REPLY",
+          resource: "WHATSAPP",
+          details: `LUNA respondió consulta de inactivos a ${user.name}`,
+        },
+      });
+
+      if (inactive.length === 0) {
+        return "✅ *Todos los usuarios han ingresado al sistema hoy.* ¡Excelente trabajo equipo!";
+      }
+
+      const inactiveNames = inactive.map((u) => u.name).join(", ");
+      return `🚫 *Usuarios sin acceso hoy (${inactive.length}):*\n\n${inactiveNames}\n\nSe recomienda contactarlos para verificar su estado.`;
+    }
+
+    if (isAdminQuery && (
+      lowerMsg.includes("alerta a los que no han completado") ||
+      lowerMsg.includes("recordatorio masivo") ||
+      lowerMsg.includes("manda recordatorio")
+    )) {
+      const pendingToday = await prisma.task.findMany({
+        where: {
+          dueDate: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            lte: new Date(new Date().setHours(23, 59, 59, 999)),
+          },
+          status: { in: ["PENDIENTE", "EN_PROCESO"] },
+        },
+        include: {
+          assignedTo: {
+            select: { id: true, name: true, phone: true, whatsappNumber: true },
+          },
+        },
+      });
+
+      const byUser = new Map<string, { name: string; phone: string | null; whatsappNumber: string | null; count: number }>();
+      for (const t of pendingToday) {
+        if (!t.assignedTo) continue;
+        const key = t.assignedTo.id;
+        if (!byUser.has(key)) {
+          byUser.set(key, {
+            name: t.assignedTo.name,
+            phone: t.assignedTo.phone,
+            whatsappNumber: t.assignedTo.whatsappNumber,
+            count: 0,
+          });
+        }
+        byUser.get(key)!.count++;
+      }
+
+      let sent = 0;
+      for (const [, entry] of byUser) {
+        const to = entry.whatsappNumber || entry.phone;
+        if (to) {
+          await sendMessage(
+            to,
+            `🔔 *Recordatorio de LUNA*\n\nAún tienes ${entry.count} tareas pendientes para hoy. Por favor complétalas o posponlas con razón. ¡Gracias!`
+          ).catch(() => {});
+          sent++;
+        }
+      }
+
+      await prisma.activity.create({
+        data: {
+          userId: user.id,
+          action: "WHATSAPP_AI_REPLY",
+          resource: "WHATSAPP",
+          details: `LUNA envió recordatorio masivo a ${sent} usuarios (solicitado por ${user.name})`,
+        },
+      });
+
+      return `✅ *Recordatorio enviado*\n\nSe enviaron recordatorios a ${sent} usuarios con tareas pendientes para hoy.`;
+    }
 
     const response = await askAI(
       [
