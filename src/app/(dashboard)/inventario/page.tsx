@@ -471,7 +471,7 @@ function InventoryFormModal({
     setSaving(true);
     try {
       const url = isEditing ? `/api/inventory/${item.id}` : "/api/inventory";
-      const method = isEditing ? "PATCH" : "POST";
+      const method = isEditing ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
         headers: {

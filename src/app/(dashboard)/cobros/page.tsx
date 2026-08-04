@@ -68,7 +68,7 @@ export default function CobrosPage() {
   async function markAsPaid(cobroId: string, status: string) {
     try {
       const res = await fetch(`/api/cobros/${cobroId}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,

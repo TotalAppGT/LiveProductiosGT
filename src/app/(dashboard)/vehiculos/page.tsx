@@ -75,7 +75,7 @@ export default function VehiculosPage() {
   async function quickStatusUpdate(vehicleId: string, status: string) {
     try {
       const res = await fetch(`/api/vehicles/${vehicleId}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
