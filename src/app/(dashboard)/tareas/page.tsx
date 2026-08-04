@@ -16,6 +16,9 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  Clock4,
+  Paperclip,
+  AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -442,6 +445,18 @@ export default function TareasPage() {
                                 {CATEGORY_OPTIONS.find((c) => c.value === task.category)?.label || task.category}
                               </span>
                             )}
+                            {task.commentsList && task.commentsList.length > 0 && (
+                              <span className="flex items-center gap-1">
+                                <MessageSquare className="h-3 w-3" />
+                                {task.commentsList.length}
+                              </span>
+                            )}
+                            {(task.history?.filter((h) => h.action?.includes("Posponida")).length || 0) > 0 && (
+                              <span className="flex items-center gap-1 text-red-500">
+                                <AlertTriangle className="h-3 w-3" />
+                                {task.history!.filter((h) => h.action?.includes("Posponida")).length}x
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
@@ -497,7 +512,7 @@ export default function TareasPage() {
                               </p>
                             </div>
                           )}
-                          <div className="flex gap-2 pt-2">
+                          <div className="flex gap-2 pt-2 flex-wrap">
                             <Button
                               variant="outline"
                               size="sm"
@@ -520,8 +535,17 @@ export default function TareasPage() {
                               variant="outline"
                               size="sm"
                               leftIcon={<CalendarClock className="h-3 w-3" />}
+                              onClick={() => updateTaskStatus(task.id, "REPROGRAMADA")}
                             >
                               Reprogramar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              leftIcon={<Clock4 className="h-3 w-3 text-orange-500" />}
+                              onClick={() => toast.success("Abrir modal de posponer")}
+                            >
+                              Posponer
                             </Button>
                             <Button
                               variant="outline"

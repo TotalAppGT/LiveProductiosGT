@@ -12,6 +12,9 @@ import {
   User,
   ExternalLink,
   UserPlus,
+  Clock4,
+  Paperclip,
+  AlertTriangle,
 } from "lucide-react";
 import { format, formatDistanceToNow, isToday, isTomorrow, isPast } from "date-fns";
 import { es } from "date-fns/locale";
@@ -28,6 +31,7 @@ interface TaskCardProps {
   onComment: (task: Task) => void;
   onClick: (task: Task) => void;
   onDelegate?: (task: Task) => void;
+  onPostpone?: (task: Task) => void;
   showDelegate?: boolean;
   className?: string;
 }
@@ -77,6 +81,7 @@ export function TaskCard({
   onComment,
   onClick,
   onDelegate,
+  onPostpone,
   showDelegate = false,
   className,
 }: TaskCardProps) {
@@ -93,6 +98,10 @@ export function TaskCard({
   const dueDate = formatDueDate(task.dueDate);
   const isCompleted = task.status === "COMPLETADA";
   const isCancelled = task.status === "CANCELADA";
+  const postponeCount = task.history?.filter((h) => h.action?.includes("Posponida")).length || 0;
+  const lastPostponeEntry = task.history
+    ?.filter((h) => h.action?.includes("Posponida"))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
   return (
     <div
@@ -147,7 +156,21 @@ export function TaskCard({
               {task.frequency ? task.frequency.charAt(0) + task.frequency.slice(1).toLowerCase() : "Fija"}
             </Badge>
           )}
+          {postponeCount > 1 && (
+            <Badge color="red" size="sm">
+              {postponeCount}x
+            </Badge>
+          )}
         </div>
+
+        {postponeCount > 0 && lastPostponeEntry && (
+          <div className="mt-2 flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">
+            <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">
+              Posponida {postponeCount}x{lastPostponeEntry.action ? ` - ${lastPostponeEntry.action.replace("Tarea posponida: ", "")}` : ""}
+            </span>
+          </div>
+        )}
 
         <div className="mt-3 flex items-center justify-between">
           <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
@@ -183,16 +206,35 @@ export function TaskCard({
               </button>
             )}
             {!isCompleted && !isCancelled && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReschedule(task);
-                }}
-                className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
-                title="Reprogramar"
-              >
-                <CalendarClock className="h-3.5 w-3.5" />
-              </button>
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReschedule(task);
+                  }}
+                  className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+                  title="Reprogramar"
+                >
+                  <CalendarClock className="h-3.5 w-3.5" />
+                </button>
+                {onPostpone && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPostpone(task);
+                    }}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-colors",
+                      postponeCount > 1
+                        ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        : "text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                    )}
+                    title="Posponer"
+                  >
+                    <Clock4 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </>
             )}
             <button
               onClick={(e) => {
@@ -260,7 +302,7 @@ export function TaskCard({
               <div>
                 <span className="text-xs text-gray-400 dark:text-gray-500">Asignado por</span>
                 <p className="text-gray-700 dark:text-gray-300">
-                  {task.assignedBy?.name || "—"}
+                  {task.assignedBy?.name || "\u2014"}
                 </p>
               </div>
               <div>
@@ -276,7 +318,7 @@ export function TaskCard({
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   ) : (
-                    "—"
+                    "\u2014"
                   )}
                 </p>
               </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import {
   CheckSquare,
   CalendarCheck,
@@ -16,6 +17,8 @@ import {
   ArrowUpRight,
   Users as UsersIcon,
   ClipboardCheck,
+  Upload,
+  Wallet,
 } from "lucide-react";
 import {
   BarChart,
@@ -35,6 +38,7 @@ import { Badge, taskStatusLabel, taskPriorityLabel, taskPriorityColor, taskStatu
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, formatCurrency, getDayName, cn } from "@/lib/utils";
+import { FileUpload } from "@/components/ui/FileUpload";
 import type { Task, Activity, Event } from "@/types";
 
 interface DashboardData {
@@ -182,6 +186,14 @@ export default function DashboardPage() {
       href: "/cobros",
     },
     {
+      label: "Ingresos del Mes",
+      value: formatCurrency(data?.stats.cobrosAmount ?? 0),
+      icon: Wallet,
+      color: "text-green-400",
+      bg: "bg-green-500/10",
+      href: "/cobros",
+    },
+    {
       label: "Equipo Dañado",
       value: data?.stats.damagedEquipment ?? 0,
       icon: AlertTriangle,
@@ -244,7 +256,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         {statCards.map((card) => (
           <Card
             key={card.label}
@@ -462,6 +474,36 @@ export default function DashboardPage() {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tareas Pendientes</p>
             </div>
           </div>
+        </Card>
+      )}
+
+      {isAdminOrOwner && (
+        <Card variant="bordered" className="p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Upload className="h-5 w-5 text-blue-500" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Subir Archivos
+            </h2>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+            Adjunta archivos a tareas o eventos rápidamente.
+          </p>
+          <FileUpload
+            onUpload={async (files) => {
+              toast.success(`${files.length} archivo(s) listos para adjuntar`);
+              return files.map((f, i) => ({
+                id: `quick_${Date.now()}_${i}`,
+                fileName: f.name,
+                fileType: f.type,
+                fileSize: f.size,
+                url: URL.createObjectURL(f),
+                uploadedById: user?.id || "",
+                createdAt: new Date().toISOString(),
+              }));
+            }}
+            maxFiles={5}
+            maxSizeMB={10}
+          />
         </Card>
       )}
     </div>

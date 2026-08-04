@@ -22,6 +22,8 @@ import {
   X,
   AlertTriangle,
   Package,
+  Paperclip,
+  Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -886,6 +888,31 @@ function EventDetailModal({
             <p className="text-sm text-gray-700 dark:text-gray-300">{event.notes}</p>
           </div>
         )}
+
+        <div>
+          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2 flex items-center gap-2">
+            <Paperclip className="h-3.5 w-3.5" />
+            Archivos Adjuntos
+          </h4>
+          <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center">
+            <Upload className="h-6 w-6 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Arrastra archivos aquí
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              O haz clic para seleccionar
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => toast.success("Adjuntar archivos al evento (próximamente)")}
+            >
+              <Upload className="h-3.5 w-3.5 mr-1" />
+              Subir Archivo
+            </Button>
+          </div>
+        </div>
       </div>
     </Modal>
   );

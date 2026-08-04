@@ -19,6 +19,7 @@ import {
   UserCog,
   UserCheck,
   User,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -49,6 +50,12 @@ const navItems: NavItem[] = [
     label: "Cumplimiento",
     href: "/cumplimiento",
     icon: ClipboardCheck,
+    roles: ["DUENO", "ADMIN", "JEFE"],
+  },
+  {
+    label: "Monitoreo",
+    href: "/monitoreo",
+    icon: Activity,
     roles: ["DUENO", "ADMIN", "JEFE"],
   },
   {

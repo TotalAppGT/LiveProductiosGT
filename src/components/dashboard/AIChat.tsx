@@ -12,6 +12,10 @@ import {
   Maximize2,
   Minimize2,
   Bot,
+  Mic,
+  Sunrise,
+  Sunset,
+  Sun,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useApp } from "@/contexts/AppContext";
@@ -34,7 +38,54 @@ const QUICK_ACTIONS = [
   { label: "Tareas urgentes", prompt: "¿Cuáles son las tareas urgentes y vencidas? ¿Quién las tiene asignadas?" },
 ];
 
-const LUNA_GREETING = `Hola, soy *LUNA*, tu asistente de inteligencia artificial de Live Productions. Estoy aquí para ayudarte con:
+const NATURAL_LANGUAGE_HINTS = [
+  "Prueba decir: \"pospon tarea 'revisar equipo' para mañana porque falta personal\"",
+  "Prueba decir: \"crea tarea para Juan de revisar el sonido para el sábado\"",
+  "Prueba decir: \"¿cuánto ha cobrado María?\"",
+  "Prueba decir: \"¿quién no ha entrado hoy?\"",
+];
+
+function getTimeBasedSuggestions(): string[] {
+  const hour = new Date().getHours();
+  if (hour < 12) {
+    return [
+      "¿Qué tareas tengo para hoy?",
+      "¿Cuáles son los eventos de esta semana?",
+      "¿Quién tiene tareas pendientes?",
+    ];
+  } else if (hour < 18) {
+    return [
+      "¿Qué se completó hoy?",
+      "¿Cuánto hemos cobrado?",
+      "¿Hay tareas urgentes?",
+    ];
+  } else {
+    return [
+      "Resumen de lo completado hoy",
+      "¿Qué falta por terminar?",
+      "Planificar tareas para mañana",
+    ];
+  }
+}
+
+function getTimeGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "¡Buenos días!";
+  if (hour < 18) return "¡Buenas tardes!";
+  return "¡Buenas noches!";
+}
+
+function getTimeIcon() {
+  const hour = new Date().getHours();
+  if (hour < 12) return Sunrise;
+  if (hour < 18) return Sun;
+  return Sunset;
+}
+
+const LUNA_GREETING = () => {
+  const hour = new Date().getHours();
+  const greeting = getTimeGreeting();
+  return `${greeting} Soy *LUNA*, tu asistente de inteligencia artificial de Live Productions. Estoy aquí para ayudarte con:
 
 - Tus tareas diarias y pendientes
 - Información de eventos próximos
@@ -43,6 +94,7 @@ const LUNA_GREETING = `Hola, soy *LUNA*, tu asistente de inteligencia artificial
 - Planificación semanal
 
 ¿En qué puedo ayudarte hoy?`;
+};
 
 interface AIChatContext {
   user: { name: string; role: string };
@@ -61,19 +113,24 @@ export function AIChat() {
     {
       id: "welcome",
       role: "assistant",
-      content: LUNA_GREETING,
+      content: LUNA_GREETING(),
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const [aiInfo, setAIInfo] = useState<{ provider: string; model: string }>({ provider: "DeepSeek", model: "deepseek-chat" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const timeIcon = getTimeIcon();
+  const timeSuggestions = getTimeBasedSuggestions();
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isThinking]);
 
   useEffect(() => {
     if (isOpen) {
@@ -185,6 +242,11 @@ export function AIChat() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    setIsThinking(true);
+
+    const thinkingInterval = setInterval(() => {
+      setIsThinking((prev) => !prev);
+    }, 500);
 
     try {
       const context = await fetchContext();
@@ -226,7 +288,10 @@ export function AIChat() {
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
+      clearInterval(thinkingInterval);
+      setIsThinking(false);
       setIsLoading(false);
+      setShowSuggestions(false);
     }
   }
 
@@ -234,6 +299,8 @@ export function AIChat() {
     e.preventDefault();
     sendMessage(input);
   }
+
+  const TimeIconComponent = timeIcon;
 
   return (
     <>
@@ -321,6 +388,8 @@ export function AIChat() {
                     "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm",
                     msg.role === "user"
                       ? "bg-blue-600 text-white rounded-br-md"
+                      : msg.id === "welcome"
+                      ? "bg-purple-50 dark:bg-purple-900/20 text-gray-900 dark:text-white rounded-bl-md border border-purple-200 dark:border-purple-800"
                       : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-bl-md"
                   )}
                 >
@@ -354,10 +423,12 @@ export function AIChat() {
                 </div>
                 <div className="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-bl-md px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mr-2">LUNA está pensando...</p>
-                    <span className="h-2 w-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="h-2 w-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="h-2 w-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mr-2">
+                      {isThinking ? "LUNA está pensando..." : "LUNA está escribiendo..."}
+                    </p>
+                    <span className="h-2 w-2 bg-purple-400 dark:bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="h-2 w-2 bg-purple-400 dark:bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="h-2 w-2 bg-purple-400 dark:bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                 </div>
               </div>
@@ -366,23 +437,43 @@ export function AIChat() {
             <div ref={messagesEndRef} />
           </div>
 
-          {messages.length <= 1 && (
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 mb-2 flex items-center gap-1 font-medium">
-                <Zap className="h-3.5 w-3.5 text-yellow-500" />
-                Preguntas frecuentes
-              </p>
+          {messages.length <= 1 && showSuggestions && (
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 space-y-3">
+              <div className="flex items-center gap-2">
+                <TimeIconComponent className="h-4 w-4 text-purple-500" />
+                <p className="text-xs text-gray-500 font-medium">
+                  {getTimeGreeting()} ¿En qué te ayudo?
+                </p>
+              </div>
               <div className="flex flex-wrap gap-1.5">
+                {timeSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => sendMessage(suggestion)}
+                    className="px-3 py-2 text-xs rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <p className="text-xs text-gray-400 flex items-center gap-1 w-full mb-1">
+                  <Zap className="h-3 w-3 text-yellow-500" />
+                  Preguntas frecuentes
+                </p>
                 {QUICK_ACTIONS.map((action) => (
                   <button
                     key={action.label}
                     onClick={() => sendMessage(action.prompt)}
-                    className="px-3 py-2 text-xs rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800 transition-colors"
+                    className="px-3 py-2 text-xs rounded-full bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 transition-colors"
                   >
                     {action.label}
                   </button>
                 ))}
               </div>
+              <p className="text-[10px] text-gray-400 italic">
+                {NATURAL_LANGUAGE_HINTS[Math.floor(Math.random() * NATURAL_LANGUAGE_HINTS.length)]}
+              </p>
             </div>
           )}
 
@@ -390,20 +481,27 @@ export function AIChat() {
             onSubmit={handleSubmit}
             className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
           >
-            <Input
+            <button
+              type="button"
+              className="p-2 rounded-full text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+              title="Entrada de voz (próximamente)"
+              onClick={() => {}}
+            >
+              <Mic className="h-5 w-5" />
+            </button>
+            <input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Escribe tu mensaje para LUNA..."
               disabled={isLoading}
-              className="flex-1 border-0 bg-white dark:bg-gray-700 focus:ring-0 text-sm"
+              className="flex-1 rounded-full border-0 bg-white dark:bg-gray-700 px-4 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             <Button
               type="submit"
-              variant="primary"
               size="sm"
               disabled={!input.trim() || isLoading}
-              className="rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500"
+              className="rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500"
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

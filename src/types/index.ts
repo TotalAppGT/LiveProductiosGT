@@ -534,3 +534,29 @@ export interface CreateWhatsAppMessageDTO {
   relatedTaskId?: string;
   relatedEventId?: string;
 }
+
+export interface FileAttachment {
+  id: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  url: string;
+  thumbnailUrl?: string | null;
+  taskId?: string | null;
+  eventId?: string | null;
+  inventoryItemId?: string | null;
+  uploadedById: string;
+  createdAt: string;
+  uploadedBy?: User | null;
+}
+
+export interface TaskPostponement {
+  id: string;
+  taskId: string;
+  postponedTo: string;
+  reason: string;
+  previousDueDate?: string | null;
+  userId: string;
+  createdAt: string;
+  user?: User | null;
+}
