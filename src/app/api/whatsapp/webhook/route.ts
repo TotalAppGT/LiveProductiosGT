@@ -268,7 +268,7 @@ async function handleCommand(
   if (cmd === "tareas" || cmd === "mis tareas" || cmd.includes("tarea") || cmd.includes("pendiente")) {
     const tasks = await formatTasksForUser(user.id);
     if (!tasks) return `Hola ${user.name}, no tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
-    return `📋 *Tareas Pendientes - ${user.name}*\n\n${tasks}\n\n_Responde directamente para hablar con LUNA, tu asistente IA._`;
+    return `📋 *Tareas Pendientes - ${user.name}*\n\n${tasks}\n\n⚡ *Acciones rápidas:*\n• \`completar 3\` - Marcar tarea #3 como hecha\n• \`posponer 5 mañana razón\` - Posponer #5\n• \`comentar 4 texto\` - Agregar comentario\n• \`transferir 2 a Diana\` - Pasar tarea a otro\n• \`equipo\` - Ver compañeros disponibles`;
   }
 
   if (cmd === "pendientes") {
