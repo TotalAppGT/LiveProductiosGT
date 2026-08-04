@@ -66,7 +66,7 @@ const AI_PROVIDERS = [
   { value: "DEEPSEEK", label: "DeepSeek", models: ["deepseek-chat", "deepseek-reasoner"] },
   { value: "OPENAI", label: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"] },
   { value: "OPENROUTER", label: "OpenRouter", models: ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-pro"] },
-  { value: "NVIDIA", label: "NVIDIA NIM", models: ["deepseek-ai/deepseek-v4-pro", "deepseek-ai/deepseek-r1", "meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b", "qwen/qwen2.5-7b-instruct"] },
+  { value: "NVIDIA", label: "NVIDIA NIM", models: ["deepseek-ai/deepseek-v4-pro", "deepseek-ai/deepseek-v4-flash", "meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b"] },
 ];
 
 export default function AdminPage() {
