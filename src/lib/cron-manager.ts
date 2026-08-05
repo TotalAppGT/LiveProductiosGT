@@ -443,7 +443,7 @@ async function checkOverdueTasks() {
 }
 
 async function afternoonAccessCheck() {
-  console.log("[Cron] Ejecutando chequeo de accesos de media tarde (3:00 PM)");
+  console.log("[Cron] Ejecutando chequeo de accesos de media tarde (4:00 PM)");
   try {
     const result = await checkDailyAccessRequirement();
     console.log(`[Cron] Chequeo de accesos: ${result.usersChecked} usuarios, ${result.belowThreshold} bajo umbral, ${result.inactiveToday} inactivos`);
@@ -452,7 +452,7 @@ async function afternoonAccessCheck() {
     for (const admin of admins) {
       const to = admin.whatsappNumber || admin.phone;
       if (to) {
-        const msg = `🕒 *Chequeo de Accesos - 3:00 PM*\n\n👥 Usuarios revisados: ${result.usersChecked}\n⚠️ Bajo el umbral: ${result.belowThreshold}\n🚫 Sin accesos hoy: ${result.inactiveToday}\n\nAún hay tiempo de cumplir con el mínimo de accesos diarios.`;
+        const msg = `🕒 *Chequeo de Accesos - 4:00 PM*\n\n👥 Usuarios revisados: ${result.usersChecked}\n⚠️ Bajo el umbral: ${result.belowThreshold}\n🚫 Sin accesos hoy: ${result.inactiveToday}\n\nAún hay tiempo de cumplir con el mínimo de accesos diarios.`;
         await sendMessage(to, msg).catch(() => {});
       }
     }
@@ -532,6 +532,21 @@ const jobs: CronJob[] = [
 let cronInterval: ReturnType<typeof setInterval> | null = null;
 let initialized = false;
 
+async function shouldRunJob(job: CronJob): Promise<boolean> {
+  const now = getGuatemalaTime();
+  const key = `cron:${job.name}:${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${job.schedule.hour}`;
+  try {
+    const existing = await prisma.systemConfig.findUnique({ where: { key } });
+    if (existing) return false;
+    await prisma.systemConfig.create({
+      data: { key, value: new Date().toISOString(), description: `Last run of ${job.name}` },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function runJobIfScheduled(job: CronJob) {
   const state = getJobState(job.name);
 
@@ -542,6 +557,11 @@ async function runJobIfScheduled(job: CronJob) {
 
   const now = getGuatemalaTime();
   if (!isTimeMatch(now, job.schedule.hour, job.schedule.minute)) return;
+
+  if (!(await shouldRunJob(job))) {
+    console.log(`[Cron] ${job.name}: ya se ejecutó en esta hora, saltando (DB dedup)`);
+    return;
+  }
 
   state.isRunning = true;
   console.log(`[Cron] ${job.name}: iniciando ejecución`);
