@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
+import PushTokenRegister from "@/components/push/PushTokenRegister";
 import "./globals.css";
 
 const inter = Inter({
@@ -24,6 +25,7 @@ export default function RootLayout({
     <html lang="es" className={inter.variable}>
       <body className="font-sans antialiased">
         <AuthProvider>
+          <PushTokenRegister />
           <AppProvider>
             {children}
           </AppProvider>

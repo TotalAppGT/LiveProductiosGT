@@ -183,6 +183,7 @@ model User {
   myIncome         IncomeRecord[]
   remindersCreated Reminder[]
   remindersAssigned Reminder[] @relation("ReminderAssignee")
+  pushTokens        PushToken[]
 }
 
 model Task {
@@ -437,4 +438,16 @@ model IncomeRecord {
   recordedById String
   recordedBy   User     @relation("IncomeRecorder", fields: [recordedById], references: [id])
   createdAt    DateTime @default(now())
+}
+
+model PushToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  platform  String   @default("expo")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
