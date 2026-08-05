@@ -6,6 +6,26 @@ import { normalizeGTPhone } from "@/lib/phone";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
 
+function normalizeGuatemalaDate(input: string): Date {
+  const d = new Date(input);
+  if (!isNaN(d.getTime()) && /[zZ]|[+-]\d{2}:\d{2}$/.test(input.trim())) {
+    return d;
+  }
+  const gt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guatemala",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const m = new Map(gt.map((p) => [p.type, p.value]));
+  return new Date(
+    Date.UTC(
+      Number(m.get("year")), Number(m.get("month")) - 1, Number(m.get("day")),
+      Number(m.get("hour")) % 24, Number(m.get("minute")), Number(m.get("second"))
+    )
+  );
+}
+
 function getConversation(phone: string) {
   const conv = conversations.get(phone);
   if (conv && Date.now() > conv.expires) {
@@ -369,7 +389,7 @@ Responde SOLO el JSON, sin markdown.`
     }], { responseFormat: "json", temperature: 0.1, maxTokens: 300 });
 
     const json = JSON.parse(response.replace(/```json|```/g, "").trim());
-    const remindAt = new Date(json.remindAt);
+    const remindAt = normalizeGuatemalaDate(json.remindAt);
 
     let assignToId: string | undefined;
     if (json.assignToName) {
@@ -669,8 +689,7 @@ async function handleCommand(
   }
 
   if (cmd.startsWith("recuerda") || cmd.startsWith("recordar") || cmd.startsWith("recordatorio") ||
-      cmd.includes("crea recordatorio") || cmd.includes("creame recordatorio") || cmd.includes("crear recordatorio") ||
-      cmd.includes("agenda recordatorio") || cmd.includes("programa recordatorio") || cmd.includes("pon recordatorio")) {
+      /\b(crea|creame|crear|agenda|programa|programar|pon|ponme|agendar|poner)\s+(un\s+|unos\s+|el\s+|una\s+|las\s+|los\s+)?recordatorio/i.test(cmd)) {
     const parsed = await parseReminderFromText(cmd, user);
     if (!parsed) return "No pude entender la fecha/hora. Ejemplo: *recuérdame llamar a Juan mañana a las 3pm*";
 
@@ -703,7 +722,7 @@ async function handleCommand(
     const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
     const targetName = targetUser ? targetUser.name : "ti";
 
-    return `⏰ Recordatorio creado para ${targetName}: *${parsed.title}*\n📅 ${parsed.remindAt.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})} a las ${parsed.remindAt.toLocaleTimeString("es-GT", {hour:"2-digit",minute:"2-digit"})}`;
+    return `⏰ Recordatorio creado para ${targetName}: *${parsed.title}*\n📅 ${parsed.remindAt.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})} a las ${parsed.remindAt.toLocaleTimeString("es-GT", {hour:"2-digit",minute:"2-digit"})}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
   }
 
   if (cmd.startsWith("crea tarea") || cmd.startsWith("crear tarea")) {

@@ -944,12 +944,41 @@ export function getSmartCronSchedule(): Record<string, string> {
   };
 }
 
-export async function fireDueReminders(): Promise<{ fired: number }> {
+export async function fireDueReminders(): Promise<{ fired: number; advanced: number }> {
   let fired = 0;
+  let advanced = 0;
   try {
     const now = new Date();
-    const fiveMinAgo = new Date(now.getTime() - 5 * 60000);
+    const tenMinFromNow = new Date(now.getTime() + 10 * 60000);
 
+    // 1) Advance notice: remindAt within next 10 minutes, not yet notified
+    const upcoming = await prisma.reminder.findMany({
+      where: {
+        remindAt: { gte: now, lte: tenMinFromNow },
+        isCompleted: false,
+        notified: false,
+        advanceNotified: false,
+      },
+      include: { assignedTo: { select: { id: true, name: true, whatsappNumber: true, phone: true } } },
+    });
+
+    for (const reminder of upcoming) {
+      try {
+        const to = reminder.assignedTo?.whatsappNumber || reminder.assignedTo?.phone;
+        if (to) {
+          await sendMessage(
+            to,
+            `⏰ *Recordatorio en unos minutos*\n\n${reminder.title}${reminder.description ? `\n_${reminder.description}_` : ""}\n\n🕐 Inicia a las ${reminder.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}. Preparate y te aviso puntual.`
+          );
+          advanced++;
+        }
+        await prisma.reminder.update({ where: { id: reminder.id }, data: { advanceNotified: true } });
+      } catch (e) {
+        console.error(`Error on advance reminder ${reminder.id}:`, e);
+      }
+    }
+
+    // 2) At-time notification: reminder time reached
     const dueReminders = await prisma.reminder.findMany({
       where: {
         remindAt: { lte: now },
@@ -991,6 +1020,6 @@ export async function fireDueReminders(): Promise<{ fired: number }> {
   } catch (error) {
     console.error("fireDueReminders error:", error);
   }
-  return { fired };
+  return { fired, advanced };
 }
 

@@ -417,9 +417,10 @@ model Reminder {
   completedAt  DateTime?
   createdById  String
   createdBy    User     @relation(fields: [createdById], references: [id])
-  assignedToId String
-  assignedTo   User     @relation("ReminderAssignee", fields: [assignedToId], references: [id])
+assignedToId String
+  assignedTo   User   @relation("ReminderAssignee", fields: [assignedToId], references: [id])
   notified     Boolean  @default(false)
+  advanceNotified Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
