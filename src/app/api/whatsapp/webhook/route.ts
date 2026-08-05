@@ -4,6 +4,21 @@ import { handleWhatsAppMessage, askAI } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 
+const conversations = new Map<string, { state: string; data: any; expires: number }>();
+
+function getConversation(phone: string) {
+  const conv = conversations.get(phone);
+  if (conv && Date.now() > conv.expires) {
+    conversations.delete(phone);
+    return null;
+  }
+  return conv;
+}
+
+function setConversation(phone: string, state: string, data: any) {
+  conversations.set(phone, { state, data, expires: Date.now() + 300000 });
+}
+
 async function transcribeAudio(mediaId: string): Promise<string | null> {
   try {
     const config = await prisma.whatsAppConfig.findFirst({
@@ -91,6 +106,147 @@ export async function GET(request: NextRequest) {
 
 function esGTDate(date: Date): string {
   return date.toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function parseTimeExpression(text: string): { hours: number; minutes: number } | null {
+  const t = text.toLowerCase().trim();
+
+  const time24 = t.match(/\b(\d{1,2}):(\d{2})\b/);
+  if (time24) {
+    const hours = parseInt(time24[1]);
+    const minutes = parseInt(time24[2]);
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return { hours, minutes };
+    }
+  }
+
+  const time12 = t.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)\b/i);
+  if (time12) {
+    let hours = parseInt(time12[1]);
+    const minutes = time12[2] ? parseInt(time12[2]) : 0;
+    const meridian = time12[3];
+    if (/pm|p\.m\./i.test(meridian) && hours < 12) hours += 12;
+    if (/am|a\.m\./i.test(meridian) && hours === 12) hours = 0;
+    return { hours, minutes };
+  }
+
+  if (/\ben la mañana\b|\btemprano\b/.test(t)) return { hours: 8, minutes: 0 };
+  if (/\ben la tarde\b/.test(t)) return { hours: 15, minutes: 0 };
+  if (/\ben la noche\b/.test(t)) return { hours: 19, minutes: 0 };
+  if (/\bmedio\s*d[ií]a\b/.test(t)) return { hours: 12, minutes: 0 };
+
+  return null;
+}
+
+function parseRelativeDate(text: string, referenceDate: Date): Date | null {
+  const t = text.toLowerCase().trim();
+  const ref = new Date(referenceDate);
+
+  if (/\bhoy\b/.test(t)) {
+    const result = new Date(ref);
+    result.setHours(9, 0, 0, 0);
+    return result;
+  }
+
+  if (/\bpasado\s*mañana\b/.test(t)) {
+    const result = new Date(ref);
+    result.setDate(result.getDate() + 2);
+    result.setHours(9, 0, 0, 0);
+    return result;
+  }
+
+  if (/\bmañana\b/.test(t) && !/\ben la mañana\b/.test(t)) {
+    const result = new Date(ref);
+    result.setDate(result.getDate() + 1);
+    result.setHours(9, 0, 0, 0);
+    return result;
+  }
+
+  const days: Record<string, number> = {
+    domingo: 0,
+    lunes: 1,
+    martes: 2,
+    "miércoles": 3,
+    miercoles: 3,
+    jueves: 4,
+    viernes: 5,
+    "sábado": 6,
+    sabado: 6,
+  };
+
+  for (const [dayName, dayNum] of Object.entries(days)) {
+    const regex = new RegExp(`\\b${dayName}\\b`, "i");
+    if (regex.test(t)) {
+      const currentDay = ref.getDay();
+      let daysUntil = dayNum - currentDay;
+      if (daysUntil <= 0) daysUntil += 7;
+      if (/\bpr[oó]ximo\b/.test(t)) {
+        daysUntil += 7;
+      }
+      const result = new Date(ref);
+      result.setDate(result.getDate() + daysUntil);
+      result.setHours(9, 0, 0, 0);
+      return result;
+    }
+  }
+
+  return null;
+}
+
+function parsePostponeDetails(text: string): { newDate: Date | null; reason: string } {
+  const t = text.trim();
+  const now = new Date();
+
+  if (/^para\s/i.test(t)) {
+    const afterPara = t.replace(/^para\s+/i, "");
+
+    const datePattern = /^(el\s+)?(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|mañana|pasado\s*mañana|hoy)(\s+pr[oó]ximo)?/i;
+    const m = afterPara.match(datePattern);
+
+    if (m) {
+      const dateStart = m[0];
+      const afterDate = afterPara.slice(m[0].length);
+
+      let timeStr = "";
+      let consumedAfterDate = 0;
+
+      const timePrefixMatch = afterDate.match(/^(\s+a\s+las?\s+)/i);
+      if (timePrefixMatch) {
+        const afterPrefix = afterDate.slice(timePrefixMatch[0].length);
+        const timeWordMatch = afterPrefix.match(/^(\S+)/);
+        if (timeWordMatch) {
+          const candidate = timePrefixMatch[0] + timeWordMatch[0];
+          if (parseTimeExpression(candidate)) {
+            timeStr = candidate;
+            consumedAfterDate = timePrefixMatch[0].length + timeWordMatch[0].length;
+          }
+        }
+      } else {
+        const rawTimeMatch = afterDate.match(/^(\s*\S+)/);
+        if (rawTimeMatch) {
+          const candidate = rawTimeMatch[0];
+          if (parseTimeExpression(candidate)) {
+            timeStr = candidate;
+            consumedAfterDate = rawTimeMatch[0].length;
+          }
+        }
+      }
+
+      const fullDateStr = dateStart + timeStr;
+      const date = parseRelativeDate(fullDateStr, now);
+
+      if (date) {
+        const time = parseTimeExpression(fullDateStr);
+        if (time) {
+          date.setHours(time.hours, time.minutes, 0, 0);
+        }
+        const reason = afterDate.slice(consumedAfterDate).trim();
+        return { newDate: date, reason: reason || "Sin razón especificada" };
+      }
+    }
+  }
+
+  return { newDate: null, reason: t || "Sin razón especificada" };
 }
 
 async function formatTasksForUser(userId: string, period?: string) {
@@ -371,13 +527,23 @@ async function getComplianceSummary(userId: string) {
   return `${completedCount} de ${assignedCount} tareas completadas (${rate}%) en los últimos 30 días`;
 }
 
+async function listTasksForSelection(userId: string): Promise<string> {
+  const tasks = await getPendingTasks(userId);
+  if (tasks.length === 0) return "No tienes tareas pendientes.";
+  return tasks.map((t, i) => {
+    const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪";
+    const status = t.status === "EN_PROCESO" ? " - En proceso" : " - Pendiente";
+    const due = t.dueDate ? ` → ${new Date(t.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric"})}` : "";
+    return `${i + 1}. ${prio} *${t.title}*${status}${due}`;
+  }).join("\n");
+}
+
 async function handleCommand(
   command: string,
   user: { id: string; name: string; role: string }
 ): Promise<string | null> {
   const cmd = command.toLowerCase().trim();
 
-  // Task interaction commands
   if (cmd.startsWith("completar ")) {
     const num = parseInt(cmd.replace("completar ", "").trim());
     if (isNaN(num)) return "¿Cuál tarea? Ejemplo: *completar 3*";
@@ -388,17 +554,33 @@ async function handleCommand(
     return `✅ Tarea *${task.title}* completada. ¡Buen trabajo ${user.name}!`;
   }
 
-  if (cmd.startsWith("posponer ")) {
-    const parts = cmd.replace("posponer ", "").trim().split(" ");
-    const num = parseInt(parts[0]);
-    if (isNaN(num)) return "Formato: *posponer 3 mañana* o *posponer 3 razón aquí*";
-    const reason = parts.slice(1).join(" ") || "Sin razón especificada";
+  if (cmd === "posponer") {
     const tasks = await getPendingTasks(user.id);
-    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas.`;
+    if (tasks.length === 0) return "No tienes tareas pendientes para posponer. ¡Excelente! 🎉";
+    const list = await listTasksForSelection(user.id);
+    return `¿Cuál tarea quieres posponer? Responde con el número:\n\n${list}\n\nO escribe: *posponer 2 para mañana*`;
+  }
+
+  if (cmd.startsWith("posponer ")) {
+    const rest = cmd.replace("posponer ", "").trim();
+    const parts = rest.split(/\s+/);
+    const num = parseInt(parts[0]);
+    if (isNaN(num)) return "Formato: *posponer 3* o *posponer 3 para mañana* o *posponer 3 para el viernes a las 3pm el cliente no contestó*";
+
+    const tasks = await getPendingTasks(user.id);
+    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas. Elige un número del 1 al ${tasks.length}.`;
     const task = tasks[num - 1];
-    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0,0,0,0);
-    await postponeTask(task.id, tomorrow, reason, user);
-    return `⏰ Tarea *${task.title}* pospuesta para mañana. Razón: ${reason}\n_Se notificará al administrador._`;
+
+    const afterNum = rest.slice(parts[0].length).trim();
+    const { newDate, reason } = parsePostponeDetails(afterNum);
+
+    const finalDate = newDate || (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(0, 0, 0, 0); return d; })();
+
+    await postponeTask(task.id, finalDate, reason, user);
+
+    const dateStr = finalDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" });
+    const timeStr = finalDate.toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" });
+    return `⏰ Tarea *${task.title}* pospuesta para *${dateStr} a las ${timeStr}*.\nRazón: ${reason}\n_Se notificará al administrador._`;
   }
 
   if (cmd.startsWith("comentar ")) {
@@ -506,30 +688,20 @@ async function handleCommand(
     return `⏰ Recordatorio creado para ${targetName}: *${parsed.title}*\n📅 ${parsed.remindAt.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})} a las ${parsed.remindAt.toLocaleTimeString("es-GT", {hour:"2-digit",minute:"2-digit"})}`;
   }
 
-  if (cmd.startsWith("crea tarea") || cmd.startsWith("crear tarea") || cmd.startsWith("nueva tarea")) {
-    const parsed = await parseTaskCreation(cmd, user);
-    if (!parsed) return "No entendí. Ejemplo: *crea tarea para Diana revisar cotizaciones mañana 10am*";
+  if (cmd.startsWith("crea tarea") || cmd.startsWith("crear tarea")) {
+    const details = cmd.replace(/^crea(r)?\s+tarea\s*/i, "").trim();
+    if (!details) {
+      return "📝 *Nueva Tarea* - Paso 1/5\n¿Qué título le pongo a la tarea?\n\nO escribe todo junto: *crea tarea para Diana revisar cotizaciones mañana 10am*";
+    }
+    return await handleCreateTask(details, user);
+  }
 
-    const task = await prisma.task.create({
-      data: {
-        title: parsed.title,
-        description: parsed.description || "",
-        assignedToId: parsed.assignToId || user.id,
-        assignedById: user.id,
-        dueDate: parsed.dueDate || new Date(),
-        priority: parsed.priority || "MEDIA",
-        category: "OTRO",
-        type: parsed.isFixed ? "FIJA" : "DINAMICA",
-        frequency: parsed.isFixed ? (parsed.frequency || "DIARIA") : "DIARIA",
-        dayOfWeek: parsed.dayOfWeek,
-        status: "PENDIENTE",
-      },
-    });
-
-    const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
-    const targetName = targetUser ? targetUser.name : user.name;
-
-    return `✅ Tarea creada para *${targetName}*: "${parsed.title}"\n📅 ${task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"}) : "Sin fecha"}`;
+  if (cmd.startsWith("nueva tarea")) {
+    const details = cmd.replace(/^nueva\s+tarea\s*/i, "").trim();
+    if (!details) {
+      return "📝 *Nueva Tarea* - Paso 1/5\n¿Qué título le pongo a la tarea?\n\nO escribe todo junto: *crea tarea para Diana revisar cotizaciones mañana 10am*";
+    }
+    return await handleCreateTask(details, user);
   }
 
   if (cmd === "eventos") {
@@ -591,37 +763,184 @@ async function handleCommand(
   if (cmd === "ayuda") {
     return `🤖 *LUNA - Asistente Live Productions*
 
-📊 *Prioridades:* 🔴 URGENTE | 🟠 ALTA | 🔵 MEDIA | ⚪ BAJA
+📊 *Ver tareas:*
+tareas → Vista completa organizada
+tareas hoy → Solo las de hoy
+tareas semana → Esta semana
+tareas semana 2 → Próxima semana
+fijas lunes → Fijas de un día
 
-📋 *Ver tareas:*
-tareas - Vista general
-tareas hoy - Solo las de hoy
-tareas semana - Esta semana
-tareas semana 2 - Próxima semana
-fijas lunes - Actividades fijas del lunes
+⚡ *Acciones rápidas:*
+completar 3 → Marcar como hecho ✅
+posponer 3 → Te pregunto fecha y razón
+comentar 3 texto → Agregar comentario
+transferir 3 a Diana → Pasar a otro
 
-⚡ *Acciones:*
-completar 3 - Marcar tarea #3 como hecha
-posponer 3 razón - Posponer con motivo
-comentar 3 texto - Agregar comentario
-transferir 3 a Diana - Pasar tarea a otro
-
-➕ *Crear:*
-crea tarea revisar bodega mañana 10am
-crea tarea para Diana cotizar evento viernes
+➕ *Crear tareas:*
+crea tarea → Te guío paso a paso
+crea tarea [título] mañana 10am → Directo
+crea tarea para Diana [tarea] viernes → Para otro
 
 ⏰ *Recordatorios:*
-recuérdame llamar cliente mañana 3pm
-recuérdame revisar inventario el lunes 9am
+recuérdame [tarea] mañana 3pm
+recuérdame [tarea] el lunes 9am
 
-👥 equipo - Ver compañeros
-🎪 eventos - Próximos eventos
-📊 resumen - Tu resumen
+👥 equipo → Ver compañeros
+🎪 eventos → Próximos eventos
+📊 resumen → Tu resumen
 
-🔗 sistema: liveproductiosgt.up.railway.app`;
+📞 *Contacto:* +502 3090-3172
+🌐 liveproductionsgt.com
+🔗 sistema: liveproductiosgt-production.up.railway.app`;
   }
 
   return null;
+}
+
+async function handleCreateTask(details: string, user: { id: string; name: string }) {
+  const parsed = await parseTaskCreation(details, user);
+  if (!parsed) return "No entendí. Ejemplo: *crea tarea para Diana revisar cotizaciones mañana 10am*";
+
+  const task = await prisma.task.create({
+    data: {
+      title: parsed.title,
+      description: parsed.description || "",
+      assignedToId: parsed.assignToId || user.id,
+      assignedById: user.id,
+      dueDate: parsed.dueDate || new Date(),
+      priority: parsed.priority || "MEDIA",
+      category: "OTRO",
+      type: parsed.isFixed ? "FIJA" : "DINAMICA",
+      frequency: parsed.isFixed ? (parsed.frequency || "DIARIA") : "DIARIA",
+      dayOfWeek: parsed.dayOfWeek,
+      status: "PENDIENTE",
+    },
+  });
+
+  const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
+  const targetName = targetUser ? targetUser.name : user.name;
+
+  return `✅ Tarea creada para *${targetName}*: "${parsed.title}"\n📅 ${task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"}) : "Sin fecha"}`;
+}
+
+async function handleConversationStep(
+  fromNumber: string,
+  text: string,
+  user: { id: string; name: string; role: string }
+): Promise<string | null> {
+  const conv = getConversation(fromNumber);
+  if (!conv) return null;
+
+  const cmdLower = text.toLowerCase().trim();
+  const isBareNumber = /^\d+$/.test(cmdLower);
+
+  if (conv.state === "waiting_postpone" && isBareNumber) {
+    conversations.delete(fromNumber);
+    const postponeText = "posponer " + text;
+    return await handleCommand(postponeText, user);
+  }
+
+  if (conv.state === "waiting_postpone") {
+    conversations.delete(fromNumber);
+    const postponeText = "posponer " + text;
+    return await handleCommand(postponeText, user);
+  }
+
+  if (conv.state === "task_create_title") {
+    setConversation(fromNumber, "task_create_person", { title: text });
+    return `📝 *Nueva Tarea* - Paso 2/5\n¿Para quién es la tarea? (Ej: Diana, Jorge, Abel...)\nO escribe *para mi* si es para ti.`;
+  }
+
+  if (conv.state === "task_create_person") {
+    const assignToName = /^para\s+mi$/i.test(cmdLower) ? user.name : text;
+    setConversation(fromNumber, "task_create_date", { ...conv.data, assignToName });
+    return `📝 *Nueva Tarea* - Paso 3/5\n¿Para qué fecha? (Ej: *mañana*, *viernes*, *lunes próximo*)\n_La hora por defecto será 9:00 AM._`;
+  }
+
+  if (conv.state === "task_create_date") {
+    const now = new Date();
+    const date = parseRelativeDate(text, now);
+    if (!date) {
+      return "No entendí la fecha. Usa: *mañana*, *viernes*, *lunes próximo*, *el 15 de agosto*, etc.\n\n📝 *Nueva Tarea* - Paso 3/5\n¿Para qué fecha?";
+    }
+    setConversation(fromNumber, "task_create_time", { ...conv.data, dueDate: date.toISOString() });
+    return `📝 *Nueva Tarea* - Paso 4/5\n¿A qué hora? (Ej: *9am*, *3pm*, *en la tarde*)\nO responde *default* para 9:00 AM.`;
+  }
+
+  if (conv.state === "task_create_time") {
+    let time = parseTimeExpression(text);
+    if (!time && /default/i.test(cmdLower)) {
+      time = { hours: 9, minutes: 0 };
+    }
+    if (!time) {
+      return "No entendí la hora. Usa: *9am*, *3pm*, *en la mañana*, *en la tarde*, *15:00*, o escribe *default*.\n\n📝 *Nueva Tarea* - Paso 4/5\n¿A qué hora?";
+    }
+
+    const dueDate = new Date(conv.data.dueDate);
+    dueDate.setHours(time.hours, time.minutes, 0, 0);
+
+    setConversation(fromNumber, "task_create_priority", {
+      ...conv.data,
+      dueDate: dueDate.toISOString(),
+      timeSet: true,
+    });
+    return `📝 *Nueva Tarea* - Paso 5/5\n¿Prioridad? (ALTA, MEDIA, BAJA)\n_Default: MEDIA_\n\nResponde la prioridad o *crear* para usar MEDIA.`;
+  }
+
+  if (conv.state === "task_create_priority") {
+    let priority: string = "MEDIA";
+    const up = cmdLower.toUpperCase();
+    if (up === "ALTA" || up === "BAJA" || up === "MEDIA" || up === "URGENTE") {
+      priority = up;
+    }
+
+    const data = conv.data;
+    conversations.delete(fromNumber);
+
+    let assignToId: string | undefined;
+    if (data.assignToName && data.assignToName !== user.name) {
+      const target = await prisma.user.findFirst({
+        where: { name: { contains: data.assignToName, mode: "insensitive" }, active: true },
+      });
+      assignToId = target?.id;
+    }
+    if (!assignToId) assignToId = user.id;
+
+    const dueDate = new Date(data.dueDate);
+
+    const task = await prisma.task.create({
+      data: {
+        title: data.title,
+        description: "",
+        assignedToId: assignToId,
+        assignedById: user.id,
+        dueDate,
+        priority: priority as "BAJA" | "MEDIA" | "ALTA" | "URGENTE",
+        category: "OTRO",
+        type: "DINAMICA",
+        frequency: "DIARIA",
+        status: "PENDIENTE",
+      },
+    });
+
+    const targetUser = assignToId !== user.id ? await prisma.user.findUnique({ where: { id: assignToId } }) : null;
+    const targetName = targetUser ? targetUser.name : user.name;
+
+    return `✅ Tarea creada para *${targetName}*: "${data.title}"\n📅 ${dueDate.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})} a las ${dueDate.toLocaleTimeString("es-GT", {hour:"2-digit",minute:"2-digit"})}\n🔵 Prioridad: ${priority}`;
+  }
+
+  return null;
+}
+
+function isKnownCommand(text: string): boolean {
+  const knownCommands = [
+    "tareas", "hoy", "semana", "completar", "posponer", "comentar",
+    "transferir", "crea tarea", "crear tarea", "nueva tarea",
+    "recuerda", "recordar", "recordatorio", "evento", "eventos",
+    "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",
+  ];
+  const lower = text.toLowerCase().trim();
+  return knownCommands.some(k => lower.startsWith(k));
 }
 
 export async function POST(request: NextRequest) {
@@ -657,7 +976,6 @@ export async function POST(request: NextRequest) {
               });
 
               if (messageType && messageType !== "text") {
-                // Handle audio with speech-to-text via OpenAI Whisper
                 if (messageType === "audio" && message.audio?.id) {
                   try {
                     text = await transcribeAudio(message.audio.id);
@@ -699,7 +1017,6 @@ export async function POST(request: NextRequest) {
 
               if (!text) continue;
 
-              // Check if message is from a WhatsApp group
               const isGroupMessage = !!(message as Record<string, unknown>)?.context;
               if (isGroupMessage) {
                 await sendMessage(
@@ -729,6 +1046,55 @@ export async function POST(request: NextRequest) {
 
                 if (user) {
                   console.log(`[WhatsApp] Usuario encontrado: ${user.name} (${user.role}) id=${user.id}`);
+
+                  const conv = getConversation(normalizedFrom);
+                  const isBareNumber = /^\d+$/.test(text.toLowerCase().trim());
+
+                  if (conv && isKnownCommand(text) && !isBareNumber) {
+                    conversations.delete(normalizedFrom);
+                  }
+
+                  if (conv && !(isKnownCommand(text) && !isBareNumber)) {
+                    const convResponse = await handleConversationStep(normalizedFrom, text, user);
+                    if (convResponse) {
+                      const sendResult = await sendMessage(fromNumber, convResponse);
+
+                      await prisma.whatsAppMessage.create({
+                        data: {
+                          userId: user.id,
+                          toNumber: fromNumber,
+                          message: `[RECIBIDO CONV] ${text}`,
+                          type: "CHAT",
+                          status: "DELIVERED",
+                        },
+                      });
+
+                      await prisma.whatsAppMessage.create({
+                        data: {
+                          userId: user.id,
+                          toNumber: fromNumber,
+                          message: `[RESPUESTA CONV] ${convResponse.slice(0, 500)}`,
+                          type: "CHAT",
+                          status: sendResult ? "SENT" : "FAILED",
+                        },
+                      });
+
+                      await prisma.activity.create({
+                        data: {
+                          userId: user.id,
+                          action: "WHATSAPP_COMMAND",
+                          resource: "WHATSAPP",
+                          details: `Conversación interactiva: "${text}" por ${user.name} (${fromNumber})`,
+                        },
+                      });
+
+                      return NextResponse.json(
+                        { success: true, message: "Webhook procesado exitosamente" },
+                        { status: 200 }
+                      );
+                    }
+                  }
+
                   const commandResponse = await handleCommand(text, user);
 
                   if (commandResponse) {
@@ -762,6 +1128,13 @@ export async function POST(request: NextRequest) {
                         details: `Comando "${text}" ejecutado por ${user.name} (${fromNumber})`,
                       },
                     });
+
+                    const cmdLower = text.toLowerCase().trim();
+                    if (cmdLower === "posponer") {
+                      setConversation(normalizedFrom, "waiting_postpone", {});
+                    } else if (["crea tarea", "crear tarea", "nueva tarea"].includes(cmdLower)) {
+                      setConversation(normalizedFrom, "task_create_title", {});
+                    }
                   } else {
                     const aiReply = await handleWhatsAppMessage(fromNumber, text);
 

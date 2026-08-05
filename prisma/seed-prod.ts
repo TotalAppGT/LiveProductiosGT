@@ -47,24 +47,7 @@ async function createOrSyncFirebaseUser(email: string, password: string, userId:
   }
 }
 
-function getNextDayOfWeek(targetDay: number, fromDate: Date): Date {
-  const result = new Date(fromDate);
-  const currentDay = result.getDay();
-  const daysUntil = (targetDay - currentDay + 7) % 7 || 7;
-  result.setDate(result.getDate() + daysUntil);
-  result.setHours(0, 0, 0, 0);
-  return result;
-}
-
 async function main() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const thisFriday = getNextDayOfWeek(5, today);
-  const nextMonday = getNextDayOfWeek(1, today);
-  const nextThursday = getNextDayOfWeek(4, today);
-  const nextFriday = getNextDayOfWeek(5, today);
 
   // === 1. Daniel (ADMIN - creador del sistema) ===
   const adminEmail = "totalappgt@gmail.com";
@@ -283,121 +266,190 @@ async function main() {
     console.log("Registros de ingreso de muestra creados");
   }
 
-  // === 8. Real Test Tasks ===
+  // === 8. August 2026 MASSIVE Task Seed ===
   const users = await prisma.user.findMany({ where: { active: true } });
   const getUser = (email: string) => users.find(u => u.email === email);
 
   const dianaUser = getUser("diana@liveproductions.com");
-  const brendaUser = getUser("brenda@liveproductions.com");
-  const abelUser = getUser("abel@liveproductions.com");
-  const selvinUser = getUser("selvin@liveproductions.com");
-  const exequielUser = getUser("exequiel@liveproductions.com");
-  const javierUser = getUser("javier@liveproductions.com");
 
-  const tasksToCreate: {
+  if (!jorgeUser) throw new Error("Jorge user not found");
+  if (!adminUser) throw new Error("Admin user not found");
+  if (!dianaUser) throw new Error("Diana user not found");
+
+  const assignedById = jorgeUser.id;
+
+  function augDate(day: number): Date {
+    return new Date(2026, 7, day, 0, 0, 0, 0);
+  }
+
+  const augustWeekdays = [
+    { date: augDate(4), dow: "MARTES" },
+    { date: augDate(5), dow: "MIERCOLES" },
+    { date: augDate(6), dow: "JUEVES" },
+    { date: augDate(7), dow: "VIERNES" },
+    { date: augDate(10), dow: "LUNES" },
+    { date: augDate(11), dow: "MARTES" },
+    { date: augDate(12), dow: "MIERCOLES" },
+    { date: augDate(13), dow: "JUEVES" },
+    { date: augDate(14), dow: "VIERNES" },
+    { date: augDate(17), dow: "LUNES" },
+    { date: augDate(18), dow: "MARTES" },
+    { date: augDate(19), dow: "MIERCOLES" },
+    { date: augDate(20), dow: "JUEVES" },
+    { date: augDate(21), dow: "VIERNES" },
+    { date: augDate(24), dow: "LUNES" },
+    { date: augDate(25), dow: "MARTES" },
+    { date: augDate(26), dow: "MIERCOLES" },
+    { date: augDate(27), dow: "JUEVES" },
+    { date: augDate(28), dow: "VIERNES" },
+    { date: augDate(31), dow: "LUNES" },
+  ];
+
+  const weeklyDates: Record<string, Date[]> = {
+    LUNES: [augDate(10), augDate(17), augDate(24), augDate(31)],
+    MARTES: [augDate(4), augDate(11), augDate(18), augDate(25)],
+    MIERCOLES: [augDate(5), augDate(12), augDate(19), augDate(26)],
+    JUEVES: [augDate(6), augDate(13), augDate(20), augDate(27)],
+    VIERNES: [augDate(7), augDate(14), augDate(21), augDate(28)],
+  };
+
+  interface TaskSeed {
     title: string;
+    type: string;
+    frequency?: string;
+    dayOfWeek?: string;
     category: string;
     priority: string;
     dueDate: Date;
     assignedToId: string;
     status: string;
-  }[] = [];
+  }
 
-  if (jorgeUser) {
-    tasksToCreate.push(
-      { title: "Revisar reporte de ingresos de la semana", category: "COBRO", priority: "ALTA", dueDate: today, assignedToId: jorgeUser.id, status: "PENDIENTE" },
-      { title: "Llamada con Diana y Abel para ver logística", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: jorgeUser.id, status: "EN_PROCESO" },
-      { title: "Seguimiento a reparaciones de equipo con Exequiel", category: "MANTENIMIENTO", priority: "MEDIA", dueDate: today, assignedToId: jorgeUser.id, status: "PENDIENTE" },
-      { title: "Ver avance de cotizaciones pendientes", category: "COTIZACION", priority: "MEDIA", dueDate: tomorrow, assignedToId: jorgeUser.id, status: "PENDIENTE" },
-      { title: "Autorizar pagos a músicos y proveedores", category: "COBRO", priority: "ALTA", dueDate: tomorrow, assignedToId: jorgeUser.id, status: "PENDIENTE" },
-      { title: "Seguimiento vehículos: camión, panel, combustible", category: "VEHICULO", priority: "MEDIA", dueDate: nextMonday, assignedToId: jorgeUser.id, status: "PENDIENTE" },
-      { title: "Revisar licencias ambientales (no caer en multas)", category: "ADMINISTRACION", priority: "ALTA", dueDate: thisFriday, assignedToId: jorgeUser.id, status: "PENDIENTE" },
+  const allTasks: TaskSeed[] = [];
+  let st = false;
+  const ns = () => { st = !st; return st ? "PENDIENTE" : "EN_PROCESO"; };
+
+  // ─── Daniel (ADMIN) ──────────────────────────────────────
+
+  // FIJA DIARIA
+  for (const wd of augustWeekdays) {
+    allTasks.push(
+      { title: "Revisar monitoreo de accesos del equipo", type: "FIJA", frequency: "DIARIA", category: "ADMINISTRACION", priority: "ALTA", dueDate: wd.date, assignedToId: adminUser.id, status: ns() },
+      { title: "Verificar funcionamiento de recordatorios automáticos", type: "FIJA", frequency: "DIARIA", category: "ADMINISTRACION", priority: "MEDIA", dueDate: wd.date, assignedToId: adminUser.id, status: ns() },
     );
   }
 
-  if (dianaUser) {
-    tasksToCreate.push(
-      { title: "Tener llamada con Selvin, Abel y Jorge para cuadro de staff", category: "PRE_EVENTO", priority: "URGENTE", dueDate: today, assignedToId: dianaUser.id, status: "EN_PROCESO" },
-      { title: "Reconfirmar staff semana de eventos", category: "PRE_EVENTO", priority: "ALTA", dueDate: today, assignedToId: dianaUser.id, status: "PENDIENTE" },
-      { title: "Hacer cobro de eventos de la semana", category: "COBRO", priority: "URGENTE", dueDate: today, assignedToId: dianaUser.id, status: "PENDIENTE" },
-      { title: "Revisar que no haya traslape en horarios de shows", category: "PRE_EVENTO", priority: "ALTA", dueDate: today, assignedToId: dianaUser.id, status: "PENDIENTE" },
-      { title: "Reconfirmar proveedores externos y diseños de pista", category: "PRE_EVENTO", priority: "MEDIA", dueDate: tomorrow, assignedToId: dianaUser.id, status: "PENDIENTE" },
-      { title: "Enviar resumen de lugares y horarios de presentaciones", category: "ADMINISTRACION", priority: "ALTA", dueDate: tomorrow, assignedToId: dianaUser.id, status: "PENDIENTE" },
-      { title: "Hacer lista de staff para revisar", category: "PERSONAL", priority: "MEDIA", dueDate: thisFriday, assignedToId: dianaUser.id, status: "PENDIENTE" },
-      { title: "Actualizar drive de eventos de la semana", category: "ADMINISTRACION", priority: "MEDIA", dueDate: nextFriday, assignedToId: dianaUser.id, status: "PENDIENTE" },
+  // FIJA SEMANAL
+  for (const d of weeklyDates.LUNES) {
+    allTasks.push({ title: "Revisión general del sistema y LUNA", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "LUNES", category: "ADMINISTRACION", priority: "ALTA", dueDate: d, assignedToId: adminUser.id, status: ns() });
+  }
+  for (const d of weeklyDates.VIERNES) {
+    allTasks.push({ title: "Reporte semanal de cumplimiento", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "VIERNES", category: "ADMINISTRACION", priority: "MEDIA", dueDate: d, assignedToId: adminUser.id, status: ns() });
+  }
+
+  // DINAMICA
+  for (const d of [augDate(4), augDate(11), augDate(18), augDate(25)]) {
+    allTasks.push({ title: "Probar nuevas funcionalidades del sistema", type: "DINAMICA", category: "ADMINISTRACION", priority: "MEDIA", dueDate: d, assignedToId: adminUser.id, status: ns() });
+  }
+  for (const d of [augDate(7), augDate(14), augDate(21), augDate(28)]) {
+    allTasks.push({ title: "Actualizar configuración según feedback del equipo", type: "DINAMICA", category: "ADMINISTRACION", priority: "BAJA", dueDate: d, assignedToId: adminUser.id, status: ns() });
+  }
+
+  // ─── Jorge Mérida (DUENO) ────────────────────────────────
+
+  // FIJA DIARIA
+  for (const wd of augustWeekdays) {
+    allTasks.push(
+      { title: "Revisar reporte de ingresos", type: "FIJA", frequency: "DIARIA", category: "COBRO", priority: "URGENTE", dueDate: wd.date, assignedToId: jorgeUser.id, status: ns() },
+      { title: "Seguimiento a cotizaciones pendientes", type: "FIJA", frequency: "DIARIA", category: "COTIZACION", priority: "ALTA", dueDate: wd.date, assignedToId: jorgeUser.id, status: ns() },
     );
   }
 
-  if (adminUser) {
-    tasksToCreate.push(
-      { title: "Verificar funcionamiento de recordatorios automáticos", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "EN_PROCESO" },
-      { title: "Revisar monitoreo de accesos del equipo", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
-      { title: "Probar respuestas de LUNA por WhatsApp", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
-      { title: "Probar transferencia de tareas entre usuarios", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
-      { title: "Verificar bitácora de actividades del equipo", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
-      { title: "Revisar cumplimiento de accesos diarios", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
-      { title: "Probar respuestas de LUNA en WhatsApp", category: "ADMINISTRACION", priority: "BAJA", dueDate: tomorrow, assignedToId: adminUser.id, status: "PENDIENTE" },
+  // FIJA SEMANAL
+  for (const d of weeklyDates.LUNES) {
+    allTasks.push({ title: "Llamada con equipo de coordinación", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "LUNES", category: "ADMINISTRACION", priority: "URGENTE", dueDate: d, assignedToId: jorgeUser.id, status: ns() });
+    allTasks.push({ title: "Seguimiento vehículos con Abel", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "LUNES", category: "VEHICULO", priority: "ALTA", dueDate: d, assignedToId: jorgeUser.id, status: ns() });
+    allTasks.push({ title: "Seguimiento inventario bodega Elgin", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "LUNES", category: "INVENTARIO", priority: "MEDIA", dueDate: d, assignedToId: jorgeUser.id, status: ns() });
+  }
+  for (const d of weeklyDates.MARTES) {
+    allTasks.push({ title: "Tener llamada con Jorge para temas varios", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "MARTES", category: "ADMINISTRACION", priority: "MEDIA", dueDate: d, assignedToId: jorgeUser.id, status: ns() });
+  }
+  for (const d of weeklyDates.MIERCOLES) {
+    allTasks.push({ title: "Cobrar clientes pendientes de la semana", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "MIERCOLES", category: "COBRO", priority: "URGENTE", dueDate: d, assignedToId: jorgeUser.id, status: ns() });
+    allTasks.push({ title: "Autorizar pagos a músicos y proveedores", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "MIERCOLES", category: "COBRO", priority: "ALTA", dueDate: d, assignedToId: jorgeUser.id, status: ns() });
+  }
+  for (const d of weeklyDates.JUEVES) {
+    allTasks.push({ title: "Revisar licencias ambientales", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "JUEVES", category: "ADMINISTRACION", priority: "ALTA", dueDate: d, assignedToId: jorgeUser.id, status: ns() });
+    allTasks.push({ title: "Preparar cuadros de eventos fin de semana", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "JUEVES", category: "PRE_EVENTO", priority: "ALTA", dueDate: d, assignedToId: jorgeUser.id, status: ns() });
+  }
+  for (const d of weeklyDates.VIERNES) {
+    allTasks.push({ title: "Reporte de ingresos personal Casa Nómada y Live", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "VIERNES", category: "ADMINISTRACION", priority: "MEDIA", dueDate: d, assignedToId: jorgeUser.id, status: ns() });
+  }
+
+  // DINAMICA
+  allTasks.push(
+    { title: "Seguimiento a reparaciones con Exequiel", type: "DINAMICA", category: "MANTENIMIENTO", priority: "MEDIA", dueDate: augDate(5), assignedToId: jorgeUser.id, status: ns() },
+    { title: "Revisar drive de compras", type: "DINAMICA", category: "ADMINISTRACION", priority: "MEDIA", dueDate: augDate(6), assignedToId: jorgeUser.id, status: ns() },
+    { title: "Dar seguimiento a pilotos nuevos", type: "DINAMICA", category: "VEHICULO", priority: "MEDIA", dueDate: augDate(7), assignedToId: jorgeUser.id, status: ns() },
+    { title: "Seguimiento tablet y repuestos KLA12", type: "DINAMICA", category: "MANTENIMIENTO", priority: "BAJA", dueDate: augDate(8), assignedToId: jorgeUser.id, status: ns() },
+  );
+
+  // ─── Diana (JEFE) ────────────────────────────────────────
+
+  // FIJA DIARIA
+  for (const wd of augustWeekdays) {
+    allTasks.push(
+      { title: "Revisar y actualizar drive de eventos", type: "FIJA", frequency: "DIARIA", category: "ADMINISTRACION", priority: "ALTA", dueDate: wd.date, assignedToId: dianaUser.id, status: ns() },
+      { title: "Enviar retroalimentación a proveedores", type: "FIJA", frequency: "DIARIA", category: "ADMINISTRACION", priority: "MEDIA", dueDate: wd.date, assignedToId: dianaUser.id, status: ns() },
     );
   }
 
-  if (abelUser) {
-    tasksToCreate.push(
-      { title: "Confirmar disponibilidad de pilotos para eventos", category: "PRE_EVENTO", priority: "ALTA", dueDate: tomorrow, assignedToId: abelUser.id, status: "PENDIENTE" },
-      { title: "Revisar niveles de combustible de vehículos", category: "VEHICULO", priority: "MEDIA", dueDate: nextMonday, assignedToId: abelUser.id, status: "PENDIENTE" },
-      { title: "Entregar viáticos a responsables de montaje", category: "PRE_EVENTO", priority: "ALTA", dueDate: nextThursday, assignedToId: abelUser.id, status: "PENDIENTE" },
-    );
+  // FIJA SEMANAL
+  for (const d of weeklyDates.LUNES) {
+    allTasks.push({ title: "Hacer resumen de lugares y horarios de la semana", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "LUNES", category: "PRE_EVENTO", priority: "URGENTE", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+    allTasks.push({ title: "Reconfirmar staff de la semana", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "LUNES", category: "PRE_EVENTO", priority: "ALTA", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+    allTasks.push({ title: "Revisar cuadro de equipo con Selvin", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "LUNES", category: "PRE_EVENTO", priority: "ALTA", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+  }
+  for (const d of weeklyDates.MARTES) {
+    allTasks.push({ title: "Llamada con Selvin, Abel y Jorge para logística", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "MARTES", category: "PRE_EVENTO", priority: "URGENTE", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+  }
+  for (const d of weeklyDates.MIERCOLES) {
+    allTasks.push({ title: "Hacer cobro de eventos de la semana", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "MIERCOLES", category: "COBRO", priority: "URGENTE", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+    allTasks.push({ title: "Enviar datos para pagos de músicos y proveedores", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "MIERCOLES", category: "COBRO", priority: "ALTA", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+    allTasks.push({ title: "Actualizar drives de eventos de la semana", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "MIERCOLES", category: "ADMINISTRACION", priority: "MEDIA", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+  }
+  for (const d of weeklyDates.JUEVES) {
+    allTasks.push({ title: "Revisar todos los grupos y ver modificaciones", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "JUEVES", category: "PRE_EVENTO", priority: "MEDIA", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+    allTasks.push({ title: "Hacer drives de eventos de próximas semanas", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "JUEVES", category: "ADMINISTRACION", priority: "MEDIA", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+  }
+  for (const d of weeklyDates.VIERNES) {
+    allTasks.push({ title: "Enviar información final a músicos y clientes", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "VIERNES", category: "PRE_EVENTO", priority: "ALTA", dueDate: d, assignedToId: dianaUser.id, status: ns() });
+    allTasks.push({ title: "Enviar reporte de proveedores del fin de semana", type: "FIJA", frequency: "SEMANAL", dayOfWeek: "VIERNES", category: "POST_EVENTO", priority: "MEDIA", dueDate: d, assignedToId: dianaUser.id, status: ns() });
   }
 
-  if (selvinUser) {
-    tasksToCreate.push(
-      { title: "Revisar cuadros de equipo con Diana", category: "PRE_EVENTO", priority: "ALTA", dueDate: today, assignedToId: selvinUser.id, status: "EN_PROCESO" },
-      { title: "Verificar equipo de audio para evento del viernes", category: "PRE_EVENTO", priority: "ALTA", dueDate: tomorrow, assignedToId: selvinUser.id, status: "PENDIENTE" },
-      { title: "Reporte de equipo en reparación", category: "MANTENIMIENTO", priority: "MEDIA", dueDate: nextMonday, assignedToId: selvinUser.id, status: "PENDIENTE" },
-    );
-  }
+  // DINAMICA
+  allTasks.push(
+    { title: "Confirmar disponibilidad de staff para 3ra semana", type: "DINAMICA", category: "PRE_EVENTO", priority: "ALTA", dueDate: augDate(5), assignedToId: dianaUser.id, status: ns() },
+    { title: "Enviar Estados de Cuenta a clientes", type: "DINAMICA", category: "COBRO", priority: "ALTA", dueDate: augDate(6), assignedToId: dianaUser.id, status: ns() },
+    { title: "Reservar a David o DJ para octubre-diciembre", type: "DINAMICA", category: "PRE_EVENTO", priority: "MEDIA", dueDate: augDate(8), assignedToId: dianaUser.id, status: ns() },
+    { title: "Hacer machote de equipo", type: "DINAMICA", category: "PRE_EVENTO", priority: "MEDIA", dueDate: augDate(12), assignedToId: dianaUser.id, status: ns() },
+    { title: "Confirmar si hubo horas extras en eventos", type: "DINAMICA", category: "POST_EVENTO", priority: "MEDIA", dueDate: augDate(18), assignedToId: dianaUser.id, status: ns() },
+  );
 
-  if (exequielUser) {
-    tasksToCreate.push(
-      { title: "Hacer inventario de consumibles", category: "INVENTARIO", priority: "ALTA", dueDate: today, assignedToId: exequielUser.id, status: "EN_PROCESO" },
-      { title: "Revisar equipo dañado post-evento", category: "POST_EVENTO", priority: "ALTA", dueDate: tomorrow, assignedToId: exequielUser.id, status: "PENDIENTE" },
-      { title: "Reporte de equipo perdido/dañado", category: "INVENTARIO", priority: "ALTA", dueDate: nextMonday, assignedToId: exequielUser.id, status: "PENDIENTE" },
-    );
-  }
+  // ─── INSERT ───────────────────────────────────────────────
 
-  if (brendaUser) {
-    tasksToCreate.push(
-      { title: "Enviar retroalimentación a proveedores", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: brendaUser.id, status: "PENDIENTE" },
-      { title: "Agregar eventos nuevos al Excel", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: brendaUser.id, status: "PENDIENTE" },
-      { title: "Reservar DJ para octubre, noviembre y diciembre", category: "PRE_EVENTO", priority: "MEDIA", dueDate: thisFriday, assignedToId: brendaUser.id, status: "PENDIENTE" },
-    );
-  }
+  const validCategories = ["PRE_EVENTO", "POST_EVENTO", "COTIZACION", "COBRO", "INVENTARIO", "VEHICULO", "PERSONAL", "BODEGA", "MANTENIMIENTO", "ADMINISTRACION", "OTRO"];
+  const validPriorities = ["BAJA", "MEDIA", "ALTA", "URGENTE"];
+  const validStatuses = ["PENDIENTE", "EN_PROCESO"];
 
-  if (javierUser) {
-    tasksToCreate.push(
-      { title: "Confirmar asistencia para evento del sábado", category: "PRE_EVENTO", priority: "MEDIA", dueDate: today, assignedToId: javierUser.id, status: "PENDIENTE" },
-      { title: "Llevar equipo de percusión a mantenimiento", category: "MANTENIMIENTO", priority: "MEDIA", dueDate: tomorrow, assignedToId: javierUser.id, status: "PENDIENTE" },
-    );
-  }
-
-  // Daniel's tasks (creator, ADMIN)
-  if (adminUser) {
-    tasksToCreate.push(
-      { title: "Probar transferencia de tareas entre usuarios", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
-      { title: "Verificar bitácora de actividades del equipo", category: "ADMINISTRACION", priority: "MEDIA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
-      { title: "Revisar cumplimiento de accesos diarios", category: "ADMINISTRACION", priority: "ALTA", dueDate: today, assignedToId: adminUser.id, status: "PENDIENTE" },
-      { title: "Probar respuestas de LUNA en WhatsApp", category: "ADMINISTRACION", priority: "MEDIA", dueDate: tomorrow, assignedToId: adminUser.id, status: "PENDIENTE" },
-    );
-  }
-
-  const assignedById = (jorgeUser || adminUser)!.id;
-
-  const validCategories: string[] = ["PRE_EVENTO", "POST_EVENTO", "COTIZACION", "COBRO", "INVENTARIO", "VEHICULO", "PERSONAL", "BODEGA", "MANTENIMIENTO", "ADMINISTRACION", "OTRO"];
-  const validPriorities: string[] = ["BAJA", "MEDIA", "ALTA", "URGENTE"];
-  const validStatuses: string[] = ["PENDIENTE", "EN_PROCESO"];
-
-  for (const task of tasksToCreate) {
+  for (const task of allTasks) {
     const exists = await prisma.task.findFirst({
-      where: { title: task.title, assignedToId: task.assignedToId },
+      where: {
+        title: task.title,
+        type: task.type as any,
+        assignedToId: task.assignedToId,
+        dueDate: task.dueDate,
+      },
     });
     if (!exists) {
       await prisma.task.create({
@@ -409,14 +461,15 @@ async function main() {
           priority: validPriorities.includes(task.priority) ? task.priority as any : "MEDIA",
           status: validStatuses.includes(task.status) ? task.status as any : "PENDIENTE",
           dueDate: task.dueDate,
-          type: "DINAMICA",
-          frequency: "DIARIA",
+          type: task.type as any,
+          frequency: (task.frequency ?? null) as any,
+          dayOfWeek: (task.dayOfWeek ?? null) as any,
         },
       });
     }
   }
 
-  console.log(`${tasksToCreate.length} tareas de prueba procesadas`);
+  console.log(`${allTasks.length} tareas de agosto 2026 procesadas`);
 }
 
 main()
