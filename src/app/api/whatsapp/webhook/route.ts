@@ -682,6 +682,22 @@ async function handleCommand(
       },
     });
 
+    // Also create as a task so it appears in the system
+    await prisma.task.create({
+      data: {
+        title: `🔔 ${parsed.title}`,
+        description: parsed.description || `Recordatorio programado para ${parsed.remindAt.toLocaleString("es-GT")}`,
+        assignedToId: parsed.assignToId || user.id,
+        assignedById: user.id,
+        dueDate: parsed.remindAt,
+        priority: "ALTA",
+        category: "OTRO",
+        type: "DINAMICA",
+        frequency: "DIARIA",
+        status: "PENDIENTE",
+      },
+    });
+
     const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
     const targetName = targetUser ? targetUser.name : "ti";
 

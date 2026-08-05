@@ -942,4 +942,55 @@ export function getSmartCronSchedule(): Record<string, string> {
     endOfDayAlerts: "0 17 * * *",
     eveningAccessCheck: "0 18 * * *",
   };
+
+export async function fireDueReminders(): Promise<{ fired: number }> {
+  let fired = 0;
+  try {
+    const now = new Date();
+    const fiveMinAgo = new Date(now.getTime() - 5 * 60000);
+
+    const dueReminders = await prisma.reminder.findMany({
+      where: {
+        remindAt: { lte: now },
+        isCompleted: false,
+        notified: false,
+      },
+      include: { assignedTo: { select: { id: true, name: true, whatsappNumber: true, phone: true } } },
+    });
+
+    for (const reminder of dueReminders) {
+      try {
+        const to = reminder.assignedTo?.whatsappNumber || reminder.assignedTo?.phone;
+        if (to) {
+          await sendMessage(
+            to,
+            `⏰ *RECORDATORIO*\n\n${reminder.title}${reminder.description ? `\n_${reminder.description}_` : ""}\n\n📅 Programado para: ${reminder.remindAt.toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`
+          );
+          fired++;
+        }
+
+        await prisma.reminder.update({
+          where: { id: reminder.id },
+          data: { notified: true, isCompleted: true, completedAt: new Date() },
+        });
+
+        // Also complete the associated task (title starts with 🔔)
+        await prisma.task.updateMany({
+          where: {
+            title: `🔔 ${reminder.title}`,
+            assignedToId: reminder.assignedToId,
+            status: "PENDIENTE",
+          },
+          data: { status: "COMPLETADA" },
+        });
+      } catch (e) {
+        console.error(`Error firing reminder ${reminder.id}:`, e);
+      }
+    }
+  } catch (error) {
+    console.error("fireDueReminders error:", error);
+  }
+  return { fired };
+}
+
 }
