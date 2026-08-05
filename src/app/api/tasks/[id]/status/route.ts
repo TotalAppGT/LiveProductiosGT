@@ -107,10 +107,6 @@ export async function PUT(
     });
 
     const historyAction = status === "REPROGRAMADA" ? "REPROGRAMACIÓN" : "CAMBIO_ESTADO";
-    const historyDetails =
-      status === "REPROGRAMADA"
-        ? `Tarea reprogramada (${existingTask.postponeCount + 1}ª vez): ${postponeReason}`
-        : undefined;
 
     await prisma.taskHistory.create({
       data: {
@@ -179,3 +175,5 @@ export async function PUT(
     );
   }
 }
+
+export const PATCH = PUT;

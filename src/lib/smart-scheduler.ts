@@ -781,6 +781,89 @@ export async function sendMorningBriefing(): Promise<{
   }
 }
 
+export async function sendBihourlyReminders(): Promise<{
+  usersReminded: number;
+  totalPendingTasks: number;
+}> {
+  try {
+    const now = new Date();
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+    const users = await prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, phone: true, whatsappNumber: true },
+    });
+
+    let usersReminded = 0;
+    let totalPendingTasks = 0;
+
+    for (const user of users) {
+      const to = user.whatsappNumber || user.phone;
+      if (!to) continue;
+
+      const lastReminder = await prisma.whatsAppMessage.findFirst({
+        where: {
+          userId: user.id,
+          type: "BIHOURLY_REMINDER",
+          createdAt: { gte: twoHoursAgo },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (lastReminder) continue;
+
+      const pendingTasks = await prisma.task.count({
+        where: {
+          assignedToId: user.id,
+          status: { in: ["PENDIENTE", "EN_PROCESO"] },
+        },
+      });
+
+      const overdueTasks = await prisma.task.count({
+        where: {
+          assignedToId: user.id,
+          status: { in: ["PENDIENTE", "EN_PROCESO"] },
+          dueDate: { lt: now },
+        },
+      });
+
+      if (pendingTasks === 0) continue;
+
+      let message = `Tienes ${pendingTasks} tareas pendientes`;
+      if (overdueTasks > 0) message += `, ${overdueTasks} vencidas`;
+      message += `. Escribe *tareas* para verlas.`;
+
+      await sendMessage(to, message).catch(() => {});
+
+      await prisma.whatsAppMessage.create({
+        data: {
+          userId: user.id,
+          toNumber: to,
+          message: `[BIHOURLY] ${message}`,
+          type: "BIHOURLY_REMINDER",
+          status: "SENT",
+        },
+      });
+
+      await logActivity(
+        "BIHOURLY_REMINDER",
+        "USER",
+        user.id,
+        `Recordatorio bi-horario enviado a ${user.name} (${pendingTasks} pendientes)`,
+        "system"
+      );
+
+      usersReminded++;
+      totalPendingTasks += pendingTasks;
+    }
+
+    return { usersReminded, totalPendingTasks };
+  } catch (error) {
+    console.error("sendBihourlyReminders error:", error);
+    return { usersReminded: 0, totalPendingTasks: 0 };
+  }
+}
+
 export async function sendEveningRecap(): Promise<{
   recapsSent: number;
 }> {

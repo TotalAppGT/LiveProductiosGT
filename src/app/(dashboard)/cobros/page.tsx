@@ -419,7 +419,7 @@ function CobroFormModal({
     setSaving(true);
     try {
       const url = isEditing ? `/api/cobros/${cobro.id}` : "/api/cobros";
-      const method = isEditing ? "PATCH" : "POST";
+      const method = isEditing ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
         headers: {

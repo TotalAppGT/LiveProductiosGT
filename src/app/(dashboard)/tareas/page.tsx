@@ -74,6 +74,9 @@ export default function TareasPage() {
   const [showBulkAssign, setShowBulkAssign] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [commentModal, setCommentModal] = useState<{ open: boolean; taskId: string; taskTitle: string }>({ open: false, taskId: "", taskTitle: "" });
+  const [commentText, setCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   const isAdminOrJefe = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
 
@@ -164,6 +167,28 @@ export default function TareasPage() {
       toast.success(`${selectedTasks.size} tareas actualizadas`);
     } catch {
       toast.error("Error en actualización masiva");
+    }
+  }
+
+  async function submitComment() {
+    if (!commentText.trim()) return;
+    setSubmittingComment(true);
+    try {
+      const res = await fetch(`/api/tasks/${commentModal.taskId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content: commentText.trim() }),
+      });
+      if (res.ok) {
+        toast.success("Comentario agregado");
+        setCommentModal({ open: false, taskId: "", taskTitle: "" });
+        setCommentText("");
+        fetchTasks();
+      } else throw new Error("Error");
+    } catch {
+      toast.error("Error al agregar comentario");
+    } finally {
+      setSubmittingComment(false);
     }
   }
 
@@ -543,7 +568,7 @@ export default function TareasPage() {
                               variant="outline"
                               size="sm"
                               leftIcon={<Clock4 className="h-3 w-3 text-orange-500" />}
-                              onClick={() => toast.success("Abrir modal de posponer")}
+                              onClick={() => updateTaskStatus(task.id, "REPROGRAMADA")}
                             >
                               Posponer
                             </Button>
@@ -551,6 +576,7 @@ export default function TareasPage() {
                               variant="outline"
                               size="sm"
                               leftIcon={<MessageSquare className="h-3 w-3" />}
+                              onClick={() => { setCommentModal({ open: true, taskId: task.id, taskTitle: task.title }); setCommentText(""); }}
                             >
                               Comentar
                             </Button>
@@ -565,6 +591,35 @@ export default function TareasPage() {
           </TabPanel>
         ))}
       </Tabs>
+
+      <Modal
+        isOpen={commentModal.open}
+        onClose={() => setCommentModal({ open: false, taskId: "", taskTitle: "" })}
+        title={`Comentar: ${commentModal.taskTitle}`}
+      >
+        <div className="space-y-4 p-1">
+          <textarea
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+            rows={3}
+            placeholder="Escribe tu comentario..."
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCommentModal({ open: false, taskId: "", taskTitle: "" })}>
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              onClick={submitComment}
+              isLoading={submittingComment}
+              disabled={!commentText.trim()}
+            >
+              Enviar
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <CreateTaskModal
         isOpen={showCreateModal}

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { askAI } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
-import { checkDailyAccessRequirement, sendEndOfDayAlerts } from "@/lib/smart-scheduler";
+import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders } from "@/lib/smart-scheduler";
 
 interface CronJob {
   name: string;
@@ -495,6 +495,18 @@ async function endOfDayTaskCheck() {
   }
 }
 
+async function bihourlyReminder(hour: number) {
+  console.log(`[Cron] Ejecutando recordatorio bi-horario (${hour}:00)`);
+  try {
+    const result = await sendBihourlyReminders();
+    console.log(`[Cron] Recordatorio bi-horario: ${result.usersReminded} usuarios recordados, ${result.totalPendingTasks} tareas pendientes`);
+
+    await logActivity("system", "CRON_BIHOURLY", `Bi-horario ${hour}h: ${result.usersReminded} usuarios, ${result.totalPendingTasks} tareas`);
+  } catch (error) {
+    console.error(`[Cron] Error bihourlyReminder (${hour}):`, error);
+  }
+}
+
 const jobs: CronJob[] = [
   { name: "morningBriefing", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing },
   { name: "dailyDigest", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: dailyDigest },
@@ -504,6 +516,11 @@ const jobs: CronJob[] = [
   { name: "eveningAccessCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: eveningAccessCheck },
   { name: "eveningRecap", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: eveningRecap },
   { name: "checkOverdueTasks", schedule: { hour: 0, minute: 0 }, timezone: "America/Guatemala", handler: checkOverdueTasks },
+  { name: "bihourly8", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(8) },
+  { name: "bihourly10", schedule: { hour: 10, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(10) },
+  { name: "bihourly12", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(12) },
+  { name: "bihourly14", schedule: { hour: 14, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(14) },
+  { name: "bihourly16", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(16) },
 ];
 
 let cronInterval: ReturnType<typeof setInterval> | null = null;

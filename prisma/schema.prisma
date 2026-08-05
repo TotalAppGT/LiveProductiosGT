@@ -126,6 +126,7 @@ enum WhatsAppMessageType {
   NOTIFICATION
   ALERT
   CHAT
+  BIHOURLY_REMINDER
 }
 
 enum WhatsAppMessageStatus {

@@ -173,6 +173,41 @@ export async function PUT(
       });
     }
 
+    if (status === "COMPLETADA" && existingTask.type === "FIJA") {
+      const now = new Date();
+      let nextDueDate: Date;
+
+      if (existingTask.frequency === "SEMANAL") {
+        nextDueDate = new Date(now);
+        nextDueDate.setDate(nextDueDate.getDate() + 7);
+      } else if (existingTask.frequency === "MENSUAL") {
+        nextDueDate = new Date(now);
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      } else {
+        nextDueDate = new Date(now);
+        nextDueDate.setDate(nextDueDate.getDate() + 1);
+      }
+
+      nextDueDate.setHours(0, 0, 0, 0);
+
+      await prisma.task.create({
+        data: {
+          title: existingTask.title,
+          description: existingTask.description,
+          type: "FIJA",
+          frequency: existingTask.frequency,
+          dayOfWeek: existingTask.dayOfWeek,
+          dueDate: nextDueDate,
+          priority: existingTask.priority,
+          category: existingTask.category,
+          assignedToId: existingTask.assignedToId,
+          assignedById: existingTask.assignedById || auth.payload.userId,
+          eventId: existingTask.eventId,
+          requiresConfirmation: existingTask.requiresConfirmation,
+        },
+      });
+    }
+
     return NextResponse.json(
       { success: true, data: task, message: "Tarea actualizada exitosamente" },
       { status: 200 }
@@ -185,6 +220,8 @@ export async function PUT(
     );
   }
 }
+
+export const PATCH = PUT;
 
 export async function DELETE(
   request: NextRequest,

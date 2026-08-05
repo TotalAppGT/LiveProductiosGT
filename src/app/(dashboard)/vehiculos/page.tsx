@@ -313,7 +313,7 @@ function VehicleFormModal({
     setSaving(true);
     try {
       const url = isEditing ? `/api/vehicles/${vehicle.id}` : "/api/vehicles";
-      const method = isEditing ? "PATCH" : "POST";
+      const method = isEditing ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
         headers: {
