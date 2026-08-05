@@ -576,6 +576,30 @@ async function handleCommand(
     return `✅ Tarea *${task.title}* completada. ¡Buen trabajo ${user.name}!`;
   }
 
+  if (cmd.startsWith("no ") && /^\d+$/.test(cmd.replace("no ", "").trim())) {
+    const num = parseInt(cmd.replace("no ", "").trim());
+    const tasks = await getPendingTasks(user.id);
+    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas.`;
+    const task = tasks[num - 1];
+    const reason = "No realizada - sin motivo especificado";
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { status: "REPROGRAMADA", postponeCount: { increment: 1 }, postponeReason: reason },
+    });
+    await prisma.taskHistory.create({
+      data: { taskId: task.id, userId: user.id, action: "NO_REALIZADA", previousStatus: task.status, newStatus: "REPROGRAMADA" },
+    });
+    const admins = await prisma.user.findMany({ where: { role: { in: ["DUENO", "ADMIN"] } }, select: { name: true, whatsappNumber: true, phone: true } });
+    for (const admin of admins) {
+      const to = admin.whatsappNumber || admin.phone;
+      if (to) {
+        const { sendMessage: sendMsg } = await import("@/lib/whatsapp");
+        await sendMsg(to, `⚠️ *Tarea No Realizada*\n\n${user.name} marcó como NO realizada la tarea:\n"${task.title}"\n\nMotivo: ${reason}\nSe reprogramó automáticamente.`).catch(() => {});
+      }
+    }
+    return `⚠️ Tarea *${task.title}* marcada como no realizada. Se notificó al administrador. Para dar un motivo usa: *comentar ${num} [motivo]*`;
+  }
+
   if (cmd === "posponer") {
     const tasks = await getPendingTasks(user.id);
     if (tasks.length === 0) return "No tienes tareas pendientes para posponer. ¡Excelente! 🎉";
@@ -797,6 +821,16 @@ async function handleCommand(
     const tasksStr = tasks || "Sin tareas pendientes";
     const eventsStr = events || "Sin eventos próximos";
     return `📊 *Resumen de ${user.name}*\n\n📋 *Tareas:*\n${tasksStr}\n\n🎪 *Eventos:*\n${eventsStr}\n\n📈 *Cumplimiento:*\n${compliance}`;
+  }
+
+  if (cmd === "ranking") {
+    const { getComplianceRanking } = await import("@/lib/smart-scheduler");
+    const data = await getComplianceRanking();
+    const lines = data.rankings.slice(0, 10).map((r, i) => {
+      const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+      return `${medal} *${r.name}* (${r.role})\n  ✅ ${r.completedTasks}/${r.totalTasks} tareas (${r.compliancePercent}%) | Accesos hoy: ${r.accessCount} | Score: ${r.score}`;
+    });
+    return `🏆 *Ranking de Cumplimiento*\n\n${lines.join("\n\n")}`;
   }
 
   if (cmd === "ayuda") {

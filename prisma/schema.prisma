@@ -184,6 +184,10 @@ model User {
   remindersCreated Reminder[]
   remindersAssigned Reminder[] @relation("ReminderAssignee")
   pushTokens        PushToken[]
+  createdGroups     Group[]       @relation("GroupCreator")
+  groupMemberships  GroupMember[]
+  createdAlerts     ScheduledAlert[] @relation("AlertCreator")
+  targetedAlerts    ScheduledAlert[] @relation("AlertTarget")
 }
 
 model Task {
@@ -450,4 +454,48 @@ model PushToken {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String   @default("")
+  createdById String
+  createdBy   User     @relation("GroupCreator", fields: [createdById], references: [id])
+  members     GroupMember[]
+  alerts      ScheduledAlert[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model GroupMember {
+  id      String @id @default(uuid())
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+}
+
+model ScheduledAlert {
+  id           String    @id @default(uuid())
+  title        String
+  message      String
+  type         String    @default("PERSONALIZADA")
+  scheduledAt  DateTime?
+  frequency    String?
+  dayOfWeek    String?
+  time         String?
+  groupId      String?
+  group        Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  targetUserId String?
+  targetUser   User?     @relation("AlertTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  createdById  String
+  createdBy    User      @relation("AlertCreator", fields: [createdById], references: [id])
+  isActive     Boolean   @default(true)
+  lastSentAt   DateTime?
+  sendCount    Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }

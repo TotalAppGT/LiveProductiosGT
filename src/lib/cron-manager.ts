@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { askAI } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
-import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders } from "@/lib/smart-scheduler";
+import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireScheduledAlerts } from "@/lib/smart-scheduler";
 import { carryOverUncompletedTasks } from "@/lib/task-utils";
 
 interface CronJob {
@@ -594,6 +594,7 @@ export function startCronManager(): void {
     try {
       await Promise.all(jobs.map((job) => runJobIfScheduled(job)));
       await fireDueReminders(); // Check reminders every 5 minutes
+      await fireScheduledAlerts(); // Fire scheduled group/individual alerts
     } catch (error) {
       console.error("[Cron] Error en ciclo de verificación:", error);
     }

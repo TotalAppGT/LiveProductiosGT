@@ -1023,3 +1023,114 @@ export async function fireDueReminders(): Promise<{ fired: number; advanced: num
   return { fired, advanced };
 }
 
+export async function getComplianceRanking(): Promise<{
+  rankings: Array<{
+    name: string;
+    role: string;
+    completedTasks: number;
+    totalTasks: number;
+    compliancePercent: number;
+    accessCount: number;
+    score: number;
+  }>;
+  totalUsers: number;
+}> {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const users = await prisma.user.findMany({
+    where: { active: true },
+    select: { id: true, name: true, role: true, whatsappNumber: true, phone: true },
+  });
+
+  const rankings = await Promise.all(users.map(async (user) => {
+    const [completedTasks, totalTasks, accessedToday] = await Promise.all([
+      prisma.task.count({ where: { assignedToId: user.id, status: "COMPLETADA", updatedAt: { gte: monthStart } } }),
+      prisma.task.count({ where: { assignedToId: user.id, createdAt: { gte: monthStart }, status: { not: "COMPLETADA" } } }),
+      prisma.activity.count({ where: { userId: user.id, createdAt: { gte: today } } }),
+    ]);
+
+    const compliancePercent = (completedTasks + totalTasks) > 0
+      ? Math.round((completedTasks / (completedTasks + totalTasks)) * 100)
+      : 0;
+    const accessScore = Math.min(accessedToday / 4, 1) * 100;
+    const score = Math.round((compliancePercent * 0.6) + (accessScore * 0.4));
+
+    return {
+      name: user.name,
+      role: user.role,
+      completedTasks,
+      totalTasks: completedTasks + totalTasks,
+      compliancePercent,
+      accessCount: accessedToday,
+      score,
+    };
+  }));
+
+  rankings.sort((a, b) => b.score - a.score);
+
+  return { rankings, totalUsers: users.length };
+}
+
+export async function fireScheduledAlerts(): Promise<{ sent: number }> {
+  let sent = 0;
+  try {
+    const now = new Date();
+    const currentDayStr = now.getDay().toString();
+    const currentTime = now.toTimeString().slice(0, 5);
+
+    const alerts = await prisma.$queryRaw<Array<{
+      id: string; title: string; message: string; groupId: string | null;
+      targetUserId: string | null; frequency: string | null; sendCount: number;
+    }>>`SELECT id, title, message, "groupId", "targetUserId", frequency, "sendCount"
+      FROM "ScheduledAlert"
+      WHERE "isActive" = true
+      AND (("scheduledAt" IS NOT NULL AND "scheduledAt" <= ${now} AND frequency IS NULL)
+        OR ("dayOfWeek" = ${currentDayStr} AND "time" = ${currentTime} AND "scheduledAt" IS NOT NULL))`;
+
+    for (const alert of alerts) {
+      const phones = new Set<string>();
+
+      if (alert.groupId) {
+        const members = await prisma.$queryRaw<Array<{ whatsappNumber: string | null; phone: string | null }>>`
+          SELECT u."whatsappNumber", u.phone FROM "GroupMember" gm
+          JOIN "User" u ON u.id = gm."userId"
+          WHERE gm."groupId" = ${alert.groupId}`;
+        for (const m of members) {
+          if (m.whatsappNumber || m.phone) phones.add(m.whatsappNumber || m.phone!);
+        }
+      }
+      if (alert.targetUserId) {
+        const target = await prisma.user.findUnique({
+          where: { id: alert.targetUserId },
+          select: { whatsappNumber: true, phone: true },
+        });
+        if (target) {
+          const p = target.whatsappNumber || target.phone;
+          if (p) phones.add(p);
+        }
+      }
+
+      for (const phone of phones) {
+        await sendMessage(phone, alert.message).catch(() => {});
+        sent++;
+      }
+
+      const nextFire = alert.frequency === "DIARIA"
+        ? new Date(now.getTime() + 86400000)
+        : alert.frequency === "SEMANAL"
+        ? new Date(now.getTime() + 604800000)
+        : null;
+
+      await prisma.scheduledAlert.update({
+        where: { id: alert.id },
+        data: { lastSentAt: now, sendCount: { increment: 1 }, scheduledAt: nextFire ?? undefined },
+      });
+    }
+  } catch (error) {
+    console.error("fireScheduledAlerts error:", error);
+  }
+  return { sent };
+}
+
