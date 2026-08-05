@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { askAI } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders } from "@/lib/smart-scheduler";
+import { carryOverUncompletedTasks } from "@/lib/task-utils";
 
 interface CronJob {
   name: string;
@@ -72,7 +73,15 @@ async function getAdminUsers() {
 }
 
 async function morningBriefing() {
-  console.log("[Cron] Ejecutando morning briefing (7:00 AM)");
+  console.log("[Cron] Ejecutando morning briefing (8:00 AM)");
+
+  try {
+    const carried = await carryOverUncompletedTasks();
+    console.log(`[Cron] Tareas arrastradas del día anterior: ${carried}`);
+  } catch (err) {
+    console.error("[Cron] Error cargando tareas de ayer:", err);
+  }
+
   const users = await getActiveUsersWithWhatsApp();
 
   for (const user of users) {

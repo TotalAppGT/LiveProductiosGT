@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { handleWhatsAppMessage } from "@/lib/ai-brain";
+import { handleWhatsAppMessage, askAI } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 
@@ -89,28 +89,202 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function formatTasksForUser(userId: string) {
-  const tasks = await prisma.task.findMany({
-    where: {
-      assignedToId: userId,
-      status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
-    },
+function esGTDate(date: Date): string {
+  return date.toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" });
+}
+
+async function formatTasksForUser(userId: string, period?: string) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  const endOfToday = new Date(today); endOfToday.setHours(23,59,59);
+
+  const dayOfWeek = today.getDay();
+  const monday = new Date(today); monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23,59,59);
+
+  const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7);
+  const nextSunday = new Date(sunday); nextSunday.setDate(sunday.getDate() + 7);
+
+  const thirdMonday = new Date(monday); thirdMonday.setDate(monday.getDate() + 14);
+  const thirdSunday = new Date(sunday); thirdSunday.setDate(sunday.getDate() + 14);
+
+  const allTasks = await prisma.task.findMany({
+    where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
-    take: 15,
+    take: 30,
   });
-  console.log(`[Tasks] userId=${userId}, found=${tasks.length}`);
-  return tasks
-    .map(
-      (t, i) => {
-        const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪";
-        const statusText = t.status === "REPROGRAMADA" 
-          ? `Reprogramada → ${t.rescheduledTo ? new Date(t.rescheduledTo).toLocaleDateString("es-GT") : new Date(t.dueDate!).toLocaleDateString("es-GT")}`
-          : t.status === "EN_PROCESO" ? "En proceso" : "Pendiente";
-        const reason = t.status === "REPROGRAMADA" && t.postponeReason ? `\n   _Razón: ${t.postponeReason}_` : "";
-        return `${i + 1}. ${prio} *${t.title}* - ${statusText}${t.dueDate && t.status !== "REPROGRAMADA" ? ` - Vence: ${new Date(t.dueDate).toLocaleDateString("es-GT")}` : ""}${reason}`;
-      }
-    )
-    .join("\n");
+
+  const todayTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= today && new Date(t.dueDate) <= endOfToday);
+  const thisWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) > endOfToday && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= sunday);
+  const nextWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= nextMonday && new Date(t.dueDate) <= nextSunday);
+  const thirdWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= thirdMonday && new Date(t.dueDate) <= thirdSunday);
+
+  const fixedTasks = allTasks.filter(t => t.type === "FIJA");
+  const dayNames = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+  const fixedByDay: Record<string, typeof allTasks> = {};
+  dayNames.forEach(d => fixedByDay[d] = []);
+  fixedTasks.forEach(t => {
+    if (t.dayOfWeek) {
+      if (!fixedByDay[t.dayOfWeek]) fixedByDay[t.dayOfWeek] = [];
+      fixedByDay[t.dayOfWeek].push(t);
+    }
+  });
+
+  let output = "";
+
+  if (period === "hoy") {
+    if (todayTasks.length === 0) return "✅ No tienes tareas para hoy.";
+    output = `📋 *HOY - ${today.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})}*\n\n`;
+    output += formatTaskList(todayTasks);
+    return output;
+  }
+
+  if (period === "semana") {
+    output = `📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT")} - ${sunday.toLocaleDateString("es-GT")})\n\n`;
+    if (thisWeekTasks.length > 0) output += formatTaskList(thisWeekTasks);
+    if (todayTasks.length > 0) output += `\n📌 *Hoy:*\n${formatTaskList(todayTasks)}`;
+    return output || "No hay tareas esta semana.";
+  }
+
+  if (period === "semana2") {
+    output = `📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT")} - ${nextSunday.toLocaleDateString("es-GT")})\n\n`;
+    if (nextWeekTasks.length > 0) output += formatTaskList(nextWeekTasks);
+    return output || "No hay tareas para la próxima semana.";
+  }
+
+  output = `📋 *Tareas - ${today.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})}*\n\n`;
+
+  if (todayTasks.length > 0) {
+    output += `📌 *HOY (${todayTasks.length})*\n${formatTaskList(todayTasks)}\n\n`;
+  }
+  if (thisWeekTasks.length > 0) {
+    output += `📅 *ESTA SEMANA (${thisWeekTasks.length})*\n${formatTaskList(thisWeekTasks)}\n\n`;
+  }
+  if (nextWeekTasks.length > 0) {
+    output += `📅 *PRÓXIMA SEMANA (${nextWeekTasks.length})*\n${formatTaskList(nextWeekTasks)}\n\n`;
+  }
+  if (thirdWeekTasks.length > 0) {
+    output += `📅 *3RA SEMANA (${thirdWeekTasks.length})*\n${formatTaskList(thirdWeekTasks)}\n\n`;
+  }
+
+  for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
+    if (fixedByDay[day] && fixedByDay[day].length > 0) {
+      output += `📌 *ACTIVIDADES FIJAS ${day.toUpperCase()} (${fixedByDay[day].length})*\n${formatTaskList(fixedByDay[day])}\n\n`;
+    }
+  }
+
+  output += `\n⚡ Comandos: \`tareas hoy\` | \`tareas semana\` | \`tareas semana 2\` | \`fijas lunes\` | \`ayuda\``;
+  return output;
+}
+
+function formatTaskList(tasks: any[]): string {
+  return tasks.map((t) => {
+    const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪";
+    const status = t.status === "REPROGRAMADA" ? "⏰ Reprogramada" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌 Pendiente";
+    const due = t.dueDate ? `${new Date(t.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric"})}` : "";
+    return `  ${prio} *${t.title}* - ${status}${due ? ` → ${due}` : ""}`;
+  }).join("\n");
+}
+
+async function parseReminderFromText(text: string, user: { id: string; name: string }) {
+  try {
+    const response = await askAI([{
+      role: "user",
+      content: `Extrae de este texto en español un recordatorio. Devuelve SOLO JSON:
+{
+  "title": "título corto de la tarea/recordatorio",
+  "description": "descripción o null",
+  "remindAt": "fecha ISO 8601 en timezone America/Guatemala",
+  "assignToName": "nombre de persona a asignar o null"
+}
+
+Texto: "${text}"
+Usuario actual: ${user.name}
+
+Fecha actual en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}
+Reglas:
+- "mañana" = día siguiente
+- "pasado mañana" = en 2 días
+- "el lunes" = próximo lunes
+- Si no se especifica hora, usa 9:00 AM
+- Si menciona un nombre de persona (Diana, Jorge, Abel, Selvin, Exequiel, Javier, Brenda, Daniel), asígnalo
+
+Responde SOLO el JSON, sin markdown.`
+    }], { responseFormat: "json", temperature: 0.1, maxTokens: 300 });
+
+    const json = JSON.parse(response.replace(/```json|```/g, "").trim());
+    const remindAt = new Date(json.remindAt);
+
+    let assignToId: string | undefined;
+    if (json.assignToName) {
+      const target = await prisma.user.findFirst({
+        where: { name: { contains: json.assignToName, mode: "insensitive" }, active: true },
+      });
+      assignToId = target?.id;
+    }
+
+    return { title: json.title, description: json.description, remindAt, assignToId };
+  } catch {
+    return null;
+  }
+}
+
+async function parseTaskCreation(text: string, user: { id: string; name: string }) {
+  try {
+    const response = await askAI([{
+      role: "user",
+      content: `Extrae de este texto en español los datos para crear una tarea. Devuelve SOLO JSON:
+{
+  "title": "título corto de la tarea",
+  "description": "descripción o null",
+  "assignToName": "nombre de la persona asignada o null",
+  "dueDate": "fecha ISO 8601 en timezone America/Guatemala o null",
+  "priority": "BAJA|MEDIA|ALTA|URGENTE (default MEDIA)",
+  "isFixed": true or false,
+  "frequency": "DIARIA|SEMANAL|MENSUAL o null",
+  "dayOfWeek": "LUNES|MARTES|MIERCOLES|JUEVES|VIERNES|SABADO|DOMINGO o null"
+}
+
+Texto: "${text}"
+Usuario actual: ${user.name}
+
+Fecha actual en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}
+
+Reglas:
+- "mañana" = día siguiente
+- "pasado mañana" = en 2 días
+- "el viernes" = próximo viernes
+- Si no se especifica hora, usa 9:00 AM
+- Si menciona un nombre de persona (Diana, Jorge, Abel, Selvin, Exequiel, Javier, Brenda, Daniel), asígnalo
+- Si dice "todos los lunes" o "cada martes", isFixed=true con frequency=SEMANAL
+- Solo es FIJA si explícitamente dice "fija" o "recurrente" o "todos los" o "cada"
+
+Responde SOLO el JSON, sin markdown.`
+    }], { responseFormat: "json", temperature: 0.1, maxTokens: 400 });
+
+    const json = JSON.parse(response.replace(/```json|```/g, "").trim());
+
+    let assignToId: string | undefined;
+    if (json.assignToName) {
+      const target = await prisma.user.findFirst({
+        where: { name: { contains: json.assignToName, mode: "insensitive" }, active: true },
+      });
+      assignToId = target?.id;
+    }
+
+    return {
+      title: json.title,
+      description: json.description,
+      assignToId,
+      dueDate: json.dueDate ? new Date(json.dueDate) : undefined,
+      priority: json.priority || "MEDIA",
+      isFixed: json.isFixed || false,
+      frequency: json.frequency,
+      dayOfWeek: json.dayOfWeek,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function formatEventsForUser(userId: string) {
@@ -271,16 +445,91 @@ async function handleCommand(
     return `👥 *Equipo Live Productions*\n\n${list}\n\n_Para transferir una tarea: *transferir 2 a [nombre]*_`;
   }
 
-  if (cmd === "tareas" || cmd === "mis tareas" || cmd.includes("tarea") || cmd.includes("pendiente")) {
+  if (cmd === "tareas hoy" || cmd === "hoy") {
+    const tasks = await formatTasksForUser(user.id, "hoy");
+    return tasks;
+  }
+  if (cmd === "tareas semana" || cmd === "semana") {
+    const tasks = await formatTasksForUser(user.id, "semana");
+    return tasks;
+  }
+  if (cmd === "tareas semana 2" || cmd === "semana 2") {
+    const tasks = await formatTasksForUser(user.id, "semana2");
+    return tasks;
+  }
+
+  const fixedDayMatch = cmd.match(/^fijas?\s+(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)$/i);
+  if (fixedDayMatch) {
+    const dayMap: Record<string, string> = {
+      "lunes":"LUNES","martes":"MARTES","miércoles":"MIERCOLES","miercoles":"MIERCOLES",
+      "jueves":"JUEVES","viernes":"VIERNES","sábado":"SABADO","sabado":"SABADO","domingo":"DOMINGO"
+    };
+    const day = dayMap[fixedDayMatch[1].toLowerCase()];
+    const tasks = await prisma.task.findMany({
+      where: { assignedToId: user.id, type: "FIJA", dayOfWeek: day as any, status: { in: ["PENDIENTE", "EN_PROCESO"] } },
+      orderBy: { priority: "desc" },
+      take: 15,
+    });
+    if (tasks.length === 0) return `No tienes actividades fijas para ${day}.`;
+    return `📌 *Actividades Fijas ${day}*\n\n${formatTaskList(tasks)}`;
+  }
+
+  if (cmd === "tareas" || cmd === "mis tareas" || (cmd.includes("tarea") && !cmd.startsWith("tareas hoy") && !cmd.startsWith("tareas semana") && !cmd.includes("crea") && !cmd.includes("crear") && !cmd.includes("nueva"))) {
     const tasks = await formatTasksForUser(user.id);
     if (!tasks) return `Hola ${user.name}, no tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
-    return `📋 *Tareas Pendientes - ${user.name}*\n\n${tasks}\n\n⚡ *Acciones rápidas:*\n• \`completar 3\` - Marcar tarea #3 como hecha\n• \`posponer 5 mañana razón\` - Posponer #5\n• \`comentar 4 texto\` - Agregar comentario\n• \`transferir 2 a Diana\` - Pasar tarea a otro\n• \`equipo\` - Ver compañeros disponibles`;
+    return tasks;
   }
 
   if (cmd === "pendientes") {
     const tasks = await formatTasksForUser(user.id);
     if (!tasks) return `${user.name}, no tienes tareas pendientes. ¡Todo al día! ✅`;
-    return `📋 *Tareas Pendientes - ${user.name}*\n\n${tasks}`;
+    return tasks;
+  }
+
+  if (cmd.startsWith("recuerda") || cmd.startsWith("recordar") || cmd.startsWith("recordatorio")) {
+    const parsed = await parseReminderFromText(cmd, user);
+    if (!parsed) return "No pude entender la fecha/hora. Ejemplo: *recuérdame llamar a Juan mañana a las 3pm*";
+
+    const reminder = await prisma.reminder.create({
+      data: {
+        title: parsed.title,
+        description: parsed.description || "",
+        remindAt: parsed.remindAt,
+        createdById: user.id,
+        assignedToId: parsed.assignToId || user.id,
+      },
+    });
+
+    const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
+    const targetName = targetUser ? targetUser.name : "ti";
+
+    return `⏰ Recordatorio creado para ${targetName}: *${parsed.title}*\n📅 ${parsed.remindAt.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})} a las ${parsed.remindAt.toLocaleTimeString("es-GT", {hour:"2-digit",minute:"2-digit"})}`;
+  }
+
+  if (cmd.startsWith("crea tarea") || cmd.startsWith("crear tarea") || cmd.startsWith("nueva tarea")) {
+    const parsed = await parseTaskCreation(cmd, user);
+    if (!parsed) return "No entendí. Ejemplo: *crea tarea para Diana revisar cotizaciones mañana 10am*";
+
+    const task = await prisma.task.create({
+      data: {
+        title: parsed.title,
+        description: parsed.description || "",
+        assignedToId: parsed.assignToId || user.id,
+        assignedById: user.id,
+        dueDate: parsed.dueDate || new Date(),
+        priority: parsed.priority || "MEDIA",
+        category: "OTRO",
+        type: parsed.isFixed ? "FIJA" : "DINAMICA",
+        frequency: parsed.isFixed ? (parsed.frequency || "DIARIA") : "DIARIA",
+        dayOfWeek: parsed.dayOfWeek,
+        status: "PENDIENTE",
+      },
+    });
+
+    const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
+    const targetName = targetUser ? targetUser.name : user.name;
+
+    return `✅ Tarea creada para *${targetName}*: "${parsed.title}"\n📅 ${task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"}) : "Sin fecha"}`;
   }
 
   if (cmd === "eventos") {
@@ -340,7 +589,36 @@ async function handleCommand(
   }
 
   if (cmd === "ayuda") {
-    return `🤖 *LUNA - Asistente Live Productions*\n\n📊 *Prioridades:*\n🔴 URGENTE | 🟠 ALTA | 🔵 MEDIA | ⚪ BAJA\n\n*Comandos:*\n• *tareas* - Ver tus tareas pendientes\n• *completar 3* - Completar tarea #3\n• *posponer 3 razón* - Posponer tarea #3\n• *comentar 3 texto* - Agregar comentario\n• *transferir 3 a Diana* - Pasar tarea a otro\n• *equipo* - Ver compañeros\n• *eventos* - Ver tus próximos eventos\n• *evento [nombre]* - Buscar un evento\n• *resumen* - Resumen completo\n• *ayuda* - Mostrar esta ayuda\n\nTambién puedes escribir cualquier pregunta y LUNA te responderá con IA.\n\n📞 +502 3090-3172\n🌐 liveproductionsgt.com\n\nAccede al sistema: https://liveproductiosgt-production.up.railway.app`;
+    return `🤖 *LUNA - Asistente Live Productions*
+
+📊 *Prioridades:* 🔴 URGENTE | 🟠 ALTA | 🔵 MEDIA | ⚪ BAJA
+
+📋 *Ver tareas:*
+tareas - Vista general
+tareas hoy - Solo las de hoy
+tareas semana - Esta semana
+tareas semana 2 - Próxima semana
+fijas lunes - Actividades fijas del lunes
+
+⚡ *Acciones:*
+completar 3 - Marcar tarea #3 como hecha
+posponer 3 razón - Posponer con motivo
+comentar 3 texto - Agregar comentario
+transferir 3 a Diana - Pasar tarea a otro
+
+➕ *Crear:*
+crea tarea revisar bodega mañana 10am
+crea tarea para Diana cotizar evento viernes
+
+⏰ *Recordatorios:*
+recuérdame llamar cliente mañana 3pm
+recuérdame revisar inventario el lunes 9am
+
+👥 equipo - Ver compañeros
+🎪 eventos - Próximos eventos
+📊 resumen - Tu resumen
+
+🔗 sistema: liveproductiosgt.up.railway.app`;
   }
 
   return null;

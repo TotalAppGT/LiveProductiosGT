@@ -181,6 +181,8 @@ model User {
   uploadedFiles    FileAttachment[]
   incomeRecords    IncomeRecord[]     @relation("IncomeRecorder")
   myIncome         IncomeRecord[]
+  remindersCreated Reminder[]
+  remindersAssigned Reminder[] @relation("ReminderAssignee")
 }
 
 model Task {
@@ -404,6 +406,22 @@ model FileAttachment {
   inventoryId  String?
   inventory    InventoryItem? @relation(fields: [inventoryId], references: [id])
   createdAt    DateTime @default(now())
+}
+
+model Reminder {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  remindAt     DateTime
+  isCompleted  Boolean  @default(false)
+  completedAt  DateTime?
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id])
+  assignedToId String
+  assignedTo   User     @relation("ReminderAssignee", fields: [assignedToId], references: [id])
+  notified     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model IncomeRecord {
