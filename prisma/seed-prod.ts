@@ -443,6 +443,12 @@ async function main() {
   const validStatuses = ["PENDIENTE", "EN_PROCESO"];
 
   for (const task of allTasks) {
+    // Limit: max 40 pending tasks per user to prevent overflow
+    const pendingCount = await prisma.task.count({
+      where: { assignedToId: task.assignedToId, status: { in: ["PENDIENTE", "EN_PROCESO"] } },
+    });
+    if (pendingCount >= 40) continue;
+
     const exists = await prisma.task.findFirst({
       where: {
         title: task.title,
