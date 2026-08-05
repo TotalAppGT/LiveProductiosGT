@@ -353,12 +353,13 @@ async function formatTasksForUser(userId: string, period?: string) {
   return output;
 }
 
-function formatTaskList(tasks: any[]): string {
-  return tasks.map((t) => {
-    const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪";
-    const status = t.status === "REPROGRAMADA" ? "⏰ Reprogramada" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌 Pendiente";
+function formatTaskList(tasks: any[], startNum: number = 1): string {
+  return tasks.map((t, i) => {
+    const num = startNum + i;
+    const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
+    const status = t.status === "COMPLETADA" ? "✅" : t.status === "REPROGRAMADA" ? "🟣 Pospuesta" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌";
     const due = t.dueDate ? `${new Date(t.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric"})}` : "";
-    return `  ${prio} *${t.title}* - ${status}${due ? ` → ${due}` : ""}`;
+    return `${num}. ${prio} *${t.title}* ${status}${due ? ` ${due}` : ""}`;
   }).join("\n");
 }
 
@@ -564,9 +565,10 @@ async function handleCommand(
 ): Promise<string | null> {
   const cmd = command.toLowerCase().trim();
 
-  if (cmd.startsWith("completar ")) {
-    const num = parseInt(cmd.replace("completar ", "").trim());
-    if (isNaN(num)) return "¿Cuál tarea? Ejemplo: *completar 3*";
+  if (cmd.startsWith("completar ") || cmd.startsWith("hecho ") || cmd.startsWith("completado ")) {
+    const numStr = cmd.replace(/^(completar|hecho|completado)\s+/i, "").trim();
+    const num = parseInt(numStr);
+    if (isNaN(num)) return "¿Cuál tarea? Ejemplo: *hecho 3* o *completar 5*";
     const tasks = await getPendingTasks(user.id);
     if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas. Elige un número del 1 al ${tasks.length}.`;
     const task = tasks[num - 1];
@@ -798,37 +800,41 @@ async function handleCommand(
   }
 
   if (cmd === "ayuda") {
-    return `🤖 *LUNA - Asistente Live Productions*
+    return `🤖 *LUNA - Tu Controladora Administrativa*
 
 📊 *Ver tareas:*
-tareas → Vista completa organizada
+tareas → Vista completa con números
 tareas hoy → Solo las de hoy
 tareas semana → Esta semana
 tareas semana 2 → Próxima semana
 fijas lunes → Fijas de un día
 
-⚡ *Acciones rápidas:*
-completar 3 → Marcar como hecho ✅
-posponer 3 → Te pregunto fecha y razón
-comentar 3 texto → Agregar comentario
-transferir 3 a Diana → Pasar a otro
+⚡ *Acciones rápidas (usa el # de la tarea):*
+hecho 3 → ✅ Completar
+completar 5 → ✅ También
+completado 2 → ✅ O así
+posponer 3 → 🟣 Pregunta fecha y razón
+comentar 3 texto → 💬 Agregar comentario
+transferir 3 a Diana → 📤 Pasar a otro
 
 ➕ *Crear tareas:*
-crea tarea → Te guío paso a paso
 crea tarea [título] mañana 10am → Directo
 crea tarea para Diana [tarea] viernes → Para otro
 
 ⏰ *Recordatorios:*
 recuérdame [tarea] mañana 3pm
-recuérdame [tarea] el lunes 9am
+crea un recordatorio [tarea] viernes 10am
 
-👥 equipo → Ver compañeros
-🎪 eventos → Próximos eventos
-📊 resumen → Tu resumen
+📈 *Reportes (dueños/gerentes):*
+resumen → Mis tareas + eventos + cumplimiento
+cómo va el equipo → Visión general
+quién no ha entrado → Inactivos hoy
+
+🎨 *Colores:*
+🟢 Baja | 🟡 Media | 🔴 Alta/Urgente | 🟣 Pospuesta | ✅ Hecha
 
 📞 *Contacto:* +502 3090-3172
-🌐 liveproductionsgt.com
-🔗 sistema: liveproductiosgt-production.up.railway.app`;
+🌐 liveproductionsgt.com`;
   }
 
   return null;
@@ -971,7 +977,7 @@ async function handleConversationStep(
 
 function isKnownCommand(text: string): boolean {
   const knownCommands = [
-    "tareas", "hoy", "semana", "completar", "posponer", "comentar",
+    "tareas", "hoy", "semana", "completar", "hecho", "completado", "posponer", "comentar",
     "transferir", "crea tarea", "crear tarea", "nueva tarea",
     "recuerda", "recordar", "recordatorio", "evento", "eventos",
     "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",
