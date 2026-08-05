@@ -942,6 +942,7 @@ export function getSmartCronSchedule(): Record<string, string> {
     endOfDayAlerts: "0 17 * * *",
     eveningAccessCheck: "0 18 * * *",
   };
+}
 
 export async function fireDueReminders(): Promise<{ fired: number }> {
   let fired = 0;
@@ -993,4 +994,3 @@ export async function fireDueReminders(): Promise<{ fired: number }> {
   return { fired };
 }
 
-}
