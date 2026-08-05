@@ -668,7 +668,9 @@ async function handleCommand(
     return tasks;
   }
 
-  if (cmd.startsWith("recuerda") || cmd.startsWith("recordar") || cmd.startsWith("recordatorio")) {
+  if (cmd.startsWith("recuerda") || cmd.startsWith("recordar") || cmd.startsWith("recordatorio") ||
+      cmd.includes("crea recordatorio") || cmd.includes("creame recordatorio") || cmd.includes("crear recordatorio") ||
+      cmd.includes("agenda recordatorio") || cmd.includes("programa recordatorio") || cmd.includes("pon recordatorio")) {
     const parsed = await parseReminderFromText(cmd, user);
     if (!parsed) return "No pude entender la fecha/hora. Ejemplo: *recuérdame llamar a Juan mañana a las 3pm*";
 
