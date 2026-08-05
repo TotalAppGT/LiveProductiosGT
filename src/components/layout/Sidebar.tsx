@@ -97,12 +97,6 @@ const navItems: NavItem[] = [
     icon: Eye,
   },
   {
-    label: "Bitácora",
-    href: "/bitacora",
-    icon: BookOpen,
-    roles: ["DUENO", "ADMIN", "JEFE"],
-  },
-  {
     label: "Admin",
     href: "/admin",
     icon: Shield,
