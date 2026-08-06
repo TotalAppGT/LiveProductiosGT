@@ -523,12 +523,17 @@ export async function checkDailyAccessRequirement(): Promise<{
     let alertsSent = 0;
     let belowThreshold = 0;
     let inactiveToday = 0;
+    const inactiveList: string[] = [];
+    const lowAccessList: string[] = [];
+    const goodList: string[] = [];
 
     for (const user of allUsers) {
       const count = accessCounts.get(user.id) || 0;
 
       if (count === 0) {
         inactiveToday++;
+        inactiveList.push(user.name);
+        // Each inactive user gets their personal alert
         const to = user.whatsappNumber || user.phone;
         if (to) {
           await sendMessage(
@@ -537,7 +542,6 @@ export async function checkDailyAccessRequirement(): Promise<{
           ).catch(() => {});
           alertsSent++;
         }
-
         await logActivity(
           "DAILY_ACCESS_CHECK",
           "USER",
@@ -545,28 +549,17 @@ export async function checkDailyAccessRequirement(): Promise<{
           `Usuario ${user.name} marcado como INACTIVO_HOY (0 accesos)`,
           "system"
         );
-
-        const admins = await getAdmins();
-        for (const admin of admins) {
-          const adminTo = admin.whatsappNumber || admin.phone;
-          if (adminTo) {
-            await sendMessage(
-              adminTo,
-              `🚨 *INACTIVO_HOY: ${user.name}*\n\nEl usuario no ha ingresado al sistema en todo el día. Se requiere acción del dueño.`
-            ).catch(() => {});
-          }
-        }
       } else if (count < minDaily) {
         belowThreshold++;
+        lowAccessList.push(`${user.name} (${count}/${minDaily})`);
         const to = user.whatsappNumber || user.phone;
         if (to) {
           await sendMessage(
             to,
-            `⚠️ *Accesos Insuficientes*\n\nSolo has ingresado ${count} veces hoy. Se requieren al menos ${minDaily} accesos diarios para seguimiento de tareas.`
+            `⚠️ *Accesos Insuficientes*\n\nSolo has ingresado ${count} veces hoy. Se requieren al menos ${minDaily} accesos diarios. Ingresa más seguido para mantener el control de tus tareas.`
           ).catch(() => {});
           alertsSent++;
         }
-
         await logActivity(
           "DAILY_ACCESS_CHECK",
           "USER",
@@ -574,6 +567,43 @@ export async function checkDailyAccessRequirement(): Promise<{
           `Usuario ${user.name} con solo ${count}/${minDaily} accesos hoy`,
           "system"
         );
+      } else {
+        goodList.push(user.name);
+      }
+    }
+
+    // También obtener tareas pendientes para el reporte
+    const overdueTasksCount = await prisma.task.count({
+      where: { status: { in: ["PENDIENTE", "EN_PROCESO"] }, dueDate: { lt: new Date() } },
+    });
+    const pendingTodayCount = await prisma.task.count({
+      where: { status: { in: ["PENDIENTE", "EN_PROCESO"] }, dueDate: { gte: today, lte: new Date() } },
+    });
+
+    // Send ONE consolidated report to all admins/dueños
+    const admins = await getAdmins();
+    if (admins.length > 0 && (inactiveToday > 0 || belowThreshold > 0 || goodList.length > 0)) {
+      const dateStr = new Date().toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" });
+      let adminMsg = `📊 *Reporte Diario - ${dateStr}*\n\n`;
+      adminMsg += `👥 *Total usuarios:* ${allUsers.length}\n`;
+      if (overdueTasksCount > 0) adminMsg += `⏰ *Tareas vencidas:* ${overdueTasksCount}\n`;
+      if (pendingTodayCount > 0) adminMsg += `📋 *Pendientes hoy:* ${pendingTodayCount}\n`;
+      adminMsg += `\n`;
+      if (inactiveList.length > 0) {
+        adminMsg += `🚫 *Sin acceso hoy (${inactiveList.length}):*\n${inactiveList.map(n => `• ${n}`).join("\n")}\n\n`;
+      }
+      if (lowAccessList.length > 0) {
+        adminMsg += `⚠️ *Accesos insuficientes (${lowAccessList.length}):*\n${lowAccessList.map(n => `• ${n}`).join("\n")}\n\n`;
+      }
+      if (goodList.length > 0) {
+        adminMsg += `✅ *Al día (${goodList.length}):* ${goodList.join(", ")}\n\n`;
+      }
+      adminMsg += `🔔 Mínimo: ${minDaily} accesos/persona/día. Recuerda revisar tareas y dar seguimiento al equipo.`;
+      for (const admin of admins) {
+        const adminTo = admin.whatsappNumber || admin.phone;
+        if (adminTo) {
+          await sendMessage(adminTo, adminMsg).catch(() => {});
+        }
       }
     }
 

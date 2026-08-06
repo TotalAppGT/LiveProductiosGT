@@ -447,16 +447,6 @@ async function afternoonAccessCheck() {
   try {
     const result = await checkDailyAccessRequirement();
     console.log(`[Cron] Chequeo de accesos: ${result.usersChecked} usuarios, ${result.belowThreshold} bajo umbral, ${result.inactiveToday} inactivos`);
-
-    const admins = await getAdminUsers();
-    for (const admin of admins) {
-      const to = admin.whatsappNumber || admin.phone;
-      if (to) {
-        const msg = `🕒 *Chequeo de Accesos - 4:00 PM*\n\n👥 Usuarios revisados: ${result.usersChecked}\n⚠️ Bajo el umbral: ${result.belowThreshold}\n🚫 Sin accesos hoy: ${result.inactiveToday}\n\nAún hay tiempo de cumplir con el mínimo de accesos diarios.`;
-        await sendMessage(to, msg).catch(() => {});
-      }
-    }
-
     await logActivity("system", "CRON_AFTERNOON_ACCESS", `Chequeo de accesos: ${result.inactiveToday} inactivos, ${result.belowThreshold} bajo umbral`);
   } catch (error) {
     console.error("[Cron] Error afternoonAccessCheck:", error);
