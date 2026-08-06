@@ -22,6 +22,7 @@ import {
   Activity,
   BookOpen,
   Eye,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -95,6 +96,12 @@ const navItems: NavItem[] = [
     label: "Seguimiento",
     href: "/seguimiento",
     icon: Eye,
+  },
+  {
+    label: "Notificaciones",
+    href: "/notificaciones",
+    icon: Bell,
+    roles: ["DUENO", "ADMIN", "JEFE"],
   },
   {
     label: "Admin",
