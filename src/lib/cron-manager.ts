@@ -474,21 +474,29 @@ async function eveningAccessCheck() {
 }
 
 async function endOfDayTaskCheck() {
-  console.log("[Cron] Ejecutando alertas de fin de día (5:00 PM)");
+  console.log("[Cron] Ejecutando cierre de jornada (5:00 PM)");
   try {
-    const result = await sendEndOfDayAlerts();
-    console.log(`[Cron] Fin de día: ${result.usersWithPending} usuarios con pendientes, ${result.tasksRescheduled} tareas reprogramadas`);
+    const [endResult, today] = await Promise.all([
+      sendEndOfDayAlerts(),
+      Promise.resolve(new Date()),
+    ]);
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    console.log(`[Cron] Fin de día: ${endResult.usersWithPending} usuarios con pendientes, ${endResult.tasksRescheduled} tareas reprogramadas`);
+
+    const [completedToday, pendingCount] = await Promise.all([
+      prisma.task.count({ where: { status: "COMPLETADA", updatedAt: { gte: startOfDay } } }),
+      prisma.task.count({ where: { status: { in: ["PENDIENTE", "EN_PROCESO"] } } }),
+    ]);
+
+    const msg = `🌙 *Cierre de Jornada - 5:00 PM*\n\n✅ Completadas hoy: ${completedToday}\n📋 Pendientes: ${pendingCount}\n🔄 Reprogramadas: ${endResult.tasksRescheduled}\n📋 Usuarios con pendientes: ${endResult.usersWithPending}\n\nLas tareas no completadas fueron reprogramadas para mañana automáticamente.`;
 
     const admins = await getAdminUsers();
     for (const admin of admins) {
       const to = admin.whatsappNumber || admin.phone;
-      if (to) {
-        const msg = `🌙 *Cierre de Tareas - 5:00 PM*\n\n📋 Usuarios con pendientes: ${result.usersWithPending}\n🔄 Tareas reprogramadas para mañana: ${result.tasksRescheduled}\n\nLas tareas no completadas fueron reprogramadas automáticamente.`;
-        await sendMessage(to, msg).catch(() => {});
-      }
+      if (to) await sendMessage(to, msg).catch(() => {});
     }
 
-    await logActivity("system", "CRON_END_OF_DAY", `${result.tasksRescheduled} tareas reprogramadas al final del día`);
+    await logActivity("system", "CRON_END_OF_DAY", `${endResult.tasksRescheduled} tareas reprogramadas al final del día`);
   } catch (error) {
     console.error("[Cron] Error endOfDayTaskCheck:", error);
   }
@@ -511,7 +519,6 @@ const jobs: CronJob[] = [
   { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck },
   { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck },
   { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck },
-  { name: "eveningRecap", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: eveningRecap },
   { name: "checkOverdueTasks", schedule: { hour: 0, minute: 0 }, timezone: "America/Guatemala", handler: checkOverdueTasks },
   { name: "bihourly10", schedule: { hour: 10, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(10) },
   { name: "bihourly12", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(12) },
@@ -524,14 +531,16 @@ let initialized = false;
 
 async function shouldRunJob(job: CronJob): Promise<boolean> {
   const now = getGuatemalaTime();
-  const key = `cron:${job.name}:${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${job.schedule.hour}`;
+  const key = `cron:${job.name}:${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}-${job.schedule.hour}`;
   try {
-    const existing = await prisma.systemConfig.findUnique({ where: { key } });
-    if (existing) return false;
-    await prisma.systemConfig.create({
-      data: { key, value: new Date().toISOString(), description: `Last run of ${job.name}` },
-    });
-    return true;
+    // Atomic insert: only one instance wins the race
+    const result = await prisma.$executeRawUnsafe(
+      `INSERT INTO "SystemConfig" (id, key, value, description, "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, NOW())
+       ON CONFLICT (key) DO NOTHING`,
+      key, new Date().toISOString(), `Last run of ${job.name}`
+    );
+    return result === 1; // 1 = inserted (first instance), 0 = already existed (skip)
   } catch {
     return false;
   }
