@@ -533,15 +533,14 @@ async function shouldRunJob(job: CronJob): Promise<boolean> {
   const now = getGuatemalaTime();
   const key = `cron:${job.name}:${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}-${job.schedule.hour}`;
   try {
-    // Atomic insert: only one instance wins the race
-    const result = await prisma.$executeRawUnsafe(
-      `INSERT INTO "SystemConfig" (id, key, value, description, "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, NOW())
-       ON CONFLICT (key) DO NOTHING`,
-      key, new Date().toISOString(), `Last run of ${job.name}`
-    );
-    return result === 1; // 1 = inserted (first instance), 0 = already existed (skip)
-  } catch {
+    // Atomic: only one instance wins — P2002 = unique constraint violation
+    await prisma.systemConfig.create({
+      data: { key, value: new Date().toISOString(), description: `Last run of ${job.name}` },
+    });
+    return true;
+  } catch (e: any) {
+    if (e?.code === 'P2002') return false;
+    console.error(`[Cron] shouldRunJob error for ${job.name}:`, e);
     return false;
   }
 }
