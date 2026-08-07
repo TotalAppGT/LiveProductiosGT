@@ -552,10 +552,10 @@ async function listTasksForSelection(userId: string): Promise<string> {
   const tasks = await getPendingTasks(userId);
   if (tasks.length === 0) return "No tienes tareas pendientes.";
   return tasks.map((t, i) => {
-    const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : t.priority === "MEDIA" ? "🔵" : "⚪";
-    const status = t.status === "EN_PROCESO" ? " - En proceso" : " - Pendiente";
+    const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
+    const status = t.status === "REPROGRAMADA" ? "🟣 Pospuesta" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌";
     const due = t.dueDate ? ` → ${new Date(t.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric"})}` : "";
-    return `${i + 1}. ${prio} *${t.title}*${status}${due}`;
+    return `${i + 1}. ${prio} *${t.title}* ${status}${due}`;
   }).join("\n");
 }
 
