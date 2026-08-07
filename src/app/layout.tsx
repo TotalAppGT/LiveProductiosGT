@@ -11,9 +11,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Live Productions - Sistema de Gestión",
+  title: "Live Productions GT - Sistema de Gestión",
   description:
-    "Sistema inteligente de gestión para Live Productions. Administración de tareas, eventos, inventario, cobros y personal con inteligencia artificial integrada.",
+    "Sistema inteligente de gestión para Live Productions GT. Administración de tareas, eventos, inventario, cobros y personal con inteligencia artificial integrada.",
+  icons: { icon: "/logo.png", apple: "/logo.png" },
 };
 
 export default function RootLayout({
@@ -23,6 +24,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className={inter.variable}>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+      </head>
       <body className="font-sans antialiased">
         <AuthProvider>
           <PushTokenRegister />

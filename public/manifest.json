@@ -1,0 +1,16 @@
+{
+  "name": "Live Productions GT",
+  "short_name": "Live Pro GT",
+  "description": "Sistema inteligente de gestión para Live Productions GT",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a73e8",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png"
+    }
+  ]
+}

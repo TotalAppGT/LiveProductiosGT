@@ -155,8 +155,8 @@ function Sidebar() {
       >
         <div className="flex items-center h-16 px-4 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="flex-shrink-0 h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">LP</span>
+            <div className="flex-shrink-0 h-8 w-8 rounded-lg flex items-center justify-center overflow-hidden">
+              <img src="/logo.png" alt="Live Productions GT" className="h-8 w-8 object-contain" />
             </div>
             {!sidebarCollapsed && (
               <span className="text-lg font-bold text-gray-900 dark:text-white truncate">
