@@ -532,25 +532,25 @@ async function shouldRunJob(job: CronJob): Promise<boolean> {
   const now = getGuatemalaTime();
   const key = `cron:${job.name}:${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}-${job.schedule.hour}`;
   try {
-    // Atomic: only one instance wins — P2002 = unique constraint violation
     await prisma.systemConfig.create({
-      data: { key, value: new Date().toISOString(), description: `Last run of ${job.name}` },
+      data: { key, value: now.toISOString(), description: `Last run of ${job.name}` },
     });
     return true;
   } catch (e: any) {
     if (e?.code === 'P2002') return false;
-    console.error(`[Cron] shouldRunJob error for ${job.name}:`, e);
     return false;
   }
+}
+
+function isTimeMatch(date: Date, hour: number, minute: number): boolean {
+  // Allow up to 10-minute window to catch jobs that missed by a few minutes (e.g., deploy at 7:31 → catches 7:00 job at 7:35)
+  return date.getHours() === hour && date.getMinutes() >= minute && date.getMinutes() < minute + 10;
 }
 
 async function runJobIfScheduled(job: CronJob) {
   const state = getJobState(job.name);
 
-  if (state.isRunning) {
-    console.log(`[Cron] ${job.name}: ya está ejecutándose, saltando`);
-    return;
-  }
+  if (state.isRunning) return;
 
   const now = getGuatemalaTime();
   if (!isTimeMatch(now, job.schedule.hour, job.schedule.minute)) return;
@@ -587,20 +587,25 @@ export function startCronManager(): void {
   const overallState = getJobState("__overall__");
   overallState.lastRun = new Date();
 
-  cronInterval = setInterval(async () => {
+  async function runAllJobChecks() {
     try {
       await Promise.all(jobs.map((job) => runJobIfScheduled(job)));
-      await fireDueReminders(); // Check reminders every 5 minutes
-      await fireScheduledAlerts(); // Fire scheduled group/individual alerts
+      await fireDueReminders();
+      await fireScheduledAlerts();
     } catch (error) {
       console.error("[Cron] Error en ciclo de verificación:", error);
     }
-  }, 5 * 60 * 1000);
+  }
+
+  cronInterval = setInterval(runAllJobChecks, 5 * 60 * 1000);
 
   console.log(`[Cron] Cron manager iniciado con ${jobs.length} trabajos. Verificando cada 5 minutos.`);
 
   const now = getGuatemalaTime();
   console.log(`[Cron] Hora actual en Guatemala: ${now.toLocaleTimeString("es-GT")}`);
+
+  // Immediate first check — no 5-min wait on deploy
+  runAllJobChecks().catch((err) => console.error("[Cron] Error en verificación inicial:", err));
 }
 
 export function stopCronManager(): void {
