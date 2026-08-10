@@ -31,10 +31,6 @@ function getGuatemalaTime(): Date {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" }));
 }
 
-function isTimeMatch(date: Date, hour: number, minute: number): boolean {
-  return date.getHours() === hour && date.getMinutes() >= minute && date.getMinutes() < minute + 5;
-}
-
 async function logActivity(userId: string, action: string, details: string) {
   try {
     await prisma.activity.create({
