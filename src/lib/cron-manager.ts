@@ -105,7 +105,7 @@ async function morningBriefing() {
       const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
       const dayName = dayNames[now.getDay()];
 
-      const aiPrompt = `Genera un breve mensaje de buenos días para ${user.name} de Live Productions. Hoy es ${dayName}. Tiene ${tasks.length} tareas pendientes y ${events.length} eventos próximos. Sé motivador y menciona sus prioridades del día. Máximo 3 oraciones. Español de Guatemala.`;
+      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un saludo de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Tiene ${tasks.length} tareas pendientes, ${events.length} eventos próximos. Sé profesional, cálida y motivadora. Mencioná sus prioridades. Máximo 3 oraciones. Español de Guatemala. Presentate como LUNA.`;
 
       let aiMessage = "";
       try {
@@ -114,14 +114,14 @@ async function morningBriefing() {
           { temperature: 0.7, maxTokens: 250 }
         );
       } catch {
-        aiMessage = `¡Buenos días ${user.name}! Hoy tienes ${tasks.length} tareas pendientes. ¡A darle con todo! 💪`;
+        aiMessage = `¡Buenos días ${user.name}! Soy LUNA. Hoy tienes ${tasks.length} tareas pendientes. ¡A darle con todo! 💪`;
       }
 
       const taskLines = tasks
-        .map((t) => {
-          const priorityEmoji = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : "🔵";
-          const dueDate = t.dueDate ? ` (${new Date(t.dueDate).toLocaleDateString("es-GT")})` : "";
-          return `${priorityEmoji} ${t.title}${dueDate}`;
+        .map((t, i) => {
+          const priorityEmoji = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
+          const dueDate = t.dueDate ? ` → ${new Date(t.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric"})}` : "";
+          return `${i + 1}. ${priorityEmoji} *${t.title}*${dueDate}`;
         })
         .join("\n");
 
