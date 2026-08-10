@@ -823,6 +823,88 @@ async function handleCommand(
     return `📊 *Resumen de ${user.name}*\n\n📋 *Tareas:*\n${tasksStr}\n\n🎪 *Eventos:*\n${eventsStr}\n\n📈 *Cumplimiento:*\n${compliance}`;
   }
 
+  if (cmd === "inventario" || cmd.startsWith("inventario ")) {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "El inventario solo está disponible para dueños, administradores y jefes.";
+
+    const filter = cmd.replace("inventario", "").trim().toLowerCase();
+    const where: any = filter ? { category: filter.toUpperCase().replace("Ó", "O").replace("Á", "A").replace("Í", "I").replace("Ú", "U") } : {};
+
+    const items = await prisma.inventoryItem.findMany({
+      where,
+      orderBy: { category: "asc" },
+      take: 30,
+      select: { name: true, category: true, quantity: true, status: true, location: true },
+    });
+
+    if (items.length === 0) return `No encontré items ${filter ? `de categoría "${filter}"` : "en inventario"}.`;
+
+    const byCategory = new Map<string, any[]>();
+    for (const item of items) {
+      if (!byCategory.has(item.category)) byCategory.set(item.category, []);
+      byCategory.get(item.category)!.push(item);
+    }
+
+    let msg = `📦 *Inventario Live Productions*\n\n`;
+    let total = 0;
+    for (const [cat, catItems] of byCategory) {
+      const catQty = catItems.reduce((s: number, i: any) => s + i.quantity, 0);
+      total += catQty;
+      msg += `*${cat} (${catItems.length} tipos, ${catQty} unidades):*\n`;
+      msg += catItems.slice(0, 8).map((i: any) => {
+        const s = i.status === "DANADO" ? "⚠️" : i.status === "EN_USO" ? "🔄" : i.status === "ASIGNADO" ? "📌" : "✅";
+        return `  ${s} ${i.name} x${i.quantity} (${i.location})`;
+      }).join("\n");
+      if (catItems.length > 8) msg += `\n  ... y ${catItems.length - 8} más`;
+      msg += "\n\n";
+    }
+    msg += `📊 Total: ${total} items`;
+    return msg;
+  }
+
+  if (cmd === "vehiculos" || cmd === "vehículos") {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "Los vehículos solo están disponibles para dueños, administradores y jefes.";
+
+    const vehicles = await prisma.vehicle.findMany({
+      orderBy: { name: "asc" },
+      select: { name: true, plate: true, type: true, status: true, fuelLevel: true, assignedTo: { select: { name: true } } },
+    });
+    if (vehicles.length === 0) return "No hay vehículos registrados.";
+    return `🚛 *Vehículos (${vehicles.length})*\n\n${vehicles.map(v => {
+      const s = v.status === "DISPONIBLE" ? "✅" : v.status === "EN_USO" ? "🔄" : v.status === "MANTENIMIENTO" ? "🔧" : "⚠️";
+      return `${s} *${v.name}* - ${v.plate} (${v.type})${v.fuelLevel ? ` ⛽${v.fuelLevel}%` : ""}${v.assignedTo ? ` → ${v.assignedTo.name}` : ""}`;
+    }).join("\n")}`;
+  }
+
+  if (cmd === "cobros" || cmd.startsWith("cobros ")) {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "Los cobros solo están disponibles para dueños, administradores y jefes.";
+
+    const cobros = await prisma.cobro.findMany({
+      where: { status: "PENDIENTE" },
+      orderBy: { dueDate: "asc" },
+      take: 15,
+      select: { clientName: true, amount: true, status: true, dueDate: true, assignedTo: { select: { name: true } }, event: { select: { name: true } } },
+    });
+    if (cobros.length === 0) return "✅ No hay cobros pendientes. ¡Todo al día!";
+    const total = cobros.reduce((s, c) => s + Number(c.amount), 0);
+    return `💰 *Cobros Pendientes (${cobros.length})*\n\n${cobros.map(c =>
+      `• ${c.clientName}: *Q${Number(c.amount).toFixed(2)}*${c.dueDate ? ` → ${new Date(c.dueDate).toLocaleDateString("es-GT")}` : ""}${c.event ? ` (${c.event.name})` : ""}${c.assignedTo ? ` | ${c.assignedTo.name}` : ""}`
+    ).join("\n")}\n\n💵 *Total: Q${total.toFixed(2)}*`;
+  }
+
+  if (cmd === "empleados" || cmd === "personal") {
+    const empleados = await prisma.user.findMany({
+      where: { active: true },
+      select: { name: true, role: true, phone: true, email: true },
+      orderBy: { name: "asc" },
+    });
+    return `👥 *Equipo Live Productions (${empleados.length})*\n\n${empleados.map(e =>
+      `• *${e.name}* (${e.role})${e.phone ? ` 📞${e.phone.slice(-8)}` : ""}${e.email ? ` 📧${e.email}` : ""}`
+    ).join("\n")}`;
+  }
+
   if (cmd === "ranking") {
     const { getComplianceRanking } = await import("@/lib/smart-scheduler");
     const data = await getComplianceRanking();
@@ -863,6 +945,14 @@ crea un recordatorio [tarea] viernes 10am
 resumen → Mis tareas + eventos + cumplimiento
 cómo va el equipo → Visión general
 quién no ha entrado → Inactivos hoy
+ranking → Top cumplimiento del equipo
+
+🏢 *Sistema general:*
+inventario → Equipo e inventario
+inventario sonido → Buscar por categoría
+vehiculos → Flota vehicular
+cobros → Cobros pendientes
+empleados → Directorio del equipo
 
 🎨 *Colores:*
 🟢 Baja | 🟡 Media | 🔴 Alta/Urgente | 🟣 Pospuesta | ✅ Hecha
@@ -1015,6 +1105,8 @@ function isKnownCommand(text: string): boolean {
     "transferir", "crea tarea", "crear tarea", "nueva tarea",
     "recuerda", "recordar", "recordatorio", "evento", "eventos",
     "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",
+    "ranking", "no ",
+    "inventario", "vehiculos", "vehículos", "cobros", "empleados", "personal",
   ];
   const lower = text.toLowerCase().trim();
   return knownCommands.some(k => lower.startsWith(k));

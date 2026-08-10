@@ -685,70 +685,78 @@ interface UserContext {
 
 export async function getAIAssistantContext(userId: string): Promise<string> {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, name: true, role: true },
-    });
-
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true } });
     if (!user) return "";
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
     const now = new Date();
+    const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const [pendingTasks, upcomingEvents, assignedCount, completedCount, recentActivity] =
-      await Promise.all([
-        prisma.task.findMany({
-          where: {
-            assignedToId: userId,
-            status: { in: ["PENDIENTE", "EN_PROCESO"] },
-          },
-          orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
-          take: 20,
-        }),
-        prisma.event.findMany({
-          where: {
-            date: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) },
-            status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
-            OR: [{ plannerId: userId }, { responsibleId: userId }],
-          },
-          orderBy: { date: "asc" },
-          take: 10,
-        }),
-        prisma.task.count({
-          where: { assignedToId: userId, createdAt: { gte: thirtyDaysAgo } },
-        }),
-        prisma.task.count({
-          where: { assignedToId: userId, status: "COMPLETADA", updatedAt: { gte: thirtyDaysAgo } },
-        }),
-        prisma.activity.findMany({
-          where: { userId },
-          orderBy: { createdAt: "desc" },
-          take: 5,
-          select: { action: true, resource: true, createdAt: true },
-        }),
-      ]);
+    const [
+      pendingTasks, upcomingEvents, assignedCount, completedCount,
+      inventory, vehicles, cobros, allEmployees, todayAccesses,
+    ] = await Promise.all([
+      prisma.task.findMany({
+        where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO"] } },
+        orderBy: [{ priority: "desc" }, { dueDate: "asc" }], take: 20,
+      }),
+      prisma.event.findMany({
+        where: { date: { gte: now }, status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
+          OR: [{ plannerId: userId }, { responsibleId: userId }] },
+        orderBy: { date: "asc" }, take: 10,
+      }),
+      prisma.task.count({ where: { assignedToId: userId, createdAt: { gte: thirtyDaysAgo } } }),
+      prisma.task.count({ where: { assignedToId: userId, status: "COMPLETADA", updatedAt: { gte: thirtyDaysAgo } } }),
+      prisma.inventoryItem.findMany({ orderBy: { category: "asc" }, take: 50, select: { name: true, category: true, quantity: true, status: true, location: true } }),
+      prisma.vehicle.findMany({ orderBy: { name: "asc" }, select: { name: true, plate: true, status: true, assignedTo: { select: { name: true } } } }),
+      prisma.cobro.findMany({ where: { status: "PENDIENTE" }, orderBy: { dueDate: "asc" }, take: 20, select: { clientName: true, amount: true, dueDate: true, assignedTo: { select: { name: true } } } }),
+      prisma.user.findMany({ where: { active: true }, select: { name: true, role: true, email: true, phone: true }, orderBy: { name: "asc" } }),
+      prisma.activity.count({ where: { userId, createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } } }),
+    ]);
 
     const complianceRate = assignedCount > 0 ? Math.round((completedCount / assignedCount) * 100) : 0;
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
 
-    const todayStr = now.toLocaleDateString("es-GT", { weekday: "long" }).toUpperCase();
-    const taskLines = pendingTasks
-      .map((t, i) => `${i+1}. ${t.title} (${t.priority}, vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT",{weekday:"short",day:"numeric"}) : "S/F"})`)
-      .join("; ");
-    const eventLines = upcomingEvents
-      .map((e) => `${e.name} - ${new Date(e.date).toLocaleDateString("es-GT")}`)
-      .join("; ");
+    let ctx = `USUARIO: ${user.name} (${user.role})
+DÍA: ${now.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}
+ACCESOS HOY: ${todayAccesses}/4 mínimo requerido
 
-    return `USUARIO: ${user.name} (${user.role})
-DÍA: ${now.toLocaleDateString("es-GT", { weekday: "long" }).toUpperCase()}
-TAREAS (${pendingTasks.length}): ${taskLines || "0 pendientes"}
-EVENTOS (${upcomingEvents.length}): ${eventLines || "0 eventos"}
-CUMPLIMIENTO: ${completedCount}/${assignedCount} (${complianceRate}%) este mes`;
+--- TAREAS (${pendingTasks.length}) ---
+${pendingTasks.map((t, i) => `${i+1}. ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢"} ${t.title} | vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT",{weekday:"short",day:"numeric"}) : "S/F"} | ${t.status}`).join("\n") || "Ninguna pendiente"}
+
+--- EVENTOS (${upcomingEvents.length}) ---
+${upcomingEvents.map(e => `• ${e.name} | ${e.clientName} | ${new Date(e.date).toLocaleDateString("es-GT",{weekday:"short",day:"numeric",month:"short"})} | ${e.status} | ${e.location || "S/L"}`).join("\n") || "Sin eventos"}
+
+CUMPLIMIENTO MES: ${completedCount}/${assignedCount} (${complianceRate}%)`;
+
+    if (isAdmin) {
+      const inventoryByCategory = new Map<string, number>();
+      let totalItems = 0, damaged = 0, inUse = 0;
+      for (const item of inventory) {
+        totalItems += item.quantity;
+        if (item.status === "DANADO") damaged += item.quantity;
+        if (item.status === "EN_USO" || item.status === "ASIGNADO") inUse += item.quantity;
+        inventoryByCategory.set(item.category, (inventoryByCategory.get(item.category) || 0) + item.quantity);
+      }
+      ctx += `\n\n--- INVENTARIO (${totalItems} items) ---
+Por categoría: ${Array.from(inventoryByCategory).map(([cat, qty]) => `${cat}: ${qty}`).join(" | ")}
+Disponible: ${totalItems - damaged - inUse} | En uso: ${inUse} | Dañado: ${damaged}
+
+--- VEHÍCULOS (${vehicles.length}) ---
+${vehicles.map(v => `• ${v.name} (${v.plate}) | ${v.status}${v.assignedTo ? ` → ${v.assignedTo.name}` : ""}`).join("\n")}
+
+--- COBROS PENDIENTES (${cobros.length}) ---
+${cobros.map(c => `• ${c.clientName}: Q${Number(c.amount).toFixed(2)}${c.dueDate ? ` | vence: ${new Date(c.dueDate).toLocaleDateString("es-GT")}` : ""}${c.assignedTo ? ` → ${c.assignedTo.name}` : ""}`).join("\n") || "Sin cobros pendientes"}
+
+--- EQUIPO (${allEmployees.length}) ---
+${allEmployees.map(e => `• ${e.name} (${e.role})${e.phone ? ` | ${e.phone.slice(-8)}` : ""}`).join("\n")}`;
+    }
+
+    return ctx;
   } catch (error) {
     console.error("getAIAssistantContext error:", error);
     return "";
   }
+}
 }
 
 export async function handleWhatsAppMessage(
