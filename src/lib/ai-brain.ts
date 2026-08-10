@@ -757,7 +757,6 @@ ${allEmployees.map(e => `• ${e.name} (${e.role})${e.phone ? ` | ${e.phone.slic
     return "";
   }
 }
-}
 
 export async function handleWhatsAppMessage(
   phoneNumber: string,
