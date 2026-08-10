@@ -734,21 +734,17 @@ export async function getAIAssistantContext(userId: string): Promise<string> {
 
     const todayStr = now.toLocaleDateString("es-GT", { weekday: "long" }).toUpperCase();
     const taskLines = pendingTasks
-      .map((t) => `${t.title} | ${t.status} | Prioridad: ${t.priority} | Vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT") : "Sin fecha"}`)
+      .map((t, i) => `${i+1}. ${t.title} (${t.priority}, vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT",{weekday:"short",day:"numeric"}) : "S/F"})`)
       .join("; ");
     const eventLines = upcomingEvents
-      .map((e) => `${e.name} | Cliente: ${e.clientName} | ${new Date(e.date).toLocaleDateString("es-GT")}`)
-      .join("; ");
-    const activityLines = recentActivity
-      .map((a) => `${a.action} - ${new Date(a.createdAt).toLocaleDateString("es-GT")}`)
+      .map((e) => `${e.name} - ${new Date(e.date).toLocaleDateString("es-GT")}`)
       .join("; ");
 
     return `USUARIO: ${user.name} (${user.role})
-HOY ES: ${todayStr}
-TAREAS PENDIENTES (${pendingTasks.length}): ${taskLines || "Ninguna"}
-EVENTOS PRÓXIMOS (${upcomingEvents.length}): ${eventLines || "Ninguno"}
-CUMPLIMIENTO 30 DÍAS: ${completedCount}/${assignedCount} (${complianceRate}%)
-ACTIVIDAD RECIENTE: ${activityLines || "Sin actividad"}`;
+DÍA: ${now.toLocaleDateString("es-GT", { weekday: "long" }).toUpperCase()}
+TAREAS (${pendingTasks.length}): ${taskLines || "0 pendientes"}
+EVENTOS (${upcomingEvents.length}): ${eventLines || "0 eventos"}
+CUMPLIMIENTO: ${completedCount}/${assignedCount} (${complianceRate}%) este mes`;
   } catch (error) {
     console.error("getAIAssistantContext error:", error);
     return "";
@@ -908,9 +904,10 @@ export async function handleWhatsAppMessage(
 
     const response = await askAI(
       [
+        { role: "system", content: LUNA_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `El usuario ${user.name} (${user.role}) de Live Productions te ha enviado este mensaje por WhatsApp: "${message}"\n\nContexto actual del usuario:\n${contextText}\n\nResponde directamente al usuario de forma útil, concisa y profesional. Máximo 3-4 oraciones. Usa su nombre. En español de Guatemala.`,
+          content: `El usuario ${user.name} (${user.role}) de Live Productions GT te ha enviado este mensaje por WhatsApp: "${message}"\n\nContexto actual del usuario:\n${contextText}\n\nResponde como LUNA: profesional, cálida y útil. Mencioná números de tarea si aplica. Si el usuario necesita hacer una acción (completar, posponer, crear tarea), recordale el comando. Máximo 3-4 oraciones. Español de Guatemala.`,
         },
       ],
       { temperature: 0.7, maxTokens: 600 }
