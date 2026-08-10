@@ -734,7 +734,8 @@ CUMPLIMIENTO MES: ${completedCount}/${assignedCount} (${complianceRate}%)`;
       for (const item of inventory) {
         totalItems += item.quantity;
         if (item.status === "DANADO") damaged += item.quantity;
-        if (item.status === "EN_USO" || item.status === "ASIGNADO") inUse += item.quantity;
+        if (item.status === "ASIGNADO" || item.status === "EN_REPARACION") inUse += item.quantity;
+        inventoryByCategory.set(item.category, (inventoryByCategory.get(item.category) || 0) + item.quantity);
         inventoryByCategory.set(item.category, (inventoryByCategory.get(item.category) || 0) + item.quantity);
       }
       ctx += `\n\n--- INVENTARIO (${totalItems} items) ---

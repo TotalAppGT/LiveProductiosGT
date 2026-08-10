@@ -828,7 +828,15 @@ async function handleCommand(
     if (!isAdmin) return "El inventario solo está disponible para dueños, administradores y jefes.";
 
     const filter = cmd.replace("inventario", "").trim().toLowerCase();
-    const where: any = filter ? { category: filter.toUpperCase().replace("Ó", "O").replace("Á", "A").replace("Í", "I").replace("Ú", "U") } : {};
+    const categoryMap: Record<string, string> = {
+      sonido: "AUDIO", audio: "AUDIO", bocina: "AUDIO", parlante: "AUDIO", microfono: "AUDIO", micro: "AUDIO",
+      iluminacion: "ILUMINACION", luz: "ILUMINACION", luces: "ILUMINACION", lampara: "ILUMINACION", led: "ILUMINACION",
+      instrumento: "INSTRUMENTO", instrumentos: "INSTRUMENTO", guitarra: "INSTRUMENTO", teclado: "INSTRUMENTO", bateria: "INSTRUMENTO", bajo: "INSTRUMENTO",
+      cableado: "CABLEADO", cable: "CABLEADO", cables: "CABLEADO",
+      mobiliario: "MOBILIARIO", mesa: "MOBILIARIO", silla: "MOBILIARIO", tarima: "MOBILIARIO", escenario: "MOBILIARIO",
+      herramienta: "HERRAMIENTA", herramientas: "HERRAMIENTA",
+    };
+    const where: any = filter ? { category: categoryMap[filter] || filter.toUpperCase().replace(/[ÁÉÍÓÚ]/g, (c: string) => ({ Á: "A", É: "E", Í: "I", Ó: "O", Ú: "U" }[c] || c)) } : {};
 
     const items = await prisma.inventoryItem.findMany({
       where,
@@ -872,7 +880,7 @@ async function handleCommand(
     });
     if (vehicles.length === 0) return "No hay vehículos registrados.";
     return `🚛 *Vehículos (${vehicles.length})*\n\n${vehicles.map(v => {
-      const s = v.status === "DISPONIBLE" ? "✅" : v.status === "EN_USO" ? "🔄" : v.status === "MANTENIMIENTO" ? "🔧" : "⚠️";
+      const s = v.status === "DISPONIBLE" ? "✅" : v.status === "EN_USO" ? "🔄" : v.status === "EN_MANTENIMIENTO" ? "🔧" : "⚠️";
       return `${s} *${v.name}* - ${v.plate} (${v.type})${v.fuelLevel ? ` ⛽${v.fuelLevel}%` : ""}${v.assignedTo ? ` → ${v.assignedTo.name}` : ""}`;
     }).join("\n")}`;
   }
