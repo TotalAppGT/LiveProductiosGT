@@ -1120,7 +1120,16 @@ function isKnownCommand(text: string): boolean {
   return knownCommands.some(k => lower.startsWith(k));
 }
 
+let cronStarted = false;
+
 export async function POST(request: NextRequest) {
+  if (!cronStarted) {
+    cronStarted = true;
+    const { startCronManager } = await import("@/lib/cron-manager");
+    startCronManager();
+    console.log("[Webhook] Cron manager iniciado desde webhook");
+  }
+
   try {
     const body = await request.json();
 
