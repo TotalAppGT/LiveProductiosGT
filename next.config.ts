@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**" },
     ],
   },
+  experimental: {
+    instrumentationHook: true,
+  },
 };
 
 export default nextConfig;
