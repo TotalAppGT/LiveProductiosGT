@@ -860,7 +860,7 @@ async function handleCommand(
       total += catQty;
       msg += `*${cat} (${catItems.length} tipos, ${catQty} unidades):*\n`;
       msg += catItems.slice(0, 8).map((i: any) => {
-        const s = i.status === "DANADO" ? "⚠️" : i.status === "EN_USO" ? "🔄" : i.status === "ASIGNADO" ? "📌" : "✅";
+        const s = i.status === "DANADO" ? "⚠️" : i.status === "ASIGNADO" ? "📌" : i.status === "EN_REPARACION" ? "🔧" : "✅";
         return `  ${s} ${i.name} x${i.quantity} (${i.location})`;
       }).join("\n");
       if (catItems.length > 8) msg += `\n  ... y ${catItems.length - 8} más`;

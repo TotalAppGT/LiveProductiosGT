@@ -69,7 +69,7 @@ async function getAdminUsers() {
 }
 
 async function morningBriefing() {
-  console.log("[Cron] Ejecutando morning briefing (8:00 AM)");
+  console.log("[Cron] Ejecutando morning briefing (7:00 AM)");
 
   try {
     const carried = await carryOverUncompletedTasks();
