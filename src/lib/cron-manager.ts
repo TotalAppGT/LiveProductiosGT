@@ -28,7 +28,8 @@ function getJobState(name: string): JobState {
 }
 
 function getGuatemalaTime(): Date {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guatemala" }));
+  // Guatemala is UTC-6. Adjust server time to Guatemala local.
+  return new Date(Date.now() - 6 * 60 * 60 * 1000);
 }
 
 async function logActivity(userId: string, action: string, details: string) {
@@ -544,10 +545,14 @@ async function runJobIfScheduled(job: CronJob) {
   if (state.isRunning) return;
 
   const now = getGuatemalaTime();
-  const hourMatch = now.getHours() >= job.schedule.hour;
+  const hourDiff = now.getHours() - job.schedule.hour;
+  const isCurrentHour = hourDiff === 0;
+  // Catch-up: if deploy missed the scheduled hour, allow run during first 10 min of next hour
+  const isCatchUp = hourDiff >= 0 && hourDiff <= 1 && now.getMinutes() < 10;
   const minuteMatch = now.getMinutes() >= job.schedule.minute && now.getMinutes() < job.schedule.minute + 10;
-  
-  if (!hourMatch || (!minuteMatch && now.getHours() === job.schedule.hour)) return;
+
+  if (!isCurrentHour && !isCatchUp) return;
+  if (!minuteMatch && isCurrentHour) return;
 
   if (!(await shouldRunJob(job))) {
     console.log(`[Cron] ${job.name}: ya se ejecutó en esta hora, saltando (DB dedup)`);
