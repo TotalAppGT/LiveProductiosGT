@@ -6,166 +6,111 @@
 <title>Live Productions GT — Presentación del Sistema</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#0a0e27;color:#e0e0e0;overflow-x:hidden}
-.slide{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:60px 40px;position:relative;border-bottom:1px solid #1a1f3a}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e27;color:#e0e0e0;overflow:hidden;height:100vh}
+.slide{display:none;height:100vh;flex-direction:column;justify-content:center;align-items:center;padding:60px 80px;animation:fadeIn .4s ease}
+.slide.active{display:flex}
 .slide:nth-child(odd){background:#0d1233}
 .slide:nth-child(even){background:#0a0e27}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 h1{font-size:clamp(2rem,5vw,4rem);font-weight:800;text-align:center;background:linear-gradient(135deg,#60a5fa,#a78bfa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:20px}
-h2{font-size:clamp(1.5rem,3.5vw,2.5rem);font-weight:700;color:#60a5fa;text-align:center;margin-bottom:40px}
-p{font-size:1.1rem;line-height:1.8;color:#94a3b8;max-width:800px;text-align:center;margin-bottom:16px}
-.logo{width:120px;height:120px;border-radius:24px;margin-bottom:30px;object-fit:contain;background:#1a1f3a;padding:12px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;max-width:1000px;width:100%}
-.card{background:#151939;border-radius:16px;padding:28px;border:1px solid #1e224c;transition:transform .2s,box-shadow .2s}
-.card:hover{transform:translateY(-4px);box-shadow:0 8px 32px rgba(96,165,250,.15)}
-.card h3{font-size:1.2rem;margin-bottom:8px;color:#e2e8f0}
-.card p{font-size:.9rem;color:#64748b;text-align:left}
-.card .emoji{font-size:2rem;margin-bottom:12px}
-.feature-row{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-width:900px;margin:20px 0}
-.badge{background:#1e224c;color:#60a5fa;padding:8px 16px;border-radius:20px;font-size:.85rem;font-weight:600}
+h2{font-size:clamp(1.5rem,3.5vw,2.5rem);font-weight:700;color:#60a5fa;text-align:center;margin-bottom:30px}
+p{font-size:1rem;line-height:1.7;color:#94a3b8;max-width:800px;text-align:center;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;max-width:1000px;width:100%}
+.card{background:#151939;border-radius:14px;padding:22px;border:1px solid #1e224c;transition:transform .2s}
+.card:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(96,165,250,.12)}
+.card h3{font-size:1.1rem;margin-bottom:6px;color:#e2e8f0}
+.card p{font-size:.85rem;color:#64748b;text-align:left}
+.card .emoji{font-size:1.7rem;margin-bottom:10px}
+.feature-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:900px;margin:16px 0}
+.badge{background:#1e224c;color:#60a5fa;padding:6px 14px;border-radius:18px;font-size:.8rem;font-weight:600}
 .stat{text-align:center}
-.stat .num{font-size:3rem;font-weight:800;color:#60a5fa}
-.stat .label{color:#64748b;font-size:.9rem}
-.stats{display:flex;flex-wrap:wrap;gap:40px;justify-content:center;margin:30px 0}
-.arrow{text-align:center;color:#334155;font-size:2rem;animation:bounce 2s infinite}
-@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(10px)}}
-.cta{background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;padding:16px 40px;border-radius:12px;font-size:1.1rem;font-weight:700;border:none;cursor:pointer;text-decoration:none;display:inline-block;margin-top:20px}
-.footer{text-align:center;padding:20px;color:#334155;font-size:.8rem}
-pre{background:#0d1233;border-radius:8px;padding:16px;font-size:.85rem;color:#a5b4fc;overflow-x:auto;max-width:500px;line-height:1.6}
-@media(max-width:600px){.slide{padding:40px 20px}.grid{grid-template-columns:1fr}}
+.stat .num{font-size:2.5rem;font-weight:800;color:#60a5fa}
+.stat .label{color:#64748b;font-size:.85rem}
+.stats{display:flex;flex-wrap:wrap;gap:30px;justify-content:center;margin:24px 0}
+.cta{background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;padding:14px 36px;border-radius:10px;font-size:1rem;font-weight:700;text-decoration:none;display:inline-block;margin-top:16px}
+pre{background:#0d1233;border-radius:8px;padding:14px;font-size:.8rem;color:#a5b4fc;overflow-x:auto;max-width:450px;line-height:1.5}
+.cron-line{display:flex;flex-direction:column;gap:10px;max-width:550px;width:100%}
+.cron-item{display:flex;align-items:center;gap:12px;background:#151939;padding:12px 18px;border-radius:10px;border:1px solid #1e224c;font-size:.9rem}
+.cron-item .time{color:#60a5fa;font-weight:700;min-width:70px}
+.cron-item .desc{color:#94a3b8}
+
+.nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:16px;z-index:100;background:rgba(10,14,39,.9);padding:8px 20px;border-radius:30px;border:1px solid #1e224c}
+.nav-btn{background:none;border:none;color:#60a5fa;font-size:1.5rem;cursor:pointer;padding:4px 8px;border-radius:6px;transition:background .2s}
+.nav-btn:hover{background:#1e224c}
+.dots{display:flex;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:#334155;transition:all .3s}
+.dot.active{background:#60a5fa;width:20px;border-radius:10px}
+.counter{color:#64748b;font-size:.8rem;min-width:50px;text-align:center}
+.hint{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);color:#334155;font-size:.75rem;text-align:center;z-index:100}
+@media(max-width:600px){.slide{padding:30px 20px}.grid{grid-template-columns:1fr}.nav{padding:6px 14px}}
 </style>
 </head>
 <body>
 
-<!-- SLIDE 1: PORTADA -->
-<div class="slide">
-  <img src="/logo.png" alt="Live Productions GT" class="logo" onerror="this.style.display='none'">
+<div class="slide active">
   <h1>Live Productions GT</h1>
-  <p style="font-size:1.4rem;color:#a78bfa;margin-bottom:8px">Sistema Inteligente de Gestión Empresarial</p>
+  <p style="font-size:1.3rem;color:#a78bfa">Sistema Inteligente de Gestión Empresarial</p>
   <p>Potenciado por <strong>LUNA</strong> — Asistente IA Administrativa</p>
-  <div class="feature-row" style="margin-top:30px">
-    <span class="badge">📋 Tareas Inteligentes</span>
-    <span class="badge">📦 Inventario</span>
-    <span class="badge">🚛 Vehículos</span>
-    <span class="badge">💰 Cobros</span>
-    <span class="badge">👥 Personal</span>
-    <span class="badge">🎪 Eventos</span>
-    <span class="badge">📊 Reportes</span>
-    <span class="badge">🤖 IA Integrada</span>
+  <div class="feature-row" style="margin-top:24px">
+    <span class="badge">📋 Tareas</span><span class="badge">📦 Inventario</span><span class="badge">🚛 Vehículos</span>
+    <span class="badge">💰 Cobros</span><span class="badge">👥 Personal</span><span class="badge">🎪 Eventos</span>
+    <span class="badge">📊 Reportes</span><span class="badge">🤖 IA</span>
   </div>
-  <p style="margin-top:20px;color:#475569">Ing. Jorge Mérida Godoy — Dueño</p>
+  <p style="margin-top:16px;color:#475569">Ing. Jorge Mérida Godoy — Dueño</p>
 </div>
 
-<!-- SLIDE 2: EL PROBLEMA -->
 <div class="slide">
   <h2>El Problema que Resolvemos</h2>
   <div class="grid">
-    <div class="card">
-      <div class="emoji">📝</div>
-      <h3>Tareas Olvidadas</h3>
-      <p>Empleados no saben qué hacer cada día. Las tareas se pierden en chats de WhatsApp o en la memoria.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">📦</div>
-      <h3>Inventario Descontrolado</h3>
-      <p>No se sabe cuántas bocinas, cables o luces hay. Equipo dañado no se reporta a tiempo.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🚛</div>
-      <h3>Vehículos sin Control</h3>
-      <p>¿Quién tiene el camión? ¿Cuánto combustible? Sin trazabilidad.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">💰</div>
-      <h3>Cobros Atrasados</h3>
-      <p>Clientes que deben dinero. Sin seguimiento formal de cobros pendientes.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">📊</div>
-      <h3>Falta de Reportes</h3>
-      <p>El dueño no tiene visibilidad diaria de lo que pasa en su empresa.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🔕</div>
-      <h3>Comunicación Ineficiente</h3>
-      <p>Cada persona recibe instrucciones por separado. Nadie tiene el panorama completo.</p>
-    </div>
+    <div class="card"><div class="emoji">📝</div><h3>Tareas Olvidadas</h3><p>Empleados no saben qué hacer cada día. Las tareas se pierden en chats o en la memoria.</p></div>
+    <div class="card"><div class="emoji">📦</div><h3>Inventario Descontrolado</h3><p>No se sabe cuántas bocinas, cables o luces hay. Equipo dañado no se reporta.</p></div>
+    <div class="card"><div class="emoji">🚛</div><h3>Vehículos sin Control</h3><p>¿Quién tiene el camión? ¿Cuánto combustible? Sin trazabilidad.</p></div>
+    <div class="card"><div class="emoji">💰</div><h3>Cobros Atrasados</h3><p>Clientes que deben. Sin seguimiento formal de cobros pendientes.</p></div>
+    <div class="card"><div class="emoji">📊</div><h3>Falta de Reportes</h3><p>El dueño no tiene visibilidad diaria de lo que pasa en su empresa.</p></div>
+    <div class="card"><div class="emoji">🔕</div><h3>Comunicación Rota</h3><p>Cada persona recibe instrucciones por separado. Nadie tiene el panorama.</p></div>
   </div>
 </div>
 
-<!-- SLIDE 3: LA SOLUCIÓN -->
 <div class="slide">
-  <h2>La Solución: Gestión Total con IA</h2>
+  <h2>La Solución</h2>
   <div class="stats">
     <div class="stat"><div class="num">1</div><div class="label">Sistema unificado</div></div>
     <div class="stat"><div class="num">24/7</div><div class="label">Disponible</div></div>
     <div class="stat"><div class="num">8</div><div class="label">Módulos</div></div>
     <div class="stat"><div class="num">100%</div><div class="label">Por WhatsApp</div></div>
   </div>
-  <p style="font-size:1.2rem;margin-top:30px">Un solo lugar para gestionar TODO. Desde cualquier dispositivo. Con inteligencia artificial que conoce tu negocio.</p>
-  <div class="feature-row">
-    <span class="badge">Web</span>
-    <span class="badge">WhatsApp</span>
-    <span class="badge">App Android</span>
-    <span class="badge">PWA</span>
-  </div>
+  <p style="font-size:1.15rem;margin-top:24px">Un solo lugar para gestionar TODO. Desde cualquier dispositivo. Con inteligencia artificial que conoce tu negocio.</p>
+  <div class="feature-row"><span class="badge">Web</span><span class="badge">WhatsApp</span><span class="badge">App Android</span></div>
 </div>
 
-<!-- SLIDE 4: LUNA -->
 <div class="slide">
-  <h2>🤖 LUNA — Tu Asistente IA</h2>
-  <p style="font-size:1.3rem;color:#a78bfa;margin-bottom:30px">"Como Jarvis, pero para tu empresa de eventos"</p>
+  <h2>LUNA — Tu Asistente IA</h2>
+  <p style="font-size:1.2rem;color:#a78bfa;margin-bottom:24px">Como Jarvis, pero para tu empresa de eventos</p>
   <div class="grid">
-    <div class="card">
-      <div class="emoji">☀️</div>
-      <h3>Briefing Matutino 7AM</h3>
-      <p>Cada empleado recibe sus tareas del día con prioridades. LUNA se presenta por WhatsApp.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🔔</div>
-      <h3>4 Recordatorios al Día</h3>
-      <p>10AM, 12PM, 2PM, 4PM — seguimiento de tareas pendientes a cada persona.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">📊</div>
-      <h3>Reporte al Dueño</h3>
-      <p>Un solo mensaje consolidado: quién no accesó, tareas vencidas, cumplimiento del equipo.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">📦</div>
-      <h3>Inventario en WhatsApp</h3>
-      <p>Preguntá "inventario sonido" y LUNA te dice cuántas bocinas, su estado y ubicación.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">⏰</div>
-      <h3>Recordatorios Dinámicos</h3>
-      <p>"LUNA recuérdame llamar a Juan a las 3pm" — avisa 10min antes y a la hora exacta.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🏆</div>
-      <h3>Ranking de Cumplimiento</h3>
-      <p>Quién completó más tareas. Top 3 del mes. Motivación y competencia sana.</p>
-    </div>
+    <div class="card"><div class="emoji">☀️</div><h3>Briefing 7AM</h3><p>Cada empleado recibe sus tareas del día con prioridades. LUNA se presenta por WhatsApp.</p></div>
+    <div class="card"><div class="emoji">🔔</div><h3>4 Recordatorios/día</h3><p>10AM, 12PM, 2PM, 4PM. Seguimiento automático a cada persona.</p></div>
+    <div class="card"><div class="emoji">📊</div><h3>Reporte al Dueño</h3><p>Un solo mensaje: quién no accesó, tareas vencidas, cumplimiento del equipo.</p></div>
+    <div class="card"><div class="emoji">📦</div><h3>Inventario por Chat</h3><p>"inventario sonido" y LUNA te dice cuántas bocinas, su estado y ubicación.</p></div>
+    <div class="card"><div class="emoji">⏰</div><h3>Recordatorios Smart</h3><p>"LUNA recuérdame a las 3pm" — avisa 10min antes y a la hora exacta.</p></div>
+    <div class="card"><div class="emoji">🏆</div><h3>Ranking Mensual</h3><p>Quién completó más tareas. Top 3 con medallas. Motivación sana.</p></div>
   </div>
 </div>
 
-<!-- SLIDE 5: COMANDOS -->
 <div class="slide">
   <h2>Habla con LUNA por WhatsApp</h2>
-  <p style="margin-bottom:20px">+502 3084 0447 — Todo el sistema desde tu celular</p>
+  <p style="margin-bottom:16px">+502 3084 0447 — Todo el sistema desde tu celular</p>
   <div style="display:flex;flex-wrap:wrap;gap:20px;justify-content:center;max-width:900px">
-    <div>
-      <h3 style="color:#60a5fa;text-align:left;margin-bottom:12px">📋 Tareas</h3>
+    <div><h3 style="color:#60a5fa;text-align:left;margin-bottom:10px">📋 Tareas</h3>
       <pre>tareas hoy
 tareas semana
 hecho 3
 posponer 5 para mañana
-comentar 2 el cliente no contestó
+comentar 2 sin respuesta
 transferir 4 a Diana
-crea tarea revisar equipo viernes 3pm
+crea tarea revisar equipo
 no 2</pre>
     </div>
-    <div>
-      <h3 style="color:#a78bfa;text-align:left;margin-bottom:12px">🏢 Sistema</h3>
+    <div><h3 style="color:#a78bfa;text-align:left;margin-bottom:10px">🏢 Sistema</h3>
       <pre>inventario
 inventario sonido
 vehiculos
@@ -175,153 +120,116 @@ ranking
 resumen
 equipo</pre>
     </div>
-    <div>
-      <h3 style="color:#f472b6;text-align:left;margin-bottom:12px">⏰ Recordatorios</h3>
+    <div><h3 style="color:#f472b6;text-align:left;margin-bottom:10px">⏰ Recordatorios</h3>
       <pre>recuérdame llamar a Juan 3pm
-crea recordatorio revisar bodega viernes 8am
-alerta grupo Logística reunión mañana 9am
-alerta fija Lunes 9am saludo semanal</pre>
+crea recordatorio revisar bodega
+alerta grupo Logística reunión
+alerta fija Lunes 9am saludo</pre>
     </div>
   </div>
 </div>
 
-<!-- SLIDE 6: MÓDULOS -->
 <div class="slide">
   <h2>Módulos del Sistema Web</h2>
   <div class="grid">
-    <div class="card">
-      <div class="emoji">📋</div>
-      <h3>Dashboard</h3>
-      <p>Vista general con semáforo de accesos, tareas del día, eventos próximos, notificaciones.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">✅</div>
-      <h3>Tareas</h3>
-      <p>Crear, asignar, completar, posponer. Fijas diarias/semanales + dinámicas. Con historial.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">📊</div>
-      <h3>Cumplimiento</h3>
-      <p>Porcentaje por persona. Accesos diarios. Ranking mensual con medallas.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">📦</div>
-      <h3>Inventario</h3>
-      <p>Audio, iluminación, instrumentos, cableado, mobiliario. Por bodega. Estados.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🚛</div>
-      <h3>Vehículos</h3>
-      <p>Flota, placas, conductor asignado, kilometraje, combustible, mantenimiento.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">👥</div>
-      <h3>Personal</h3>
-      <p>Registro de empleados con roles, teléfonos, WhatsApp. Control de accesos.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">💰</div>
-      <h3>Cobros</h3>
-      <p>Registro de cobros por evento. Pendientes, parciales, completados. Reportes.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🎪</div>
-      <h3>Eventos</h3>
-      <p>Calendario de eventos. Planner, responsable, staff. Pre-evento, montaje, post-evento.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🔔</div>
-      <h3>Notificaciones</h3>
-      <p>Crear grupos. Programar alertas por día/hora. Notificaciones automáticas por WhatsApp.</p>
-    </div>
+    <div class="card"><div class="emoji">📋</div><h3>Dashboard</h3><p>Vista general, semáforo de accesos, tareas, eventos, notificaciones.</p></div>
+    <div class="card"><div class="emoji">✅</div><h3>Tareas</h3><p>Crear, asignar, completar. Fijas diarias/semanales + dinámicas. Historial.</p></div>
+    <div class="card"><div class="emoji">📊</div><h3>Cumplimiento</h3><p>Porcentaje por persona. Accesos diarios. Ranking mensual con medallas.</p></div>
+    <div class="card"><div class="emoji">📦</div><h3>Inventario</h3><p>Audio, iluminación, instrumentos, cableado, mobiliario. Por bodega.</p></div>
+    <div class="card"><div class="emoji">🚛</div><h3>Vehículos</h3><p>Flota, placas, conductor, kilometraje, combustible, mantenimiento.</p></div>
+    <div class="card"><div class="emoji">👥</div><h3>Personal</h3><p>Registro de empleados con roles, contacto. Control de accesos diarios.</p></div>
+    <div class="card"><div class="emoji">💰</div><h3>Cobros</h3><p>Registro de cobros por evento. Pendientes, parciales, completados.</p></div>
+    <div class="card"><div class="emoji">🎪</div><h3>Eventos</h3><p>Calendario. Planner, responsable, staff. Pre-evento, montaje, post-evento.</p></div>
+    <div class="card"><div class="emoji">🔔</div><h3>Notificaciones</h3><p>Grupos, alertas programadas por día/hora. WhatsApp automático.</p></div>
   </div>
 </div>
 
-<!-- SLIDE 7: FLUJO -->
 <div class="slide">
-  <h2>Cómo Funciona un Día Típico</h2>
-  <div style="display:flex;flex-direction:column;gap:16px;max-width:600px;align-items:stretch">
-    <div class="card"><div class="emoji">🌅 7:00 AM</div><p>LUNA envía briefing matutino a cada persona: tareas del día, eventos, prioridades.</p></div>
-    <div class="card"><div class="emoji">🔔 10:00 AM</div><p>Primer recordatorio. ¿Ya empezaste tus tareas? LUNA te recuerda las pendientes.</p></div>
-    <div class="card"><div class="emoji">🕛 12:00 PM</div><p>Chequeo de mediodía. ¿Quién no ha ingresado al sistema? Reporte al dueño.</p></div>
-    <div class="card"><div class="emoji">🔔 2:00 PM</div><p>Segundo recordatorio. Las tareas de la tarde necesitan atención.</p></div>
-    <div class="card"><div class="emoji">📊 4:00 PM</div><p>Chequeo de accesos. Reporte consolidado: inactivos, bajo umbral, cumplimiento.</p></div>
-    <div class="card"><div class="emoji">🌙 5:00 PM</div><p>Cierre de jornada. Tareas no completadas se reprograman. Resumen al dueño.</p></div>
+  <h2>Un Día Típico con LUNA</h2>
+  <div class="cron-line">
+    <div class="cron-item"><span class="time">🌅 7:00</span><span class="desc">Briefing matutino a cada persona: tareas, eventos, prioridades del día</span></div>
+    <div class="cron-item"><span class="time">🔔 10:00</span><span class="desc">Primer recordatorio. ¿Ya empezaste tus tareas pendientes?</span></div>
+    <div class="cron-item"><span class="time">🕛 12:00</span><span class="desc">Chequeo de mediodía. ¿Quién no ha ingresado al sistema?</span></div>
+    <div class="cron-item"><span class="time">🔔 14:00</span><span class="desc">Segundo recordatorio. Tareas de la tarde necesitan atención.</span></div>
+    <div class="cron-item"><span class="time">📊 16:00</span><span class="desc">Reporte consolidado al dueño: inactivos, bajo umbral, cumplimiento</span></div>
+    <div class="cron-item"><span class="time">🌙 17:00</span><span class="desc">Cierre de jornada. Tareas no hechas se reprograman para mañana</span></div>
   </div>
-  <p style="margin-top:30px">Entre medio, cada empleado usa <strong>hecho 3</strong>, <strong>posponer 5</strong>, <strong>comentar 2</strong> desde WhatsApp</p>
 </div>
 
-<!-- SLIDE 8: BENEFICIOS -->
 <div class="slide">
-  <h2>Beneficios para la Empresa</h2>
+  <h2>Beneficios</h2>
   <div class="grid">
-    <div class="card">
-      <div class="emoji">⏱️</div>
-      <h3>Ahorro de Tiempo</h3>
-      <p>El dueño ya no persigue a cada empleado. LUNA lo hace automáticamente.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">📈</div>
-      <h3>Control Total</h3>
-      <p>Todo en un solo lugar. Sabes qué hace cada persona, qué equipo tienes, cuánto te deben.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🎯</div>
-      <h3>Responsabilidad</h3>
-      <p>Cada empleado sabe sus tareas. Si no las completa, queda registro. El sistema no miente.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🤝</div>
-      <h3>Trabajo en Equipo</h3>
-      <p>Transferir tareas, comentar avances, ver el progreso de los demás. Todos conectados.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">📱</div>
-      <h3>Desde el Celular</h3>
-      <p>WhatsApp y app Android. Sin instalar nada, sin entrenamiento. Como chatear.</p>
-    </div>
-    <div class="card">
-      <div class="emoji">🔮</div>
-      <h3>Escalabilidad</h3>
-      <p>El sistema crece con la empresa. Nuevos empleados, más eventos, más equipo. Sin límite.</p>
-    </div>
+    <div class="card"><div class="emoji">⏱️</div><h3>Ahorro de Tiempo</h3><p>El dueño ya no persigue a cada empleado. LUNA lo hace automáticamente.</p></div>
+    <div class="card"><div class="emoji">📈</div><h3>Control Total</h3><p>Qué hace cada persona, qué equipo tenés, cuánto te deben. Todo en un lugar.</p></div>
+    <div class="card"><div class="emoji">🎯</div><h3>Responsabilidad</h3><p>Cada empleado sabe sus tareas. Si no las completa, queda registro. No se miente.</p></div>
+    <div class="card"><div class="emoji">📱</div><h3>Desde el Celular</h3><p>WhatsApp y app Android. Sin instalar nada. Sin entrenamiento.</p></div>
+    <div class="card"><div class="emoji">🔮</div><h3>Escalabilidad</h3><p>Crece con la empresa. Más empleados, más eventos, más equipo.</p></div>
+    <div class="card"><div class="emoji">🤝</div><h3>Trabajo en Equipo</h3><p>Transferir tareas, comentar avances, ver progreso. Todos conectados.</p></div>
   </div>
 </div>
 
-<!-- SLIDE 9: TECNOLOGÍA -->
-<div class="slide">
-  <h2>Tecnología de Punta</h2>
-  <div class="stats" style="margin-bottom:30px">
-    <div class="stat"><div class="num">Next.js 15</div><div class="label">Frontend + Backend</div></div>
-    <div class="stat"><div class="num">PostgreSQL</div><div class="label">Base de Datos</div></div>
-    <div class="stat"><div class="num">DeepSeek AI</div><div class="label">Inteligencia Artificial</div></div>
-    <div class="stat"><div class="num">WhatsApp API</div><div class="label">Meta Business</div></div>
-  </div>
-  <div class="grid">
-    <div class="card"><h3>🔒 Seguridad</h3><p>Firebase Auth + JWT. Cada usuario ve solo lo que le corresponde según su rol.</p></div>
-    <div class="card"><h3>☁️ Cloud</h3><p>Desplegado en Railway. 24/7. Sin servidores que mantener.</p></div>
-    <div class="card"><h3>📱 Multi-plataforma</h3><p>Web, PWA instalable, App Android nativa. Mismo sistema, cualquier dispositivo.</p></div>
-    <div class="card"><h3>⚡ Tiempo Real</h3><p>Los cambios se reflejan al instante. Completar una tarea en WhatsApp la marca en el sistema web.</p></div>
-  </div>
-</div>
-
-<!-- SLIDE 10: PRÓXIMOS PASOS -->
 <div class="slide">
   <h2>Listo para Empezar</h2>
-  <div class="stats" style="margin-bottom:30px">
+  <div class="stats" style="margin-bottom:24px">
     <div class="stat"><div class="num">admin.</div><div class="label">liveproductionsgt.com</div></div>
     <div class="stat"><div class="num">+502</div><div class="label">3084 0447</div></div>
-    <div class="stat"><div class="num">8</div><div class="label">Usuarios activos</div></div>
     <div class="stat"><div class="num">24/7</div><div class="label">En línea</div></div>
   </div>
-  <p style="font-size:1.3rem;color:#a78bfa;margin-top:20px">Hoy comienza una nueva era de gestión para Live Productions GT</p>
-  <div style="margin-top:40px">
-    <a href="https://admin.liveproductionsgt.com" class="cta" target="_blank">🌐 Entrar al Sistema</a>
-  </div>
-  <p style="margin-top:30px;color:#64748b">LUNA ya está en línea. Solo tenés que escribirle.</p>
+  <p style="font-size:1.2rem;color:#a78bfa">Hoy comienza una nueva era de gestión</p>
+  <a href="https://admin.liveproductionsgt.com/dashboard" class="cta">🌐 Entrar al Sistema</a>
+  <p style="margin-top:24px;color:#64748b">LUNA ya está en línea. Solo tenés que escribirle.</p>
   <p style="color:#475569">whatsapp: +502 3084 0447</p>
+  <p style="color:#1e224c;margin-top:8px;font-size:.7rem">🖱️ Clic o → para avanzar | ← para retroceder</p>
 </div>
 
-<div class="footer">Live Productions GT © 2026 — Sistema creado con tecnología de punta para la industria de eventos en Guatemala</div>
+<div class="hint">🖱️ Clic en la pantalla o → para avanzar | ← para retroceder</div>
+
+<div class="nav">
+  <button class="nav-btn" onclick="prevSlide()">◀</button>
+  <div class="dots" id="dots"></div>
+  <span class="counter" id="counter"></span>
+  <button class="nav-btn" onclick="nextSlide()">▶</button>
+</div>
+
+<script>
+let current = 0;
+const slides = document.querySelectorAll('.slide');
+const total = slides.length;
+const dotsEl = document.getElementById('dots');
+const counterEl = document.getElementById('counter');
+const hintEl = document.querySelector('.hint');
+
+for (let i = 0; i < total; i++) {
+  const dot = document.createElement('div');
+  dot.className = 'dot' + (i === 0 ? ' active' : '');
+  dot.onclick = () => goTo(i);
+  dotsEl.appendChild(dot);
+}
+
+function update() {
+  slides.forEach((s, i) => s.classList.toggle('active', i === current));
+  document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === current));
+  counterEl.textContent = `${current + 1}/${total}`;
+  hintEl.style.opacity = current === 0 ? '1' : '0';
+}
+
+function nextSlide() { if (current < total - 1) { current++; update(); } }
+function prevSlide() { if (current > 0) { current--; update(); } }
+function goTo(i) { current = i; update(); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+  if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+  if (e.key === 'End') { e.preventDefault(); goTo(total - 1); }
+});
+
+document.addEventListener('click', e => {
+  if (e.target.closest('.nav') || e.target.closest('a')) return;
+  const x = e.clientX;
+  if (x > window.innerWidth / 2) nextSlide();
+  else if (x < window.innerWidth / 3) prevSlide();
+});
+</script>
 </body>
 </html>
