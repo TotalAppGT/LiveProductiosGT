@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
 import PushTokenRegister from "@/components/push/PushTokenRegister";
+import "@/lib/cron-starter";
 import "./globals.css";
 
 const inter = Inter({
