@@ -538,18 +538,16 @@ async function shouldRunJob(job: CronJob): Promise<boolean> {
   }
 }
 
-function isTimeMatch(date: Date, hour: number, minute: number): boolean {
-  // Allow up to 10-minute window to catch jobs that missed by a few minutes (e.g., deploy at 7:31 → catches 7:00 job at 7:35)
-  return date.getHours() === hour && date.getMinutes() >= minute && date.getMinutes() < minute + 10;
-}
-
 async function runJobIfScheduled(job: CronJob) {
   const state = getJobState(job.name);
 
   if (state.isRunning) return;
 
   const now = getGuatemalaTime();
-  if (!isTimeMatch(now, job.schedule.hour, job.schedule.minute)) return;
+  const hourMatch = now.getHours() >= job.schedule.hour;
+  const minuteMatch = now.getMinutes() >= job.schedule.minute && now.getMinutes() < job.schedule.minute + 10;
+  
+  if (!hourMatch || (!minuteMatch && now.getHours() === job.schedule.hour)) return;
 
   if (!(await shouldRunJob(job))) {
     console.log(`[Cron] ${job.name}: ya se ejecutó en esta hora, saltando (DB dedup)`);
