@@ -544,6 +544,9 @@ async function runJobIfScheduled(job: CronJob) {
 
   if (state.isRunning) return;
 
+  // In-memory dedup: if this job ran in the last 10 minutes, skip
+  if (state.lastRun && Date.now() - state.lastRun.getTime() < 10 * 60 * 1000) return;
+
   const now = getGuatemalaTime();
   const hourDiff = now.getHours() - job.schedule.hour;
   const isCurrentHour = hourDiff === 0;
