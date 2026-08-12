@@ -326,7 +326,7 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
     <Modal isOpen onClose={onClose} title={`Bitácora ${log.plate} - ${log.vehicleType}`} size="lg">
       <div className="space-y-4 p-1">
         <div className="flex gap-2">
-          <a href={`/api/vehicle-logs/${log.id}/print`} target="_blank" className="text-xs text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg">
+          <a href={`/api/vehicle-logs/${log.id}/pdf`} target="_blank" className="text-xs text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg">
             <FileText className="w-3 h-3 inline mr-1" /> Ver PDF / Imprimir
           </a>
           {isActive && (

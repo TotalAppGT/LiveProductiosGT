@@ -37,7 +37,7 @@ export default function ReportesPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   function printUrl(report: any): string {
-    if (report.resourceType === "vehicle_log") return `/api/vehicle-logs/${report.resourceId}/print`;
+    if (report.resourceType === "vehicle_log") return `/api/vehicle-logs/${report.resourceId}/pdf`;
     if (report.resourceType === "order") return `/api/orders/${report.resourceId}/print`;
     return "#";
   }
@@ -55,7 +55,7 @@ export default function ReportesPage() {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
-        toNumber: phone,
+        to: phone,
         message: `📄 *Reporte: ${report.title}*\n\nVisualizá el informe aquí:\n${window.location.origin}${printUrl(report)}`,
         type: "NOTIFICATION",
       }),
