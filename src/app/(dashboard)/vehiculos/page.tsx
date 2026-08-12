@@ -42,6 +42,7 @@ export default function VehiculosPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [maintVehicle, setMaintVehicle] = useState<Vehicle | null>(null);
 
   const fetchVehicles = useCallback(async () => {
     if (!token) return;
@@ -252,6 +253,14 @@ export default function VehiculosPage() {
                   >
                     <Pencil className="h-3 w-3 mr-1" /> Editar
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setMaintVehicle(vehicle)}
+                  >
+                    <Wrench className="h-3 w-3 mr-1" /> Mantenimiento
+                  </Button>
                   <select
                     value={vehicle.status}
                     onChange={(e) => quickStatusUpdate(vehicle.id, e.target.value)}
@@ -279,6 +288,14 @@ export default function VehiculosPage() {
         token={token || ""}
         vehicle={editingVehicle}
         onSaved={fetchVehicles}
+      />
+
+      <MaintenanceModal
+        key={maintVehicle?.id || "maint"}
+        isOpen={!!maintVehicle}
+        onClose={() => setMaintVehicle(null)}
+        token={token || ""}
+        vehicle={maintVehicle}
       />
     </div>
   );
@@ -399,6 +416,191 @@ function VehicleFormModal({
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+const MAINT_TYPE_LABELS: Record<string, string> = {
+  ACEITE: "Cambio de aceite",
+  FRENOS: "Frenos",
+  LLANTAS: "Llantas",
+  MOTOR: "Motor",
+  ELECTRICO: "Sistema eléctrico",
+  SUSPENSION: "Suspensión",
+  FILTROS: "Filtros",
+  OTRO: "Otro",
+};
+
+function MaintenanceModal({
+  isOpen,
+  onClose,
+  token,
+  vehicle,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  token: string;
+  vehicle: Vehicle | null;
+}) {
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [type, setType] = useState("ACEITE");
+  const [description, setDescription] = useState("");
+  const [cost, setCost] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [mileage, setMileage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && vehicle) {
+      fetchRecords();
+      setType("ACEITE");
+      setDescription("");
+      setCost("");
+      setDate(new Date().toISOString().slice(0, 10));
+      setMileage("");
+    }
+  }, [isOpen, vehicle]);
+
+  async function fetchRecords() {
+    if (!vehicle) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/vehicles/${vehicle.id}/maintenance`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.success) setRecords(json.data);
+    } catch {
+      toast.error("Error cargando mantenimiento");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function addRecord() {
+    if (!vehicle) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/vehicles/${vehicle.id}/maintenance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type, description, cost, date, mileage }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Mantenimiento registrado");
+        fetchRecords();
+        setDescription("");
+        setCost("");
+      } else {
+        toast.error(json.error || "Error");
+      }
+    } catch {
+      toast.error("Error al registrar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteRecord(recordId: string) {
+    if (!vehicle || !confirm("¿Eliminar este registro de mantenimiento?")) return;
+    try {
+      const res = await fetch(`/api/vehicles/${vehicle.id}/maintenance`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ recordId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Registro eliminado");
+        fetchRecords();
+      }
+    } catch {
+      toast.error("Error al eliminar");
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`🔧 Mantenimiento: ${vehicle?.name || ""}`}>
+      <div className="space-y-4 p-1">
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Registrá cada mantenimiento para llevar control del vehículo.</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          >
+            {Object.entries(MAINT_TYPE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          />
+        </div>
+
+        <input
+          placeholder="Descripción (ej: cambio de aceite 5W-30)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <input
+            placeholder="Costo (Q)"
+            type="number"
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          />
+          <input
+            placeholder="Kilometraje"
+            type="number"
+            value={mileage}
+            onChange={(e) => setMileage(e.target.value)}
+            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          />
+        </div>
+
+        <Button variant="primary" onClick={addRecord} isLoading={saving} className="w-full">
+          <Plus className="h-4 w-4 mr-1" /> Registrar Mantenimiento
+        </Button>
+
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+          <p className="text-sm font-medium mb-2">Historial ({records.length})</p>
+          {loading ? (
+            <p className="text-sm text-gray-400">Cargando...</p>
+          ) : records.length === 0 ? (
+            <p className="text-sm text-gray-400">Sin registros de mantenimiento.</p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {records.map((r: any) => (
+                <div key={r.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
+                  <div>
+                    <p className="text-sm font-medium">{MAINT_TYPE_LABELS[r.type] || r.type}</p>
+                    <p className="text-xs text-gray-500">
+                      {formatDate(r.date)}
+                      {r.mileage ? ` · ${r.mileage} km` : ""}
+                      {r.cost ? ` · Q${Number(r.cost).toFixed(2)}` : ""}
+                      {r.doneBy ? ` · ${r.doneBy.name}` : ""}
+                    </p>
+                    {r.description && <p className="text-xs text-gray-400">{r.description}</p>}
+                  </div>
+                  <button onClick={() => deleteRecord(r.id)} className="text-red-500 text-xs px-2">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </Modal>
   );
 }

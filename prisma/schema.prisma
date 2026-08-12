@@ -188,6 +188,7 @@ model User {
   groupMemberships  GroupMember[]
   createdAlerts     ScheduledAlert[] @relation("AlertCreator")
   targetedAlerts    ScheduledAlert[] @relation("AlertTarget")
+  maintenanceDone   VehicleMaintenance[]
 }
 
 model Task {
@@ -310,8 +311,27 @@ model Vehicle {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  assignedTo User?   @relation(fields: [assignedToId], references: [id])
-  tenant     Tenant? @relation(fields: [tenantId], references: [id])
+  assignedTo         User?                @relation(fields: [assignedToId], references: [id])
+  tenant             Tenant?              @relation(fields: [tenantId], references: [id])
+  maintenanceRecords VehicleMaintenance[]
+}
+
+model VehicleMaintenance {
+  id          String   @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  type        String   @default("OTRO")
+  description String?
+  cost        Decimal? @db.Decimal(10, 2)
+  date        DateTime @default(now())
+  mileage     Int?
+  doneById    String?
+  doneBy      User?    @relation(fields: [doneById], references: [id])
+  notes        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([vehicleId])
 }
 
 model Cobro {
