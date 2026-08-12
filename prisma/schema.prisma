@@ -192,6 +192,8 @@ model User {
   maintenanceDone   VehicleMaintenance[]
   workshopAssigned  WorkshopItem[] @relation("WorkshopTechnician")
   workshopCreated   WorkshopItem[] @relation("WorkshopCreator")
+  createdOrders     Order[]        @relation("OrderCreator")
+  createdTemplates  OrderTemplate[] @relation("OrderTemplateCreator")
 }
 
 model Task {
@@ -438,8 +440,53 @@ model WhatsAppMessage {
   relatedEvent Event? @relation(fields: [relatedEventId], references: [id])
 }
 
+model Order {
+  id          String      @id @default(cuid())
+  orderNumber Int
+  eventName   String
+  status      String      @default("BORRADOR")
+  templateId  String?
+  createdById String
+  createdBy   User        @relation("OrderCreator", fields: [createdById], references: [id])
+  items       OrderItem[]
+  sentAt      DateTime?
+  returnedAt  DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([orderNumber])
+}
+
+model OrderItem {
+  id               String   @id @default(cuid())
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  name             String
+  category         String   @default("AUDIO")
+  quantity         Int      @default(1)
+  preparedPhotos   String[] @default([])
+  preparedChecked  Boolean  @default(false)
+  returnPhotos     String[] @default([])
+  returnChecked    Boolean  @default(false)
+  returnCondition  String?
+  inventoryItemId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([orderId])
+}
+
+model OrderTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  items       Json
+  createdById String
+  createdBy   User     @relation("OrderTemplateCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+}
+
 model FileAttachment {
-  id           String   @id @default(uuid())
+  id           String  @id @default(uuid())
   fileName     String
   fileUrl      String
   fileType     String

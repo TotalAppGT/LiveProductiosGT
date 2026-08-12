@@ -11,6 +11,7 @@ import {
   DollarSign,
   Truck,
   Wrench,
+  ClipboardList,
   Shield,
   LogOut,
   ChevronLeft,
@@ -92,6 +93,11 @@ const navItems: NavItem[] = [
     label: "Vehículos",
     href: "/vehiculos",
     icon: Truck,
+  },
+  {
+    label: "Pedidos",
+    href: "/pedidos",
+    icon: ClipboardList,
   },
   {
     label: "Taller",
