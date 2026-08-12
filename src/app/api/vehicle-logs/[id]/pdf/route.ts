@@ -93,7 +93,7 @@ export async function GET(
     drawPhotoGrid(safeArray(log.startPhotos), startLabels, 150);
 
     // Combustible
-    const fuelEntries = safeArray(log.fuelEntries);
+    const fuelEntries = Array.isArray(log.fuelEntries) ? log.fuelEntries : [];
     if (fuelEntries.length > 0) {
       doc.fontSize(11).fillColor("#2563eb").text(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`);
       doc.moveDown(0.3);
