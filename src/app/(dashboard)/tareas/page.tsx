@@ -19,6 +19,7 @@ import {
   Clock4,
   Paperclip,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -167,6 +168,25 @@ export default function TareasPage() {
       toast.success(`${selectedTasks.size} tareas actualizadas`);
     } catch {
       toast.error("Error en actualización masiva");
+    }
+  }
+
+  async function deleteTask(taskId: string) {
+    if (!confirm("¿Seguro que deseas eliminar esta tarea? Esta acción no se puede deshacer.")) return;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json: ApiResponse<Task> = await res.json();
+      if (json.success) {
+        toast.success("Tarea eliminada");
+        fetchTasks();
+      } else {
+        throw new Error(json.error || "Error");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar");
     }
   }
 
@@ -580,6 +600,16 @@ export default function TareasPage() {
                             >
                               Comentar
                             </Button>
+                            {(user?.role === "DUENO" || user?.role === "ADMIN") && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                leftIcon={<Trash2 className="h-3 w-3 text-red-500" />}
+                                onClick={() => deleteTask(task.id)}
+                              >
+                                Eliminar
+                              </Button>
+                            )}
                           </div>
                         </div>
                       )}
