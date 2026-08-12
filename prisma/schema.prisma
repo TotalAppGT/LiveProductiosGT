@@ -190,6 +190,8 @@ model User {
   createdAlerts     ScheduledAlert[] @relation("AlertCreator")
   targetedAlerts    ScheduledAlert[] @relation("AlertTarget")
   maintenanceDone   VehicleMaintenance[]
+  workshopAssigned  WorkshopItem[] @relation("WorkshopTechnician")
+  workshopCreated   WorkshopItem[] @relation("WorkshopCreator")
 }
 
 model Task {
@@ -333,6 +335,25 @@ model VehicleMaintenance {
   updatedAt   DateTime @updatedAt
 
   @@index([vehicleId])
+}
+
+model WorkshopItem {
+  id           String    @id @default(cuid())
+  itemName     String
+  category     String    @default("AUDIO")
+  issue        String
+  diagnostic   String?
+  status       String    @default("EN_REVISION")
+  assignedToId String?
+  assignedTo   User?     @relation("WorkshopTechnician", fields: [assignedToId], references: [id])
+  createdById  String
+  createdBy    User      @relation("WorkshopCreator", fields: [createdById], references: [id])
+  completedAt  DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status])
 }
 
 model Cobro {
