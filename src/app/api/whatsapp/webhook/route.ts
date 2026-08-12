@@ -566,7 +566,7 @@ async function handleCommand(
   command: string,
   user: { id: string; name: string; role: string }
 ): Promise<string | null> {
-  const cmd = command.toLowerCase().trim();
+  const cmd = command.toLowerCase().trim().replace(/[áéíóúñ]/g, (c: string) => ({ á: "a", é: "e", í: "i", ó: "o", ú: "u", ñ: "n" }[c] || c));
 
   if (cmd.startsWith("completar ") || cmd.startsWith("hecho ") || cmd.startsWith("completado ")) {
     const numStr = cmd.replace(/^(completar|hecho|completado)\s+/i, "").trim();
@@ -705,7 +705,13 @@ async function handleCommand(
     return `📌 *Actividades Fijas ${day}*\n\n${formatTaskList(tasks)}`;
   }
 
-  if (cmd === "tareas" || cmd === "mis tareas" || (cmd.includes("tarea") && !cmd.startsWith("tareas hoy") && !cmd.startsWith("tareas semana") && !cmd.includes("crea") && !cmd.includes("crear") && !cmd.includes("nueva"))) {
+  if (
+    cmd === "tareas" || cmd === "mis tareas" || cmd === "ver tareas" ||
+    cmd === "muestrame mis tareas" || cmd === "muéstrame mis tareas" ||
+    cmd === "quiero ver mis tareas" || cmd === "ver mis tareas" ||
+    /^(ver|mostrar|muestra|muéstrame|dame|consultar|listar|revisar)\s+(mis\s+)?tareas/.test(cmd) ||
+    (cmd.includes("tarea") && !cmd.startsWith("tareas hoy") && !cmd.startsWith("tareas semana") && !cmd.includes("crea") && !cmd.includes("crear") && !cmd.includes("nueva"))
+  ) {
     const tasks = await formatTasksForUser(user.id);
     if (!tasks) return `Hola ${user.name}, no tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
     return tasks;
