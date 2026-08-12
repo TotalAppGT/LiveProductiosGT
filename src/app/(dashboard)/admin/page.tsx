@@ -445,6 +445,30 @@ export default function AdminPage() {
         <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm mt-1">
           Configuración y monitoreo del sistema
         </p>
+        <button
+          onClick={async () => {
+            if (!confirm("⚠️ ¿Resetear TODO el sistema? Se borrarán TODAS las tareas, eventos, inventario, vehículos y usuarios (excepto tú). Esta acción no se puede deshacer.")) return;
+            if (!confirm("¿Estás 100% seguro? Ingresarás desde cero.")) return;
+            try {
+              const res = await fetch("/api/admin/reset", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              const json = await res.json();
+              if (json.success) {
+                toast.success(json.message || "Sistema reseteado");
+                setTimeout(() => window.location.reload(), 1500);
+              } else {
+                toast.error(json.error || "Error al resetear");
+              }
+            } catch {
+              toast.error("Error al resetear");
+            }
+          }}
+          className="mt-3 text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-medium"
+        >
+          🗑️ Resetear sistema (borrar todo)
+        </button>
       </div>
 
       <Tabs defaultValue="ai">

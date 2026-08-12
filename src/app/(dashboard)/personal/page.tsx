@@ -654,7 +654,7 @@ function AddWorkerModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !password.trim()) return;
+    if (!name.trim() || !password.trim()) return;
     setSaving(true);
     try {
       const normalizedPhone = phone.trim() ? normalizeGTPhone(phone.trim()) : undefined;
@@ -666,7 +666,7 @@ function AddWorkerModal({
         },
         body: JSON.stringify({
           name: name.trim(),
-          email: email.trim(),
+          email: email.trim() || undefined,
           password,
           phone: normalizedPhone,
           whatsappNumber: normalizedPhone,
@@ -675,7 +675,7 @@ function AddWorkerModal({
       });
       const json = await res.json();
       if (json.success) {
-        toast.success("Trabajador creado exitosamente");
+        toast.success(`Trabajador creado (${json.data?.email || ""})`);
         onCreated();
         onClose();
       } else {
@@ -692,7 +692,7 @@ function AddWorkerModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Agregar Trabajador" size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label="Nombre completo" value={name} onChange={(e) => setName(e.target.value)} required />
-        <Input label="Correo electrónico" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <Input label="Correo electrónico (opcional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Si lo deja vacío se genera automáticamente" />
         <Input label="Teléfono (WhatsApp)" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Solo los 8 dígitos, sin guiones" />
         <Input label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <div>

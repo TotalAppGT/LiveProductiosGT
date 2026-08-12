@@ -104,16 +104,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, email, password, phone, role, whatsappNumber, tenantId, firebaseUid } = body;
+    const { name, email, password, phone, role, whatsappNumber, tenantId } = body;
 
-    if (!name || !email || !password) {
+    if (!name || !password) {
       return NextResponse.json(
-        { success: false, error: "Nombre, email y contraseña son requeridos" },
+        { success: false, error: "Nombre y contraseña son requeridos" },
         { status: 400 }
       );
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const normalizedPhone = phone ? normalizeGTPhone(phone) : null;
+    const normalizedWhatsapp = whatsappNumber ? normalizeGTPhone(whatsappNumber) : normalizedPhone;
+
+    // Si no hay email, generar uno interno basado en el teléfono
+    let finalEmail = email?.trim();
+    if (!finalEmail) {
+      const digits = (normalizedPhone || "").replace(/\D/g, "");
+      finalEmail = digits ? `usuario${digits}@liveproductions.gt` : `usuario${Date.now()}@liveproductions.gt`;
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email: finalEmail } });
     if (existingUser) {
       return NextResponse.json(
         { success: false, error: "El email ya está registrado" },
@@ -124,19 +134,37 @@ export async function POST(request: NextRequest) {
     const { hashPassword } = await import("@/lib/auth");
     const hashedPassword = await hashPassword(password);
 
-    const normalizedPhone = phone ? normalizeGTPhone(phone) : null;
-    const normalizedWhatsapp = whatsappNumber ? normalizeGTPhone(whatsappNumber) : null;
+    // Crear usuario en Firebase Auth para que pueda iniciar sesión
+    let firebaseUid: string | null = null;
+    try {
+      const { getAdminAuth } = await import("@/lib/firebase-admin");
+      const adminAuth = getAdminAuth();
+      try {
+        const fbUser = await adminAuth.getUserByEmail(finalEmail);
+        firebaseUid = fbUser.uid;
+      } catch {
+        const created = await adminAuth.createUser({
+          email: finalEmail,
+          password,
+          displayName: name,
+          emailVerified: true,
+        });
+        firebaseUid = created.uid;
+      }
+    } catch (e: any) {
+      console.warn("Firebase user creation skipped:", e?.message);
+    }
 
     const user = await prisma.user.create({
       data: {
         name,
-        email,
+        email: finalEmail,
         password: hashedPassword,
         phone: normalizedPhone,
         role: role || "EMPLEADO",
         whatsappNumber: normalizedWhatsapp,
         tenantId: tenantId || null,
-        firebaseUid: firebaseUid || null,
+        firebaseUid,
       },
       select: {
         id: true,
