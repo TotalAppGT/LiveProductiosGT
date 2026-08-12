@@ -312,6 +312,7 @@ async function formatTasksForUser(userId: string, period?: string) {
     if (todayTasks.length === 0) return "✅ No tienes tareas para hoy.";
     output = `📋 *HOY - ${today.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})}*\n\n`;
     output += formatTaskList(todayTasks);
+    output += `\n\n⚡ \`hecho 3\` completar | \`posponer 3 para mañana\` | \`ayuda\``;
     return output;
   }
 
@@ -319,12 +320,14 @@ async function formatTasksForUser(userId: string, period?: string) {
     output = `📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT")} - ${sunday.toLocaleDateString("es-GT")})\n\n`;
     if (thisWeekTasks.length > 0) output += formatTaskList(thisWeekTasks);
     if (todayTasks.length > 0) output += `\n📌 *Hoy:*\n${formatTaskList(todayTasks)}`;
+    output += `\n\n⚡ \`hecho 3\` completar | \`posponer 3 para mañana\` | \`ayuda\``;
     return output || "No hay tareas esta semana.";
   }
 
   if (period === "semana2") {
     output = `📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT")} - ${nextSunday.toLocaleDateString("es-GT")})\n\n`;
     if (nextWeekTasks.length > 0) output += formatTaskList(nextWeekTasks);
+    output += `\n\n⚡ \`hecho 3\` completar | \`posponer 3 para mañana\` | \`ayuda\``;
     return output || "No hay tareas para la próxima semana.";
   }
 
@@ -349,7 +352,7 @@ async function formatTasksForUser(userId: string, period?: string) {
     }
   }
 
-  output += `\n⚡ Comandos: \`tareas hoy\` | \`tareas semana\` | \`tareas semana 2\` | \`fijas lunes\` | \`ayuda\``;
+  output += `\n⚡ *Acciones:* \`hecho 3\` (completar #3) | \`posponer 3 para mañana\` | \`comentar 3 texto\` | \`transferir 3 a Diana\`\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`tareas semana 2\` | \`fijas lunes\` | \`ayuda\``;
   return output;
 }
 
