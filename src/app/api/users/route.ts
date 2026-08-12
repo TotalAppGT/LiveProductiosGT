@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, email, password, phone, role, whatsappNumber, tenantId } = body;
+    const { name, email, password, phone, role, whatsappNumber, tenantId, position } = body;
 
     if (!name || !password) {
       return NextResponse.json(
@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
         role: role || "EMPLEADO",
         whatsappNumber: normalizedWhatsapp,
         tenantId: tenantId || null,
+        position: position || "",
         firebaseUid,
       },
       select: {

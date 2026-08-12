@@ -48,7 +48,7 @@ export async function POST(
 
     await prisma.order.update({
       where: { id },
-      data: { status: "LISTO", sentAt: new Date() },
+      data: { status: "LISTO", sentAt: new Date(), readyById: auth.payload.userId },
     });
 
     await prisma.activity.create({
@@ -61,7 +61,23 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({ success: true, message: "Pedido listo, inventario descontado" });
+    // Notificar a bodega por WhatsApp
+    const bodegaUsers = await prisma.user.findMany({
+      where: { active: true, position: { contains: "bodega", mode: "insensitive" } },
+      select: { name: true, whatsappNumber: true, phone: true },
+    });
+
+    if (bodegaUsers.length > 0) {
+      const itemsText = order.items.map((it) => `• ${it.name} x${it.quantity}`).join("\n");
+      const msg = `📦 *Pedido #${order.orderNumber} LISTO*\n\nEvento: ${order.eventName}\n\n*Items:*\n${itemsText}\n\nEl pedido está preparado y listo para retirar. Revisalo en el sistema.`;
+      const { sendMessage } = await import("@/lib/whatsapp");
+      for (const b of bodegaUsers) {
+        const to = b.whatsappNumber || b.phone;
+        if (to) await sendMessage(to, msg).catch(() => {});
+      }
+    }
+
+    return NextResponse.json({ success: true, message: "Pedido listo, inventario descontado y bodega notificada" });
   } catch (error) {
     console.error("Error en ready:", error);
     return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });

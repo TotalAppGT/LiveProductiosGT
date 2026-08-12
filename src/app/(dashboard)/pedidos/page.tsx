@@ -312,6 +312,15 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
   return (
     <Modal isOpen onClose={onClose} title={`Pedido #${order.orderNumber} - ${order.eventName}`} size="lg">
       <div className="space-y-4 p-1">
+        <div className="flex gap-2">
+          <a
+            href={`/api/orders/${order.id}/print`}
+            target="_blank"
+            className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg"
+          >
+            🖨️ Imprimir / PDF
+          </a>
+        </div>
         {items.map((item: any) => (
           <div key={item.id} className="border rounded-lg p-3">
             <div className="flex items-center justify-between">

@@ -649,6 +649,7 @@ function AddWorkerModal({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
+  const [position, setPosition] = useState("");
   const [role, setRole] = useState("EMPLEADO");
   const [saving, setSaving] = useState(false);
 
@@ -670,6 +671,7 @@ function AddWorkerModal({
           password,
           phone: normalizedPhone,
           whatsappNumber: normalizedPhone,
+          position: position.trim(),
           role,
         }),
       });
@@ -692,6 +694,7 @@ function AddWorkerModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Agregar Trabajador" size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label="Nombre completo" value={name} onChange={(e) => setName(e.target.value)} required />
+        <Input label="Puesto (ej: Bodega, Técnico, Coordinación)" value={position} onChange={(e) => setPosition(e.target.value)} />
         <Input label="Correo electrónico (opcional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Si lo deja vacío se genera automáticamente" />
         <Input label="Teléfono (WhatsApp)" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Solo los 8 dígitos, sin guiones" />
         <Input label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />

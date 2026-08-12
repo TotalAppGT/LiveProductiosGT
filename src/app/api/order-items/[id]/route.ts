@@ -18,9 +18,21 @@ export async function PUT(
 
     const data: Record<string, unknown> = {};
     if (preparedPhotos !== undefined) data.preparedPhotos = preparedPhotos;
-    if (preparedChecked !== undefined) data.preparedChecked = preparedChecked;
+    if (preparedChecked !== undefined) {
+      data.preparedChecked = preparedChecked;
+      if (preparedChecked) {
+        data.preparedById = auth.payload.userId;
+        data.preparedAt = new Date();
+      }
+    }
     if (returnPhotos !== undefined) data.returnPhotos = returnPhotos;
-    if (returnChecked !== undefined) data.returnChecked = returnChecked;
+    if (returnChecked !== undefined) {
+      data.returnChecked = returnChecked;
+      if (returnChecked) {
+        data.returnedById = auth.payload.userId;
+        data.returnedAt = new Date();
+      }
+    }
     if (returnCondition !== undefined) data.returnCondition = returnCondition;
     if (quantity !== undefined) data.quantity = quantity;
     if (name !== undefined) data.name = name;

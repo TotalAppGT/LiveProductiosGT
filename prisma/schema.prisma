@@ -163,6 +163,7 @@ model User {
   avatar          String?
   whatsappNumber  String?
   active          Boolean  @default(true)
+  position        String   @default("")
   tenantId        String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -451,6 +452,8 @@ model Order {
   items       OrderItem[]
   sentAt      DateTime?
   returnedAt  DateTime?
+  readyById   String?
+  returnById  String?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -466,8 +469,12 @@ model OrderItem {
   quantity         Int      @default(1)
   preparedPhotos   String[] @default([])
   preparedChecked  Boolean  @default(false)
+  preparedById     String?
+  preparedAt       DateTime?
   returnPhotos     String[] @default([])
   returnChecked    Boolean  @default(false)
+  returnedById     String?
+  returnedAt       DateTime?
   returnCondition  String?
   inventoryItemId  String?
   createdAt        DateTime @default(now())

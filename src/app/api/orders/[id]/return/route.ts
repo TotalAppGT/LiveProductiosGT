@@ -68,7 +68,7 @@ export async function POST(
 
     await prisma.order.update({
       where: { id },
-      data: { status: "DEVUELTO", returnedAt: new Date() },
+      data: { status: "DEVUELTO", returnedAt: new Date(), returnById: auth.payload.userId },
     });
 
     await prisma.activity.create({
