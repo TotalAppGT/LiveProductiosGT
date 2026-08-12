@@ -52,6 +52,7 @@ enum TaskPriority {
 
 enum TaskCategory {
   PRE_EVENTO
+  EVENTO
   POST_EVENTO
   COTIZACION
   COBRO

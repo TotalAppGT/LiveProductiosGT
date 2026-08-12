@@ -678,7 +678,7 @@ function CreateTaskModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIA");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("PRE_EVENTO");
   const [type, setType] = useState("DINAMICA");
   const [assignedToId, setAssignedToId] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -725,24 +725,40 @@ function CreateTaskModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Nueva Tarea" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Categoría
+          </label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            <option value="PRE_EVENTO">Pre Evento</option>
+            <option value="EVENTO">Evento</option>
+            <option value="POST_EVENTO">Post Evento</option>
+          </select>
+        </div>
         <Input
-          label="Título"
-          placeholder="Título de la tarea"
+          label="Evento"
+          placeholder="Nombre del evento o tarea"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           required
         />
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Descripción
+            Descripción <span className="text-gray-400 text-xs">(máx. 100 caracteres)</span>
           </label>
           <textarea
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => setDescription(e.target.value.slice(0, 100))}
+            maxLength={100}
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
-            rows={3}
-            placeholder="Descripción opcional"
+            rows={2}
+            placeholder="Descripción breve (opcional)"
           />
+          <p className="text-right text-xs text-gray-400 mt-1">{description.length}/100</p>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -775,20 +791,6 @@ function CreateTaskModal({
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Categoría
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            >
-              {CATEGORY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Asignar a
