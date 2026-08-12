@@ -29,7 +29,7 @@ export async function GET(
       return NextResponse.json({ error: "Bitácora no encontrada" }, { status: 404 });
     }
 
-    const doc = new PDFDocument({ size: "LETTER", margin: 40 });
+    const doc = new PDFDocument({ size: "LETTER", margin: 40, autoFirstPage: true });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     const done = new Promise<Buffer>((resolve, reject) => {
@@ -37,49 +37,47 @@ export async function GET(
       doc.on("error", (err) => reject(err));
     });
 
+    const safeArray = (arr: any): string[] => (Array.isArray(arr) ? arr : []);
+
+    const drawPhotoGrid = (photos: string[], labels: string[], size: number) => {
+      const perRow = 3;
+      const gap = 10;
+      const x0 = doc.page.margins.left;
+      const startY = doc.y;
+      for (let i = 0; i < photos.length; i++) {
+        const col = i % perRow;
+        const row = Math.floor(i / perRow);
+        const x = x0 + col * (size + gap);
+        const y = startY + row * (size + 16);
+        if (y + size > doc.page.height - doc.page.margins.bottom) {
+          doc.addPage();
+          doc.y = doc.page.margins.top;
+          break;
+        }
+        // label
+        doc.fontSize(7).fillColor("#555555").text(labels[i] || "Foto", x, y, { width: size, align: "center" });
+        // image
+        const buf = dataUrlToBuffer(photos[i]);
+        if (buf) {
+          try {
+            doc.image(buf, x, y + 12, { width: size, height: size });
+          } catch {
+            doc.rect(x, y + 12, size, size).stroke("#cccccc");
+          }
+        } else {
+          doc.rect(x, y + 12, size, size).stroke("#cccccc");
+        }
+      }
+      doc.y = startY + Math.ceil(photos.length / perRow) * (size + 16) + 10;
+    };
+
     // Encabezado
     doc.fontSize(16).fillColor("#2563eb").text("LIVE PRODUCTIONS GT", { align: "center" });
     doc.fontSize(10).fillColor("#666666").text("Informe de Uso de Vehículos", { align: "center" });
     doc.moveDown(0.5);
     doc.fontSize(12).fillColor("#222222").text(`Vehículo ${log.plate} — ${log.vehicleType}`, { align: "center" });
-    doc.fontSize(9).fillColor("#555555").text(`Conductor: ${log.driver?.name} · Generado: ${new Date().toLocaleString("es-GT")}`, { align: "center" });
+    doc.fontSize(9).fillColor("#555555").text(`Conductor: ${log.driver?.name || "—"} · Generado: ${new Date().toLocaleString("es-GT")}`, { align: "center" });
     doc.moveDown(1);
-
-    const drawPhotos = (photos: string[], labels: string[], size: number) => {
-      const perRow = 3;
-      const gap = 10;
-      const x0 = doc.page.margins.left;
-      for (let i = 0; i < photos.length; i++) {
-        const col = i % perRow;
-        const row = Math.floor(i / perRow);
-        const x = x0 + col * (size + gap);
-        const y = doc.y + row * (size + 16);
-        if (y + size > doc.page.height - doc.page.margins.bottom) {
-          doc.addPage();
-          doc.y = doc.page.margins.top;
-          const col2 = i % perRow;
-          const x2 = x0 + col2 * (size + gap);
-          drawPhotoSingle(photos[i], labels[i], x2, doc.y, size);
-        } else {
-          drawPhotoSingle(photos[i], labels[i], x, y, size);
-        }
-      }
-      doc.y += Math.ceil(photos.length / perRow) * (size + 16) + 10;
-    };
-
-    const drawPhotoSingle = (photo: string, label: string, x: number, y: number, size: number) => {
-      doc.fontSize(7).fillColor("#555555").text(label, x, y, { width: size, align: "center" });
-      const buf = dataUrlToBuffer(photo);
-      if (buf) {
-        try {
-          doc.image(buf, x, y + 12, { width: size, height: size });
-        } catch {
-          doc.rect(x, y + 12, size, size).stroke("#cccccc");
-        }
-      } else {
-        doc.rect(x, y + 12, size, size).stroke("#cccccc");
-      }
-    };
 
     // Salida
     doc.fontSize(11).fillColor("#2563eb").text("INFORMACIÓN DE SALIDA");
@@ -92,33 +90,33 @@ export async function GET(
     doc.moveDown(0.5);
 
     const startLabels = ["Frontal", "Trasera", "Lateral Izq", "Lateral Der", "Tablero/KM", "Interior"];
-    drawPhotos(log.startPhotos, startLabels, 150);
+    drawPhotoGrid(safeArray(log.startPhotos), startLabels, 150);
 
     // Combustible
-    if (log.fuelEntries.length > 0) {
-      doc.fontSize(11).fillColor("#2563eb").text(`CARGAS DE COMBUSTIBLE (${log.fuelEntries.length})`);
+    const fuelEntries = safeArray(log.fuelEntries);
+    if (fuelEntries.length > 0) {
+      doc.fontSize(11).fillColor("#2563eb").text(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`);
       doc.moveDown(0.3);
-      for (const f of log.fuelEntries) {
+      for (const f of fuelEntries) {
         doc.fontSize(9).fillColor("#333333").text(`Carga · ${new Date(f.createdAt).toLocaleString("es-GT")}`);
-        drawPhotos(f.photos || [], ["Tablero antes", "Bomba/Gasolinera", "Factura", "Tablero después"], 120);
+        drawPhotoGrid(safeArray(f.photos), ["Tablero antes", "Bomba/Gasolinera", "Factura", "Tablero después"], 120);
       }
     }
 
     // Retorno
-    if (log.status === "FINALIZADO") {
+    if (log.status === "FINALIZADO" && log.endAt) {
       doc.fontSize(11).fillColor("#2563eb").text("INFORMACIÓN DE RETORNO");
       doc.moveDown(0.3);
       doc.fontSize(9).fillColor("#333333");
-      doc.text(`Fecha de retorno: ${new Date(log.endAt!).toLocaleString("es-GT")}`);
+      doc.text(`Fecha de retorno: ${new Date(log.endAt).toLocaleString("es-GT")}`);
       doc.text(`Kilometraje final: ${log.endKm} km    Recorrido total: ${(log.endKm || 0) - log.startKm} km`);
       doc.text(`Nivel de agua: ${log.endWater || "—"}    Nivel de aceite: ${log.endOil || "—"}`);
       if (log.endComment) doc.text(`Comentario: ${log.endComment}`);
       doc.moveDown(0.5);
       const endLabels = ["Frontal", "Trasera", "Lateral Izq", "Lateral Der"];
-      drawPhotos(log.endPhotos, endLabels, 150);
+      drawPhotoGrid(safeArray(log.endPhotos), endLabels, 150);
     }
 
-    // Pie
     doc.moveDown(1);
     doc.fontSize(7).fillColor("#999999").text("Documento generado automáticamente por el sistema · Live Productions GT", { align: "center" });
 
@@ -133,6 +131,6 @@ export async function GET(
     });
   } catch (error) {
     console.error("Error generando PDF:", error);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json({ error: "Error interno: " + (error instanceof Error ? error.message : String(error)) }, { status: 500 });
   }
 }
