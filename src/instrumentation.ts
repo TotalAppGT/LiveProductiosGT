@@ -1,7 +1,9 @@
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
+  try {
     const { startCronManager } = await import("@/lib/cron-manager");
     startCronManager();
-    console.log("[Instrumentation] Cron manager registrado al iniciar");
+    console.log("[Instrumentation] ✅ Cron manager iniciado exitosamente");
+  } catch (err) {
+    console.error("[Instrumentation] ❌ Error iniciando cron:", err);
   }
 }
