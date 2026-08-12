@@ -340,7 +340,7 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
           <p><strong>Salida:</strong> {new Date(log.startAt).toLocaleString("es-GT")} · {log.startKm} km</p>
           <p><strong>Agua:</strong> {log.startWater || "—"} · <strong>Aceite:</strong> {log.startOil || "—"}</p>
           {(log.fuelEntries || []).map((f: any, i: number) => (
-            <p key={i} className="text-xs text-gray-600 dark:text-gray-300">⛽ Gasolina {i+1}: {f.kmBefore}→{f.kmAfter} km {f.amount ? `· ${f.amount}` : ""}</p>
+            <p key={i} className="text-xs text-gray-700 dark:text-gray-300">⛽ Gasolina #{i+1} · {(f.photos || []).length} fotos · {new Date(f.createdAt).toLocaleTimeString("es-GT", {hour:"2-digit",minute:"2-digit"})}</p>
           ))}
         </div>
 

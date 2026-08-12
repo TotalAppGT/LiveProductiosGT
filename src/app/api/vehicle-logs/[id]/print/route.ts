@@ -67,14 +67,14 @@ body { font-family: Arial, Helvetica, sans-serif; color: #222; font-size: 12px; 
 table { width: 100%; border-collapse: collapse; }
 table td { padding: 4px 6px; border-bottom: 1px solid #eee; font-size: 11px; }
 table td.lbl { font-weight: 700; width: 160px; color: #444; }
-.photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px; }
 .photo-box { border: 1px solid #ddd; border-radius: 6px; overflow: hidden; text-align: center; background: #fafafa; }
 .photo-label { font-size: 9px; font-weight: 700; color: #555; padding: 3px; background: #f0f4ff; }
-.photo-box img { width: 100%; height: 90px; object-fit: cover; display: block; }
-.no-photo { height: 90px; display: flex; align-items: center; justify-content: center; color: #bbb; }
-.fuel-entry { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid #eee; }
+.photo-box img { width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block; }
+.no-photo { aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; color: #bbb; }
+.fuel-entry { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; flex-wrap: wrap; }
 .fuel-num { font-weight: 800; color: #2563eb; min-width: 28px; }
-.fuel-photo { width: 70px; height: 52px; object-fit: cover; border: 1px solid #ddd; border-radius: 4px; }
+.fuel-photo { width: 130px; height: 130px; object-fit: cover; border: 1px solid #ddd; border-radius: 6px; }
 .footer { margin-top: 20px; font-size: 9px; color: #999; text-align: center; border-top: 1px solid #eee; padding-top: 8px; }
 </style>
 </head>

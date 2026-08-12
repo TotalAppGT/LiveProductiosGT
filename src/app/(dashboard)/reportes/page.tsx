@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { FolderOpen, FileText, Printer, Trash2, Share2 } from "lucide-react";
+import { Folder, FileText, Printer, Trash2, Share2, Mail, X, ChevronLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
 
 const CATEGORIES: { value: string; label: string; icon: string }[] = [
   { value: "USO_VEHICULOS", label: "Uso de Vehículos", icon: "🚛" },
@@ -18,7 +18,7 @@ export default function ReportesPage() {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCat, setSelectedCat] = useState("USO_VEHICULOS");
-  const [whatsappPhone, setWhatsappPhone] = useState("");
+  const [viewing, setViewing] = useState<any | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -49,7 +49,7 @@ export default function ReportesPage() {
   }
 
   async function sendWhatsApp(report: any) {
-    const phone = whatsappPhone || prompt("Número de WhatsApp para enviar (8 dígitos):");
+    const phone = prompt("Número de WhatsApp para enviar (8 dígitos):");
     if (!phone) return;
     const res = await fetch("/api/whatsapp/send", {
       method: "POST",
@@ -65,6 +65,12 @@ export default function ReportesPage() {
     else toast.error(json.error || "Error al enviar");
   }
 
+  function sendEmail(report: any) {
+    const subject = encodeURIComponent(`Reporte: ${report.title}`);
+    const body = encodeURIComponent(`Visualizá el informe aquí:\n${window.location.origin}${printUrl(report)}`);
+    window.open(`mailto:?subject=${subject}&body=${body}`);
+  }
+
   const filtered = reports.filter((r) => r.category === selectedCat);
 
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
@@ -72,7 +78,7 @@ export default function ReportesPage() {
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold flex items-center gap-2 mb-6">
-        <FolderOpen className="w-6 h-6" /> Repositorio de Reportes
+        <Folder className="w-6 h-6" /> Repositorio de Reportes
       </h1>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -80,64 +86,65 @@ export default function ReportesPage() {
           <button
             key={cat.value}
             onClick={() => setSelectedCat(cat.value)}
-            className={`p-4 rounded-xl border-2 text-center ${
+            className={`p-4 rounded-xl border-2 text-center transition-colors ${
               selectedCat === cat.value ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300"
             }`}
           >
             <div className="text-2xl mb-1">{cat.icon}</div>
-            <div className="text-sm font-medium">{cat.label}</div>
-            <div className="text-xs text-gray-400">{reports.filter((r) => r.category === cat.value).length} reportes</div>
+            <div className="text-sm font-medium text-gray-800">{cat.label}</div>
+            <div className="text-xs text-gray-500">{reports.filter((r) => r.category === cat.value).length} archivos</div>
           </button>
         ))}
       </div>
 
-      <div className="mb-4 flex items-center gap-2">
-        <input
-          value={whatsappPhone}
-          onChange={(e) => setWhatsappPhone(e.target.value)}
-          placeholder="Nº WhatsApp para envío (8 dígitos)"
-          className="rounded-lg border px-3 py-2 text-sm w-64"
-        />
-      </div>
-
-      <div className="grid gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {filtered.map((r) => (
-          <Card key={r.id} className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <FileText className="w-6 h-6 text-blue-500" />
-                <div>
-                  <h3 className="font-semibold">{r.title}</h3>
-                  <p className="text-xs text-gray-400">
-                    {new Date(r.createdAt).toLocaleString("es-GT")} · {r.createdBy?.name}
-                  </p>
-                </div>
+          <button
+            key={r.id}
+            onClick={() => setViewing(r)}
+            className="border border-gray-200 rounded-xl p-4 text-left hover:border-blue-400 hover:shadow-md transition-all bg-white"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
+                <FileText className="w-5 h-5 text-red-500" />
               </div>
-              <div className="flex gap-2">
-                <a
-                  href={printUrl(r)}
-                  target="_blank"
-                  className="px-3 py-1.5 rounded-lg text-xs bg-gray-100 hover:bg-gray-200 flex items-center gap-1"
-                >
-                  <Printer className="w-3 h-3" /> Ver/Imprimir
-                </a>
-                <button
-                  onClick={() => sendWhatsApp(r)}
-                  className="px-3 py-1.5 rounded-lg text-xs bg-green-100 hover:bg-green-200 flex items-center gap-1"
-                >
-                  <Share2 className="w-3 h-3" /> WhatsApp
-                </button>
-                <button onClick={() => deleteReport(r.id)} className="px-2 py-1.5 rounded-lg text-xs text-red-500 hover:bg-red-50">
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
+              <span className="text-xs text-gray-400">{new Date(r.createdAt).toLocaleDateString("es-GT", {day:"numeric",month:"short"})}</span>
             </div>
-          </Card>
+            <p className="text-sm font-medium text-gray-800 line-clamp-2">{r.title}</p>
+            <p className="text-xs text-gray-500 mt-1">{r.createdBy?.name}</p>
+          </button>
         ))}
         {filtered.length === 0 && (
-          <p className="text-center text-gray-400 py-8">No hay reportes en esta carpeta.</p>
+          <p className="text-center text-gray-400 py-8 col-span-full">No hay reportes en esta carpeta.</p>
         )}
       </div>
+
+      {/* Visor del reporte */}
+      {viewing && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-100">
+          <div className="bg-white border-b flex items-center justify-between px-4 py-3">
+            <button onClick={() => setViewing(null)} className="flex items-center gap-1 text-sm text-gray-700">
+              <ChevronLeft className="w-5 h-5" /> Volver
+            </button>
+            <span className="text-sm font-medium text-gray-800 truncate flex-1 text-center px-2">{viewing.title}</span>
+            <div className="flex gap-2">
+              <button onClick={() => window.open(printUrl(viewing), "_blank")} className="p-2 rounded-lg hover:bg-gray-100 text-gray-700" title="Imprimir">
+                <Printer className="w-5 h-5" />
+              </button>
+              <button onClick={() => sendWhatsApp(viewing)} className="p-2 rounded-lg hover:bg-green-50 text-green-600" title="WhatsApp">
+                <Share2 className="w-5 h-5" />
+              </button>
+              <button onClick={() => sendEmail(viewing)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600" title="Correo">
+                <Mail className="w-5 h-5" />
+              </button>
+              <button onClick={() => { deleteReport(viewing.id); setViewing(null); }} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Eliminar">
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          <iframe src={printUrl(viewing)} className="flex-1 w-full bg-white" />
+        </div>
+      )}
     </div>
   );
 }
