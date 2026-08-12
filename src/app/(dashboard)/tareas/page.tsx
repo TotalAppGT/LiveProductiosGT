@@ -35,6 +35,7 @@ import { formatDate, cn, getWeekDay } from "@/lib/utils";
 import type { Task, TaskStatus, User, ApiResponse, PaginatedResponse } from "@/types";
 
 const STATUS_TABS = [
+  { value: "MIS_TAREAS", label: "Mis Tareas" },
   { value: "TODAS", label: "Todas" },
   { value: "PENDIENTE", label: "Pendientes" },
   { value: "EN_PROCESO", label: "En Proceso" },
@@ -64,7 +65,7 @@ export default function TareasPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("TODAS");
+  const [activeTab, setActiveTab] = useState("MIS_TAREAS");
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -87,11 +88,13 @@ export default function TareasPage() {
     setError("");
     try {
       const params = new URLSearchParams();
-      if (activeTab !== "TODAS" && activeTab !== "HOY" && activeTab !== "SEMANA") {
+      if (activeTab === "MIS_TAREAS") {
+        if (user?.id) params.set("assignedToId", user.id);
+      } else if (activeTab !== "TODAS" && activeTab !== "HOY" && activeTab !== "SEMANA") {
         params.set("status", activeTab);
       }
       if (categoryFilter) params.set("category", categoryFilter);
-      if (assignedFilter) params.set("assignedToId", assignedFilter);
+      if (assignedFilter && activeTab !== "MIS_TAREAS") params.set("assignedToId", assignedFilter);
       if (typeFilter) params.set("type", typeFilter);
       if (search) params.set("search", search);
       if (activeTab === "HOY") {
@@ -114,7 +117,7 @@ export default function TareasPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, activeTab, categoryFilter, assignedFilter, typeFilter, search]);
+  }, [token, activeTab, categoryFilter, assignedFilter, typeFilter, search, user?.id]);
 
   const fetchUsers = useCallback(async () => {
     if (!token || !isAdminOrJefe) return;
