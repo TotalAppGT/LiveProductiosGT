@@ -250,9 +250,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, loading: true }));
 
       try {
+        // Resolve username (nombre/teléfono/correo) a email
+        let loginEmail = credentials.email;
+        if (!loginEmail.includes("@")) {
+          const resolveRes = await fetch("/api/auth/resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: credentials.email }),
+          });
+          const resolveJson = await resolveRes.json();
+          if (resolveJson.success && resolveJson.email) {
+            loginEmail = resolveJson.email;
+          }
+        }
+
         const firebaseCredential = await signInWithEmailAndPassword(
           authInstance,
-          credentials.email,
+          loginEmail,
           credentials.password
         );
         const { user, token } = await syncWithBackend(
