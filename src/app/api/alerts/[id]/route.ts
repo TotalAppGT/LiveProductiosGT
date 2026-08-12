@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await authenticateRequest(req);
+    const auth = authenticateRequest(req);
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
-    const existing = await prisma.scheduledAlert.findUnique({ where: { id: params.id } });
+    const { id } = await params;
+
+    const existing = await prisma.scheduledAlert.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Alerta no encontrada" }, { status: 404 });
     }
@@ -28,7 +30,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (data.targetUserId !== undefined) updateData.targetUserId = data.targetUserId;
 
     const alert = await prisma.scheduledAlert.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
     });
 
@@ -38,19 +40,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await authenticateRequest(req);
+    const auth = authenticateRequest(req);
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
-    const existing = await prisma.scheduledAlert.findUnique({ where: { id: params.id } });
+    const { id } = await params;
+
+    const existing = await prisma.scheduledAlert.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Alerta no encontrada" }, { status: 404 });
     }
 
-    await prisma.scheduledAlert.delete({ where: { id: params.id } });
+    await prisma.scheduledAlert.delete({ where: { id } });
 
     return NextResponse.json({ message: "Alerta eliminada" });
   } catch (error) {
