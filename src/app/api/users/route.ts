@@ -116,11 +116,17 @@ export async function POST(request: NextRequest) {
     const normalizedPhone = phone ? normalizeGTPhone(phone) : null;
     const normalizedWhatsapp = whatsappNumber ? normalizeGTPhone(whatsappNumber) : normalizedPhone;
 
-    // Si no hay email, generar uno interno basado en el teléfono
-    let finalEmail = email?.trim();
+    // Si no hay email, generar uno interno limpio basado en el nombre
+    let finalEmail = email?.trim().toLowerCase();
     if (!finalEmail) {
+      const cleanName = name
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "");
       const digits = (normalizedPhone || "").replace(/\D/g, "");
-      finalEmail = digits ? `usuario${digits}@liveproductions.gt` : `usuario${Date.now()}@liveproductions.gt`;
+      finalEmail = cleanName
+        ? `${cleanName}${digits ? `.${digits}` : ""}@liveproductions.gt`
+        : (digits ? `usuario${digits}` : `usuario${Date.now()}`) + "@liveproductions.gt";
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email: finalEmail } });
