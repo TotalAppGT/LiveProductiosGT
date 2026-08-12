@@ -193,9 +193,10 @@ model User {
   maintenanceDone   VehicleMaintenance[]
   workshopAssigned  WorkshopItem[]       @relation("WorkshopTechnician")
   workshopCreated   WorkshopItem[]       @relation("WorkshopCreator")
-  createdOrders     Order[]              @relation("OrderCreator")
-  createdTemplates  OrderTemplate[]      @relation("OrderTemplateCreator")
-  vehicleLogs       VehicleLog[]         @relation("VehicleLogDriver")
+  createdOrders     Order[]        @relation("OrderCreator")
+  createdTemplates  OrderTemplate[] @relation("OrderTemplateCreator")
+  vehicleLogs       VehicleLog[]   @relation("VehicleLogDriver")
+  createdReports    Report[]       @relation("ReportCreator")
 }
 
 model Task {
@@ -532,6 +533,19 @@ model VehicleLogFuel {
   createdAt DateTime   @default(now())
 
   @@index([logId])
+}
+
+model Report {
+  id           String   @id @default(cuid())
+  title        String
+  category     String   @default("OTROS")
+  resourceType String   @default("")
+  resourceId   String   @default("")
+  createdById  String
+  createdBy    User     @relation("ReportCreator", fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([category])
 }
 
 model FileAttachment {

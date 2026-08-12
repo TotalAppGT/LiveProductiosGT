@@ -55,6 +55,17 @@ export async function POST(
       },
     });
 
+    // Auto-generar reporte en el repositorio
+    await prisma.report.create({
+      data: {
+        title: `Bitácora ${log.plate} - ${log.vehicleType}`,
+        category: "USO_VEHICULOS",
+        resourceType: "vehicle_log",
+        resourceId: id,
+        createdById: auth.payload.userId,
+      },
+    });
+
     return NextResponse.json({ success: true, data: log });
   } catch (error) {
     console.error("Error en finish:", error);

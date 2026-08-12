@@ -81,6 +81,17 @@ export async function POST(
       },
     });
 
+    // Auto-generar reporte en repositorio
+    await prisma.report.create({
+      data: {
+        title: `Pedido #${order.orderNumber} - ${order.eventName}`,
+        category: "PEDIDOS",
+        resourceType: "order",
+        resourceId: id,
+        createdById: auth.payload.userId,
+      },
+    });
+
     return NextResponse.json({ success: true, message: "Devolución procesada" });
   } catch (error) {
     console.error("Error en return:", error);
