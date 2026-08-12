@@ -7,6 +7,7 @@ import {
   Users,
   UserCheck,
   UserX,
+  Trash2,
   Pencil,
   Shield,
   MessageCircle,
@@ -133,6 +134,25 @@ export default function PersonalPage() {
       }
     } catch {
       toast.error("Error al actualizar usuario");
+    }
+  }
+
+  async function deleteUser(user: User) {
+    if (!confirm(`¿Eliminar permanentemente a ${user.name}? Se eliminarán sus tareas, accesos, cobros y registros. Esta acción no se puede deshacer.`)) return;
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json: ApiResponse<User> = await res.json();
+      if (json.success) {
+        toast.success("Usuario eliminado");
+        fetchUsers();
+      } else {
+        toast.error(json.error || "Error al eliminar");
+      }
+    } catch {
+      toast.error("Error al eliminar usuario");
     }
   }
 
@@ -402,6 +422,16 @@ export default function PersonalPage() {
                                 )}
                               </Button>
                             )}
+                            {u.id !== currentUser?.id && (currentUser?.role === "DUENO" || currentUser?.role === "ADMIN") && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deleteUser(u)}
+                                title="Eliminar permanentemente"
+                              >
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -510,6 +540,11 @@ export default function PersonalPage() {
                     {u.id !== currentUser?.id && (
                       <Button variant="ghost" size="sm" onClick={() => toggleActive(u)}>
                         {u.active ? <UserX className="h-4 w-4 text-red-500" /> : <UserCheck className="h-4 w-4 text-green-500" />}
+                      </Button>
+                    )}
+                    {u.id !== currentUser?.id && (currentUser?.role === "DUENO" || currentUser?.role === "ADMIN") && (
+                      <Button variant="ghost" size="sm" onClick={() => deleteUser(u)} title="Eliminar permanentemente">
+                        <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>
                     )}
                   </div>

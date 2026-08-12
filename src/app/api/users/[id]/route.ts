@@ -192,8 +192,15 @@ export async function DELETE(
 
     if (!hasMinRole(auth.payload, "ADMIN")) {
       return NextResponse.json(
-        { success: false, error: "Solo administradores pueden desactivar usuarios" },
+        { success: false, error: "Solo administradores pueden eliminar usuarios" },
         { status: 403 }
+      );
+    }
+
+    if (auth.payload.userId === id) {
+      return NextResponse.json(
+        { success: false, error: "No puedes eliminar tu propia cuenta" },
+        { status: 400 }
       );
     }
 
@@ -205,27 +212,48 @@ export async function DELETE(
       );
     }
 
-    await prisma.user.update({
-      where: { id },
-      data: { active: false },
-    });
+    // Hard delete: clean up all related records
+    await prisma.$transaction([
+      prisma.pushToken.deleteMany({ where: { userId: id } }),
+      prisma.activity.deleteMany({ where: { userId: id } }),
+      prisma.whatsAppMessage.deleteMany({ where: { userId: id } }),
+      prisma.taskComment.deleteMany({ where: { userId: id } }),
+      prisma.taskHistory.deleteMany({ where: { userId: id } }),
+      prisma.groupMember.deleteMany({ where: { userId: id } }),
+      prisma.reminder.deleteMany({ where: { OR: [{ createdById: id }, { assignedToId: id }] } }),
+      prisma.vehicleMaintenance.deleteMany({ where: { doneById: id } }),
+      prisma.incomeRecord.deleteMany({ where: { OR: [{ userId: id }, { recordedById: id }] } }),
+      prisma.scheduledAlert.deleteMany({ where: { createdById: id } }),
+      // Reassign groups to null creator is not possible (required), delete them
+      prisma.group.deleteMany({ where: { createdById: id } }),
+      // Set nullable FKs to null
+      prisma.task.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+      prisma.task.updateMany({ where: { assignedById: id }, data: { assignedById: null } }),
+      prisma.inventoryItem.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+      prisma.vehicle.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+      prisma.cobro.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+      prisma.event.updateMany({ where: { plannerId: id }, data: { plannerId: null } }),
+      prisma.event.updateMany({ where: { responsibleId: id }, data: { responsibleId: null } }),
+      // Finally delete the user
+      prisma.user.delete({ where: { id } }),
+    ]);
 
     await prisma.activity.create({
       data: {
         userId: auth.payload.userId,
-        action: "DESACTIVAR_USUARIO",
+        action: "ELIMINAR_USUARIO",
         resource: "USER",
         resourceId: id,
-        details: `Usuario ${existingUser.name} desactivado`,
+        details: `Usuario ${existingUser.name} eliminado permanentemente`,
       },
     });
 
     return NextResponse.json(
-      { success: true, message: "Usuario desactivado exitosamente" },
+      { success: true, message: "Usuario eliminado permanentemente" },
       { status: 200 }
     );
   } catch (error) {
-    console.error("Error en desactivar usuario:", error);
+    console.error("Error en eliminar usuario:", error);
     return NextResponse.json(
       { success: false, error: "Error interno del servidor" },
       { status: 500 }
