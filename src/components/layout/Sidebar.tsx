@@ -10,6 +10,7 @@ import {
   Users,
   DollarSign,
   Truck,
+  Car,
   Wrench,
   ClipboardList,
   Shield,
@@ -93,6 +94,11 @@ const navItems: NavItem[] = [
     label: "Vehículos",
     href: "/vehiculos",
     icon: Truck,
+  },
+  {
+    label: "Bitácora Vehículos",
+    href: "/bitacora-vehiculos",
+    icon: Car,
   },
   {
     label: "Pedidos",

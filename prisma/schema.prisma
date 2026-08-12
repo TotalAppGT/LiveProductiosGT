@@ -153,79 +153,80 @@ model Tenant {
 }
 
 model User {
-  id              String   @id @default(cuid())
-  email           String   @unique
-  password        String
-  name            String
-  phone           String?
-  role            Role     @default(EMPLEADO)
-  firebaseUid     String?  @unique
-  avatar          String?
-  whatsappNumber  String?
-  active          Boolean  @default(true)
-  position        String   @default("")
-  tenantId        String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  email          String   @unique
+  password       String
+  name           String
+  phone          String?
+  role           Role     @default(EMPLEADO)
+  firebaseUid    String?  @unique
+  avatar         String?
+  whatsappNumber String?
+  active         Boolean  @default(true)
+  position       String   @default("")
+  tenantId       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  tenant           Tenant?            @relation(fields: [tenantId], references: [id])
-  assignedTasks    Task[]             @relation("TaskAssignee")
-  createdTasks     Task[]             @relation("TaskCreator")
-  taskComments     TaskComment[]
-  taskHistory      TaskHistory[]
-  inventoryItems   InventoryItem[]
-  vehicles         Vehicle[]
-  cobros           Cobro[]
-  activities       Activity[]
-  whatsappMessages WhatsAppMessage[]
-  plannedEvents    Event[]            @relation("EventPlanner")
-  responsibleEvents Event[]           @relation("EventResponsible")
-  uploadedFiles    FileAttachment[]
-  incomeRecords    IncomeRecord[]     @relation("IncomeRecorder")
-  myIncome         IncomeRecord[]
-  remindersCreated Reminder[]
-  remindersAssigned Reminder[] @relation("ReminderAssignee")
+  tenant            Tenant?              @relation(fields: [tenantId], references: [id])
+  assignedTasks     Task[]               @relation("TaskAssignee")
+  createdTasks      Task[]               @relation("TaskCreator")
+  taskComments      TaskComment[]
+  taskHistory       TaskHistory[]
+  inventoryItems    InventoryItem[]
+  vehicles          Vehicle[]
+  cobros            Cobro[]
+  activities        Activity[]
+  whatsappMessages  WhatsAppMessage[]
+  plannedEvents     Event[]              @relation("EventPlanner")
+  responsibleEvents Event[]              @relation("EventResponsible")
+  uploadedFiles     FileAttachment[]
+  incomeRecords     IncomeRecord[]       @relation("IncomeRecorder")
+  myIncome          IncomeRecord[]
+  remindersCreated  Reminder[]
+  remindersAssigned Reminder[]           @relation("ReminderAssignee")
   pushTokens        PushToken[]
-  createdGroups     Group[]       @relation("GroupCreator")
+  createdGroups     Group[]              @relation("GroupCreator")
   groupMemberships  GroupMember[]
-  createdAlerts     ScheduledAlert[] @relation("AlertCreator")
-  targetedAlerts    ScheduledAlert[] @relation("AlertTarget")
+  createdAlerts     ScheduledAlert[]     @relation("AlertCreator")
+  targetedAlerts    ScheduledAlert[]     @relation("AlertTarget")
   maintenanceDone   VehicleMaintenance[]
-  workshopAssigned  WorkshopItem[] @relation("WorkshopTechnician")
-  workshopCreated   WorkshopItem[] @relation("WorkshopCreator")
-  createdOrders     Order[]        @relation("OrderCreator")
-  createdTemplates  OrderTemplate[] @relation("OrderTemplateCreator")
+  workshopAssigned  WorkshopItem[]       @relation("WorkshopTechnician")
+  workshopCreated   WorkshopItem[]       @relation("WorkshopCreator")
+  createdOrders     Order[]              @relation("OrderCreator")
+  createdTemplates  OrderTemplate[]      @relation("OrderTemplateCreator")
+  vehicleLogs       VehicleLog[]         @relation("VehicleLogDriver")
 }
 
 model Task {
-  id                 String       @id @default(cuid())
-  title              String
-  description        String?
-  type               TaskType     @default(FIJA)
-  frequency          TaskFrequency?
-  dayOfWeek          DayOfWeek?
-  dueDate            DateTime?
-  status             TaskStatus   @default(PENDIENTE)
-  priority           TaskPriority @default(MEDIA)
-  category           TaskCategory @default(OTRO)
-  comments           String?
-  rescheduledTo      DateTime?
-  requiresConfirmation Boolean   @default(false)
-  confirmedAt        DateTime?
-  assignedToId       String?
-  assignedById       String?
-  eventId            String?
-  tenantId           String?
-  postponeReason     String?
-  postponeCount      Int          @default(0)
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  id                   String         @id @default(cuid())
+  title                String
+  description          String?
+  type                 TaskType       @default(FIJA)
+  frequency            TaskFrequency?
+  dayOfWeek            DayOfWeek?
+  dueDate              DateTime?
+  status               TaskStatus     @default(PENDIENTE)
+  priority             TaskPriority   @default(MEDIA)
+  category             TaskCategory   @default(OTRO)
+  comments             String?
+  rescheduledTo        DateTime?
+  requiresConfirmation Boolean        @default(false)
+  confirmedAt          DateTime?
+  assignedToId         String?
+  assignedById         String?
+  eventId              String?
+  tenantId             String?
+  postponeReason       String?
+  postponeCount        Int            @default(0)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  assignedTo User?          @relation("TaskAssignee", fields: [assignedToId], references: [id])
-  assignedBy User?          @relation("TaskCreator", fields: [assignedById], references: [id])
-  event      Event?         @relation(fields: [eventId], references: [id])
-  tenant     Tenant?        @relation(fields: [tenantId], references: [id])
-  commentsList      TaskComment[]
+  assignedTo       User?             @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  assignedBy       User?             @relation("TaskCreator", fields: [assignedById], references: [id])
+  event            Event?            @relation(fields: [eventId], references: [id])
+  tenant           Tenant?           @relation(fields: [tenantId], references: [id])
+  commentsList     TaskComment[]
   history          TaskHistory[]
   whatsappMessages WhatsAppMessage[]
   attachments      FileAttachment[]
@@ -243,13 +244,13 @@ model TaskComment {
 }
 
 model TaskHistory {
-  id             String     @id @default(cuid())
+  id             String      @id @default(cuid())
   taskId         String
   userId         String
   action         String
   previousStatus TaskStatus?
   newStatus      TaskStatus?
-  createdAt      DateTime   @default(now())
+  createdAt      DateTime    @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id])
@@ -274,9 +275,9 @@ model Event {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  planner     User?    @relation("EventPlanner", fields: [plannerId], references: [id])
-  responsible User?    @relation("EventResponsible", fields: [responsibleId], references: [id])
-  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  planner          User?             @relation("EventPlanner", fields: [plannerId], references: [id])
+  responsible      User?             @relation("EventResponsible", fields: [responsibleId], references: [id])
+  tenant           Tenant?           @relation(fields: [tenantId], references: [id])
   tasks            Task[]
   cobros           Cobro[]
   whatsappMessages WhatsAppMessage[]
@@ -285,20 +286,20 @@ model Event {
 }
 
 model InventoryItem {
-  id            String           @id @default(cuid())
+  id            String            @id @default(cuid())
   name          String
   category      InventoryCategory @default(OTRO)
-  quantity      Int              @default(1)
+  quantity      Int               @default(1)
   assignedToId  String?
-  status         InventoryStatus  @default(DISPONIBLE)
-  location       String           @default("Bodega Elgin")
+  status        InventoryStatus   @default(DISPONIBLE)
+  location      String            @default("Bodega Elgin")
   notes         String?
   lastCheckedAt DateTime?
   serialNumber  String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
-  assignedTo User? @relation(fields: [assignedToId], references: [id])
+  assignedTo  User?            @relation(fields: [assignedToId], references: [id])
   attachments FileAttachment[]
 }
 
@@ -320,6 +321,7 @@ model Vehicle {
   assignedTo         User?                @relation(fields: [assignedToId], references: [id])
   tenant             Tenant?              @relation(fields: [tenantId], references: [id])
   maintenanceRecords VehicleMaintenance[]
+  vehicleLogs        VehicleLog[]
 }
 
 model VehicleMaintenance {
@@ -333,7 +335,7 @@ model VehicleMaintenance {
   mileage     Int?
   doneById    String?
   doneBy      User?    @relation(fields: [doneById], references: [id])
-  notes        String?
+  notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -360,9 +362,9 @@ model WorkshopItem {
 }
 
 model Cobro {
-  id            String     @id @default(cuid())
+  id            String      @id @default(cuid())
   clientName    String
-  amount        Decimal    @db.Decimal(10, 2)
+  amount        Decimal     @db.Decimal(10, 2)
   status        CobroStatus @default(PENDIENTE)
   invoiceNumber String?
   dueDate       DateTime?
@@ -370,8 +372,8 @@ model Cobro {
   notes         String?
   eventId       String?
   tenantId      String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   event      Event?  @relation(fields: [eventId], references: [id])
   assignedTo User?   @relation(fields: [assignedToId], references: [id])
@@ -426,15 +428,15 @@ model WhatsAppConfig {
 }
 
 model WhatsAppMessage {
-  id            String               @id @default(cuid())
-  userId        String
-  toNumber      String
-  message       String
-  type          WhatsAppMessageType  @default(NOTIFICATION)
-  status        WhatsAppMessageStatus @default(SENT)
-  relatedTaskId String?
+  id             String                @id @default(cuid())
+  userId         String
+  toNumber       String
+  message        String
+  type           WhatsAppMessageType   @default(NOTIFICATION)
+  status         WhatsAppMessageStatus @default(SENT)
+  relatedTaskId  String?
   relatedEventId String?
-  createdAt     DateTime             @default(now())
+  createdAt      DateTime              @default(now())
 
   user         User?  @relation(fields: [userId], references: [id])
   relatedTask  Task?  @relation(fields: [relatedTaskId], references: [id])
@@ -461,24 +463,24 @@ model Order {
 }
 
 model OrderItem {
-  id               String   @id @default(cuid())
-  orderId          String
-  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  name             String
-  category         String   @default("AUDIO")
-  quantity         Int      @default(1)
-  preparedPhotos   String[] @default([])
-  preparedChecked  Boolean  @default(false)
-  preparedById     String?
-  preparedAt       DateTime?
-  returnPhotos     String[] @default([])
-  returnChecked    Boolean  @default(false)
-  returnedById     String?
-  returnedAt       DateTime?
-  returnCondition  String?
-  inventoryItemId  String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String    @id @default(cuid())
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  name            String
+  category        String    @default("AUDIO")
+  quantity        Int       @default(1)
+  preparedPhotos  String[]  @default([])
+  preparedChecked Boolean   @default(false)
+  preparedById    String?
+  preparedAt      DateTime?
+  returnPhotos    String[]  @default([])
+  returnChecked   Boolean   @default(false)
+  returnedById    String?
+  returnedAt      DateTime?
+  returnCondition String?
+  inventoryItemId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([orderId])
 }
@@ -492,38 +494,78 @@ model OrderTemplate {
   createdAt   DateTime @default(now())
 }
 
+model VehicleLog {
+  id           String    @id @default(cuid())
+  vehicleId    String?
+  vehicle      Vehicle?  @relation(fields: [vehicleId], references: [id])
+  plate        String
+  vehicleType  String
+  driverId     String
+  driver       User      @relation("VehicleLogDriver", fields: [driverId], references: [id])
+  status       String    @default("EN_USO")
+  startKm      Int
+  startWater   String    @default("")
+  startOil     String    @default("")
+  startPhotos  String[]  @default([])
+  startAt      DateTime  @default(now())
+  startComment String?
+  endKm        Int?
+  endWater     String?
+  endOil       String?
+  endPhotos    String[]  @default([])
+  endAt        DateTime?
+  endComment   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  fuelEntries VehicleLogFuel[]
+}
+
+model VehicleLogFuel {
+  id        String     @id @default(cuid())
+  logId     String
+  log       VehicleLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  kmBefore  Int?
+  kmAfter   Int?
+  amount    String?
+  photos    String[]   @default([])
+  createdAt DateTime   @default(now())
+
+  @@index([logId])
+}
+
 model FileAttachment {
-  id           String  @id @default(uuid())
+  id           String         @id @default(uuid())
   fileName     String
   fileUrl      String
   fileType     String
   fileSize     Int
   uploadedById String
-  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  uploadedBy   User           @relation(fields: [uploadedById], references: [id])
   taskId       String?
-  task         Task?    @relation(fields: [taskId], references: [id])
+  task         Task?          @relation(fields: [taskId], references: [id])
   eventId      String?
-  event        Event?   @relation(fields: [eventId], references: [id])
+  event        Event?         @relation(fields: [eventId], references: [id])
   inventoryId  String?
   inventory    InventoryItem? @relation(fields: [inventoryId], references: [id])
-  createdAt    DateTime @default(now())
+  createdAt    DateTime       @default(now())
 }
 
 model Reminder {
-  id           String   @id @default(uuid())
-  title        String
-  description  String?
-  remindAt     DateTime
-  isCompleted  Boolean  @default(false)
-  completedAt  DateTime?
-  createdById  String
-  createdBy    User     @relation(fields: [createdById], references: [id])
-assignedToId String
-  assignedTo   User   @relation("ReminderAssignee", fields: [assignedToId], references: [id])
-  notified     Boolean  @default(false)
-  advanceNotified Boolean @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String    @id @default(uuid())
+  title           String
+  description     String?
+  remindAt        DateTime
+  isCompleted     Boolean   @default(false)
+  completedAt     DateTime?
+  createdById     String
+  createdBy       User      @relation(fields: [createdById], references: [id])
+  assignedToId    String
+  assignedTo      User      @relation("ReminderAssignee", fields: [assignedToId], references: [id])
+  notified        Boolean   @default(false)
+  advanceNotified Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model IncomeRecord {
@@ -553,15 +595,15 @@ model PushToken {
 }
 
 model Group {
-  id          String   @id @default(uuid())
+  id          String           @id @default(uuid())
   name        String
-  description String   @default("")
+  description String           @default("")
   createdById String
-  createdBy   User     @relation("GroupCreator", fields: [createdById], references: [id])
+  createdBy   User             @relation("GroupCreator", fields: [createdById], references: [id])
   members     GroupMember[]
   alerts      ScheduledAlert[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 }
 
 model GroupMember {
