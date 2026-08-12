@@ -634,6 +634,25 @@ export default function PersonalPage() {
   );
 }
 
+const MODULE_OPTIONS = [
+  { value: "dashboard", label: "Dashboard" },
+  { value: "tareas", label: "Tareas" },
+  { value: "cumplimiento", label: "Cumplimiento" },
+  { value: "monitoreo", label: "Monitoreo" },
+  { value: "bitacora", label: "Bitácora" },
+  { value: "eventos", label: "Eventos" },
+  { value: "inventario", label: "Inventario" },
+  { value: "personal", label: "Personal" },
+  { value: "cobros", label: "Cobros" },
+  { value: "vehiculos", label: "Vehículos" },
+  { value: "bitacora-vehiculos", label: "Uso Vehículos" },
+  { value: "pedidos", label: "Pedidos" },
+  { value: "taller", label: "Taller" },
+  { value: "notificaciones", label: "Notificaciones" },
+  { value: "reportes", label: "Reportes" },
+  { value: "admin", label: "Admin" },
+];
+
 function AddWorkerModal({
   isOpen,
   onClose,
@@ -651,6 +670,7 @@ function AddWorkerModal({
   const [phone, setPhone] = useState("");
   const [position, setPosition] = useState("");
   const [role, setRole] = useState("EMPLEADO");
+  const [selectedModules, setSelectedModules] = useState<string[]>(["dashboard", "tareas"]);
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -672,6 +692,7 @@ function AddWorkerModal({
           phone: normalizedPhone,
           whatsappNumber: normalizedPhone,
           position: position.trim(),
+          modules: selectedModules,
           role,
         }),
       });
@@ -710,6 +731,21 @@ function AddWorkerModal({
             <option value="JEFE">Jefe</option>
             <option value="EMPLEADO">Empleado</option>
           </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Módulos de acceso</label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {MODULE_OPTIONS.map((m) => (
+              <label key={m.value} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer border ${selectedModules.includes(m.value) ? "border-blue-400 bg-blue-50 text-gray-800" : "border-gray-200 text-gray-600"}`}>
+                <input
+                  type="checkbox"
+                  checked={selectedModules.includes(m.value)}
+                  onChange={() => setSelectedModules(prev => prev.includes(m.value) ? prev.filter(x => x !== m.value) : [...prev, m.value])}
+                />
+                {m.label}
+              </label>
+            ))}
+          </div>
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="ghost" onClick={onClose} type="button">Cancelar</Button>

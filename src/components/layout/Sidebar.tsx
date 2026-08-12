@@ -143,8 +143,15 @@ function Sidebar() {
   const { user, logout } = useAuth();
 
   const filteredItems = navItems.filter((item) => {
-    if (!item.roles) return true;
-    return user ? item.roles.includes(user.role) : false;
+    if (item.roles && (!user || !item.roles.includes(user.role))) return false;
+    // Filtro por módulos de acceso (solo si el usuario tiene módulos definidos)
+    const userModules = (user as any)?.modules;
+    if (userModules && userModules.trim() !== "") {
+      const moduleKey = item.href.replace("/", "");
+      const allowed = userModules.split(",").map((m: string) => m.trim());
+      if (!allowed.includes(moduleKey)) return false;
+    }
+    return true;
   });
 
   function handleNavigate(href: string) {

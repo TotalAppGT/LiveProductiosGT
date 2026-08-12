@@ -102,7 +102,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, email, phone, role, whatsappNumber, avatar, active, tenantId, firebaseUid } = body;
+    const { name, email, phone, role, whatsappNumber, avatar, active, tenantId, firebaseUid, position, modules } = body;
 
     if (role !== undefined && !hasMinRole(auth.payload, "ADMIN")) {
       return NextResponse.json(
@@ -133,6 +133,8 @@ export async function PUT(
         active: active !== undefined ? active : undefined,
         tenantId: tenantId !== undefined ? tenantId : undefined,
         firebaseUid: firebaseUid !== undefined ? firebaseUid : undefined,
+        position: position !== undefined ? position : undefined,
+        modules: modules !== undefined ? (Array.isArray(modules) ? modules.join(",") : modules) : undefined,
       },
       select: {
         id: true,

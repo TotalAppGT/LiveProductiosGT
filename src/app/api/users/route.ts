@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, email, password, phone, role, whatsappNumber, tenantId, position } = body;
+    const { name, email, password, phone, role, whatsappNumber, tenantId, position, modules } = body;
 
     if (!name || !password) {
       return NextResponse.json(
@@ -171,6 +171,7 @@ export async function POST(request: NextRequest) {
         whatsappNumber: normalizedWhatsapp,
         tenantId: tenantId || null,
         position: position || "",
+        modules: Array.isArray(modules) ? modules.join(",") : (modules || ""),
         firebaseUid,
       },
       select: {
