@@ -140,8 +140,8 @@ export default function BitacoraVehiculosPage() {
       <Modal isOpen={showStart} onClose={() => setShowStart(false)} title="Iniciar Bitácora de Vehículo" size="lg">
         <div className="space-y-4 p-1">
           <div>
-            <label className="block text-sm font-medium mb-1">Vehículo</label>
-            <select value={vehicleId} onChange={(e) => onSelectVehicle(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vehículo</label>
+            <select value={vehicleId} onChange={(e) => onSelectVehicle(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white">
               <option value="">Seleccionar vehículo...</option>
               {vehicles.map((v) => (
                 <option key={v.id} value={v.id}>{v.type} - {v.plate} ({v.name})</option>
@@ -155,21 +155,21 @@ export default function BitacoraVehiculosPage() {
           <div className="grid grid-cols-3 gap-3">
             <Input label="Kilometraje" type="number" value={startKm} onChange={(e) => setStartKm(e.target.value)} />
             <div>
-              <label className="block text-sm font-medium mb-1">Agua</label>
-              <select value={startWater} onChange={(e) => setStartWater(e.target.value)} className="w-full rounded-lg border px-2 py-2 text-sm">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Agua</label>
+              <select value={startWater} onChange={(e) => setStartWater(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-gray-900 dark:text-white">
                 <option>Normal</option><option>Bajo</option><option>Crítico</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Aceite</label>
-              <select value={startOil} onChange={(e) => setStartOil(e.target.value)} className="w-full rounded-lg border px-2 py-2 text-sm">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Aceite</label>
+              <select value={startOil} onChange={(e) => setStartOil(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-gray-900 dark:text-white">
                 <option>Normal</option><option>Bajo</option><option>Crítico</option>
               </select>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Fotos obligatorias ({startPhotos.length}/6)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fotos obligatorias ({startPhotos.length}/6)</label>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {["Frontal", "Trasera", "Lateral izq", "Lateral der", "Tablero/KM", "Interior"].map((label, i) => (
                 <button
@@ -195,7 +195,7 @@ export default function BitacoraVehiculosPage() {
             value={startComment}
             onChange={(e) => setStartComment(e.target.value)}
             placeholder="Observación o comentario (opcional)"
-            className="w-full rounded-lg border px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
             rows={2}
           />
 
@@ -285,21 +285,21 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
     <Modal isOpen onClose={onClose} title={`Bitácora ${log.plate} - ${log.vehicleType}`} size="lg">
       <div className="space-y-4 p-1">
         <div className="flex gap-2">
-          <a href={`/api/vehicle-logs/${log.id}/print`} target="_blank" className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg">
+          <a href={`/api/vehicle-logs/${log.id}/print`} target="_blank" className="text-xs text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg">
             <FileText className="w-3 h-3 inline mr-1" /> Ver PDF / Imprimir
           </a>
           {isActive && (
-            <button onClick={() => setShowFuel(!showFuel)} className="text-xs bg-yellow-100 hover:bg-yellow-200 px-3 py-1.5 rounded-lg">
+            <button onClick={() => setShowFuel(!showFuel)} className="text-xs text-yellow-900 bg-yellow-100 hover:bg-yellow-200 px-3 py-1.5 rounded-lg">
               <Fuel className="w-3 h-3 inline mr-1" /> Registrar Gasolina
             </button>
           )}
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-3 text-sm">
+        <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-900 dark:text-gray-100">
           <p><strong>Salida:</strong> {new Date(log.startAt).toLocaleString("es-GT")} · {log.startKm} km</p>
           <p><strong>Agua:</strong> {log.startWater || "—"} · <strong>Aceite:</strong> {log.startOil || "—"}</p>
           {(log.fuelEntries || []).map((f: any, i: number) => (
-            <p key={i} className="text-xs text-gray-500">⛽ Gasolina {i+1}: {f.kmBefore}→{f.kmAfter} km {f.amount ? `· ${f.amount}` : ""}</p>
+            <p key={i} className="text-xs text-gray-600 dark:text-gray-300">⛽ Gasolina {i+1}: {f.kmBefore}→{f.kmAfter} km {f.amount ? `· ${f.amount}` : ""}</p>
           ))}
         </div>
 
@@ -312,11 +312,11 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
               <Input label="Monto Q" value={fuelAmount} onChange={(e) => setFuelAmount(e.target.value)} />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">Fotos ({fuelPhotos.length}/4)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fotos ({fuelPhotos.length}/4)</label>
               <div className="grid grid-cols-2 gap-2">
                 {["Tablero antes", "Bomba/Gasolinera", "Factura", "Tablero después"].map((label, i) => (
                   <button key={label} type="button" onClick={() => uploadCameraPhoto((url) => { const arr = [...fuelPhotos]; arr[i] = url; setFuelPhotos(arr); })}
-                    className={`border-2 border-dashed rounded-lg p-2 text-center text-xs ${fuelPhotos[i] ? "border-green-500 text-green-600" : "border-yellow-400 text-yellow-600"}`}>
+                    className={`border-2 border-dashed rounded-lg p-2 text-center text-xs font-medium ${fuelPhotos[i] ? "border-green-600 text-green-700 bg-green-50" : "border-yellow-500 text-yellow-800"}`}>
                     <Camera className="w-4 h-4 mx-auto mb-1" />{fuelPhotos[i] ? "✅ " + label : label}
                   </button>
                 ))}
@@ -332,20 +332,20 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
             <div className="grid grid-cols-3 gap-2">
               <Input label="KM final" type="number" value={endKm} onChange={(e) => setEndKm(e.target.value)} />
               <div>
-                <label className="block text-xs font-medium mb-1">Agua</label>
-                <select value={endWater} onChange={(e) => setEndWater(e.target.value)} className="w-full rounded-lg border px-2 py-2 text-sm">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Agua</label>
+                <select value={endWater} onChange={(e) => setEndWater(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-gray-900 dark:text-white">
                   <option>Normal</option><option>Bajo</option><option>Crítico</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">Aceite</label>
-                <select value={endOil} onChange={(e) => setEndOil(e.target.value)} className="w-full rounded-lg border px-2 py-2 text-sm">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Aceite</label>
+                <select value={endOil} onChange={(e) => setEndOil(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-gray-900 dark:text-white">
                   <option>Normal</option><option>Bajo</option><option>Crítico</option>
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">Fotos de retorno ({endPhotos.length}/4)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fotos de retorno ({endPhotos.length}/4)</label>
               <div className="grid grid-cols-2 gap-2">
                 {["Frontal", "Trasera", "Lateral izq", "Lateral der"].map((label, i) => (
                   <button key={label} type="button" onClick={() => uploadCameraPhoto((url) => { const arr = [...endPhotos]; arr[i] = url; setEndPhotos(arr); })}
@@ -355,7 +355,7 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
                 ))}
               </div>
             </div>
-            <textarea value={endComment} onChange={(e) => setEndComment(e.target.value)} placeholder="Observación de retorno (opcional)" className="w-full rounded-lg border px-3 py-2 text-sm" rows={2} />
+            <textarea value={endComment} onChange={(e) => setEndComment(e.target.value)} placeholder="Observación de retorno (opcional)" className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white" rows={2} />
             <Button onClick={finishLog} className="w-full bg-green-600">
               <Check className="w-4 h-4 mr-1" /> Finalizar Bitácora
             </Button>
