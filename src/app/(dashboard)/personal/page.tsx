@@ -8,6 +8,7 @@ import {
   UserCheck,
   UserX,
   Trash2,
+  KeyRound,
   Pencil,
   Shield,
   MessageCircle,
@@ -153,6 +154,26 @@ export default function PersonalPage() {
       }
     } catch {
       toast.error("Error al eliminar usuario");
+    }
+  }
+
+  async function resetPassword(user: User) {
+    const newPassword = prompt(`Nueva contraseña para ${user.name} (mínimo 6 caracteres):`);
+    if (!newPassword) return;
+    try {
+      const res = await fetch(`/api/users/${user.id}/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ newPassword }),
+      });
+      const json: ApiResponse<User> = await res.json();
+      if (json.success) {
+        toast.success(`Contraseña de ${user.name} actualizada`);
+      } else {
+        toast.error(json.error || "Error al cambiar contraseña");
+      }
+    } catch {
+      toast.error("Error al cambiar contraseña");
     }
   }
 
@@ -432,6 +453,16 @@ export default function PersonalPage() {
                                 <Trash2 className="h-4 w-4 text-red-600" />
                               </Button>
                             )}
+                            {currentUser?.role === "DUENO" || currentUser?.role === "ADMIN" ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => resetPassword(u)}
+                                title="Cambiar contraseña"
+                              >
+                                <KeyRound className="h-4 w-4 text-blue-500" />
+                              </Button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
