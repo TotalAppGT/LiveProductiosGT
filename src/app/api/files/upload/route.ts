@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         success: true,
         data: {
           ...attachment,
-          fileUrl: `/api/files/${attachment.id}`,
+          fileUrl: attachment.fileUrl,
         },
         message: "Archivo subido exitosamente",
       },

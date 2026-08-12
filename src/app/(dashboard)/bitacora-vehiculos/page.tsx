@@ -55,6 +55,33 @@ export default function BitacoraVehiculosPage() {
     setVehicleType(v?.type || "");
   }
 
+  async function compressImage(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (e) => {
+        const img = new Image();
+        img.src = e.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxSize = 1000;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxSize) { height *= maxSize / width; width = maxSize; }
+          } else {
+            if (height > maxSize) { width *= maxSize / height; height = maxSize; }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.7));
+        };
+      };
+    });
+  }
+
   async function uploadCameraPhoto(callback: (url: string) => void) {
     const input = document.createElement("input");
     input.type = "file";
@@ -63,15 +90,8 @@ export default function BitacoraVehiculosPage() {
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/files/upload", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      const json = await res.json();
-      if (json.success) callback(json.data.fileUrl);
+      const dataUrl = await compressImage(file);
+      callback(dataUrl);
     };
     input.click();
   }
@@ -220,15 +240,39 @@ export default function BitacoraVehiculosPage() {
 function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClose: () => void; token: string; onUpdated: () => void }) {
   const [current, setCurrent] = useState<any>(log);
   const [showFuel, setShowFuel] = useState(false);
-  const [fuelKmBefore, setFuelKmBefore] = useState("");
-  const [fuelKmAfter, setFuelKmAfter] = useState("");
-  const [fuelAmount, setFuelAmount] = useState("");
   const [fuelPhotos, setFuelPhotos] = useState<string[]>([]);
   const [endKm, setEndKm] = useState("");
   const [endWater, setEndWater] = useState("Normal");
   const [endOil, setEndOil] = useState("Normal");
   const [endPhotos, setEndPhotos] = useState<string[]>([]);
   const [endComment, setEndComment] = useState("");
+
+  async function compressImage(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (e) => {
+        const img = new Image();
+        img.src = e.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxSize = 1000;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxSize) { height *= maxSize / width; width = maxSize; }
+          } else {
+            if (height > maxSize) { width *= maxSize / height; height = maxSize; }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.7));
+        };
+      };
+    });
+  }
 
   async function uploadCameraPhoto(callback: (url: string) => void) {
     const input = document.createElement("input");
@@ -238,11 +282,8 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/files/upload", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData });
-      const json = await res.json();
-      if (json.success) callback(json.data.fileUrl);
+      const dataUrl = await compressImage(file);
+      callback(dataUrl);
     };
     input.click();
   }
@@ -252,13 +293,13 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
     const res = await fetch(`/api/vehicle-logs/${log.id}/fuel`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ kmBefore: fuelKmBefore, kmAfter: fuelKmAfter, amount: fuelAmount, photos: fuelPhotos }),
+      body: JSON.stringify({ photos: fuelPhotos }),
     });
     const json = await res.json();
     if (json.success) {
       toast.success("Carga de combustible registrada");
       setShowFuel(false);
-      setFuelKmBefore(""); setFuelKmAfter(""); setFuelAmount(""); setFuelPhotos([]);
+      setFuelPhotos([]);
       onUpdated();
     } else toast.error(json.error || "Error");
   }
@@ -305,12 +346,7 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
 
         {showFuel && isActive && (
           <div className="border rounded-lg p-3 space-y-3">
-            <p className="font-medium text-sm">Registro de Combustible</p>
-            <div className="grid grid-cols-3 gap-2">
-              <Input label="KM antes" type="number" value={fuelKmBefore} onChange={(e) => setFuelKmBefore(e.target.value)} />
-              <Input label="KM después" type="number" value={fuelKmAfter} onChange={(e) => setFuelKmAfter(e.target.value)} />
-              <Input label="Monto Q" value={fuelAmount} onChange={(e) => setFuelAmount(e.target.value)} />
-            </div>
+            <p className="font-medium text-sm text-gray-700 dark:text-gray-300">Registro de Combustible</p>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fotos ({fuelPhotos.length}/4)</label>
               <div className="grid grid-cols-2 gap-2">
