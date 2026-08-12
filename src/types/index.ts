@@ -59,11 +59,7 @@ export type InventoryStatus =
   | 'PERDIDO'
   | 'DANADO';
 
-export type InventoryLocation =
-  | 'BODEGA_ELGIN'
-  | 'BODEGA_PP'
-  | 'EN_EVENTO'
-  | 'EN_RENTA';
+export type InventoryLocation = string;
 
 export type VehicleStatus =
   | 'DISPONIBLE'

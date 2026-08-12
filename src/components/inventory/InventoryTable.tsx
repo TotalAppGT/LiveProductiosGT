@@ -35,13 +35,6 @@ const categoryLabels: Record<InventoryCategory, string> = {
   OTRO: "Otro",
 };
 
-const locationLabels: Record<InventoryLocation, string> = {
-  BODEGA_ELGIN: "Bodega Elgin",
-  BODEGA_PP: "Bodega PP",
-  EN_EVENTO: "En evento",
-  EN_RENTA: "En renta",
-};
-
 const quickStatusOptions: InventoryStatus[] = [
   "DISPONIBLE",
   "ASIGNADO",
@@ -196,7 +189,7 @@ export function InventoryTable({
                   <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
                     <div className="flex items-center gap-1">
                       <MapPin className="h-3.5 w-3.5 text-gray-400" />
-                      <span className="text-sm">{locationLabels[item.location] || item.location}</span>
+                      <span className="text-sm">{item.location}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3">

@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         quantity: quantity || 1,
         assignedToId: assignedToId || null,
         status: status || "DISPONIBLE",
-        location: location || "BODEGA_ELGIN",
+        location: location || "Bodega Elgin",
         notes: notes || null,
         serialNumber: serialNumber || null,
         lastCheckedAt: new Date(),

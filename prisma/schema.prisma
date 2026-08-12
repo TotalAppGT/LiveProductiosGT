@@ -287,8 +287,8 @@ model InventoryItem {
   category      InventoryCategory @default(OTRO)
   quantity      Int              @default(1)
   assignedToId  String?
-  status        InventoryStatus  @default(DISPONIBLE)
-  location      InventoryLocation @default(BODEGA_ELGIN)
+  status         InventoryStatus  @default(DISPONIBLE)
+  location       String           @default("Bodega Elgin")
   notes         String?
   lastCheckedAt DateTime?
   serialNumber  String?

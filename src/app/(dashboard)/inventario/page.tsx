@@ -460,7 +460,7 @@ function InventoryFormModal({
   const [category, setCategory] = useState(item?.category || "AUDIO");
   const [quantity, setQuantity] = useState(String(item?.quantity || 1));
   const [status, setStatus] = useState(item?.status || "DISPONIBLE");
-  const [location, setLocation] = useState(item?.location || "BODEGA_ELGIN");
+  const [location, setLocation] = useState(item?.location || "Bodega Elgin");
   const [serialNumber, setSerialNumber] = useState(item?.serialNumber || "");
   const [notes, setNotes] = useState(item?.notes || "");
   const [saving, setSaving] = useState(false);
@@ -561,15 +561,19 @@ function InventoryFormModal({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Ubicación
             </label>
-            <select
+            <input
+              list="location-options"
               value={location}
-              onChange={(e) => setLocation(e.target.value as any)}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Ej: Bodega Elgin, Bodega PP..."
               className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            >
-              {Object.entries(LOCATION_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
+            />
+            <datalist id="location-options">
+              <option value="Bodega Elgin" />
+              <option value="Bodega PP" />
+              <option value="En evento" />
+              <option value="En renta" />
+            </datalist>
           </div>
         </div>
         <Input

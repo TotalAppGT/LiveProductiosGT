@@ -42,13 +42,6 @@ const statusOptions: { value: InventoryStatus; label: string }[] = [
   { value: "DANADO", label: "Dañado" },
 ];
 
-const locationOptions: { value: InventoryLocation; label: string }[] = [
-  { value: "BODEGA_ELGIN", label: "Bodega Elgin" },
-  { value: "BODEGA_PP", label: "Bodega PP" },
-  { value: "EN_EVENTO", label: "En evento" },
-  { value: "EN_RENTA", label: "En renta" },
-];
-
 export function InventoryForm({
   initialData,
   users = [],
@@ -136,13 +129,24 @@ export function InventoryForm({
           error={errors.status}
           placeholder="Seleccionar estado"
         />
-        <Select
-          label="Ubicación"
-          value={location}
-          onChange={(e) => setLocation(e.target.value as InventoryLocation)}
-          options={locationOptions}
-          placeholder="Seleccionar ubicación"
-        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Ubicación
+          </label>
+          <input
+            list="location-options"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Ej: Bodega Elgin, Bodega PP..."
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          />
+          <datalist id="location-options">
+            <option value="Bodega Elgin" />
+            <option value="Bodega PP" />
+            <option value="En evento" />
+            <option value="En renta" />
+          </datalist>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
