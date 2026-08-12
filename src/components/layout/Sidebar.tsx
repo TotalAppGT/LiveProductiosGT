@@ -97,7 +97,7 @@ const navItems: NavItem[] = [
     icon: Truck,
   },
   {
-    label: "Bitácora Vehículos",
+    label: "Uso de Vehículos",
     href: "/bitacora-vehiculos",
     icon: Car,
   },

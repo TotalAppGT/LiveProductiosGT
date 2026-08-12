@@ -104,7 +104,7 @@ export default function BitacoraVehiculosPage() {
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Truck className="w-6 h-6" /> Bitácora de Vehículos
+          <Truck className="w-6 h-6" /> Uso de Vehículos
         </h1>
         <Button onClick={() => setShowStart(true)}>
           <Plus className="w-4 h-4 mr-1" /> Iniciar Uso
@@ -137,7 +137,7 @@ export default function BitacoraVehiculosPage() {
       </div>
 
       {/* Modal inicio */}
-      <Modal isOpen={showStart} onClose={() => setShowStart(false)} title="Iniciar Bitácora de Vehículo" size="lg">
+      <Modal isOpen={showStart} onClose={() => setShowStart(false)} title="Iniciar Uso de Vehículo" size="lg">
         <div className="space-y-4 p-1">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vehículo</label>
@@ -200,7 +200,7 @@ export default function BitacoraVehiculosPage() {
           />
 
           <Button onClick={startLog} className="w-full">
-            <Check className="w-4 h-4 mr-1" /> Iniciar Bitácora
+            <Check className="w-4 h-4 mr-1" /> Iniciar Uso
           </Button>
         </div>
       </Modal>
@@ -328,7 +328,7 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
 
         {isActive && (
           <div className="border rounded-lg p-3 space-y-3">
-            <p className="font-medium text-sm">Finalizar Bitácora (Retorno)</p>
+            <p className="font-medium text-sm">Finalizar Uso (Retorno)</p>
             <div className="grid grid-cols-3 gap-2">
               <Input label="KM final" type="number" value={endKm} onChange={(e) => setEndKm(e.target.value)} />
               <div>
@@ -357,7 +357,7 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
             </div>
             <textarea value={endComment} onChange={(e) => setEndComment(e.target.value)} placeholder="Observación de retorno (opcional)" className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white" rows={2} />
             <Button onClick={finishLog} className="w-full bg-green-600">
-              <Check className="w-4 h-4 mr-1" /> Finalizar Bitácora
+              <Check className="w-4 h-4 mr-1" /> Finalizar Uso
             </Button>
           </div>
         )}
