@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**" },
     ],
   },
+  serverExternalPackages: ["pdfkit"],
 };
 
 export default nextConfig;

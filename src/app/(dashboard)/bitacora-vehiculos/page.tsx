@@ -362,9 +362,9 @@ function VehicleLogDetail({ log, onClose, token, onUpdated }: { log: any; onClos
           </div>
         )}
 
-        {isActive && (
+        {isActive && !showFuel && (
           <div className="border rounded-lg p-3 space-y-3">
-            <p className="font-medium text-sm">Finalizar Uso (Retorno)</p>
+            <p className="font-medium text-sm text-gray-700 dark:text-gray-300">Finalizar Uso (Retorno)</p>
             <div className="grid grid-cols-3 gap-2">
               <Input label="KM final" type="number" value={endKm} onChange={(e) => setEndKm(e.target.value)} />
               <div>
