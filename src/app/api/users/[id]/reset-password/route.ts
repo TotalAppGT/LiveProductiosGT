@@ -30,49 +30,60 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Usuario no encontrado" }, { status: 404 });
     }
 
-    let firebaseUid = user.firebaseUid;
     const adminAuth = getAdminAuth();
+    let firebaseUid = user.firebaseUid;
+    let firebaseAction = "";
 
-    // Try to update or create the Firebase Auth user
+    // 1) Update by firebaseUid if exists
     if (firebaseUid) {
       try {
         await adminAuth.updateUser(firebaseUid, { password: newPassword });
+        firebaseAction = "updated_by_uid";
       } catch (e: any) {
         if (e?.code === "auth/user-not-found") {
           firebaseUid = null;
         } else {
-          throw e;
+          throw new Error(`Firebase updateUser error: ${e?.message || e?.code || "unknown"}`);
         }
       }
     }
 
+    // 2) Fallback: find or create by email
     if (!firebaseUid) {
       try {
         const existing = await adminAuth.getUserByEmail(user.email);
         await adminAuth.updateUser(existing.uid, { password: newPassword });
         firebaseUid = existing.uid;
+        firebaseAction = "updated_by_email";
       } catch (e: any) {
         if (e?.code === "auth/user-not-found") {
           const created = await adminAuth.createUser({
             email: user.email,
             password: newPassword,
             displayName: user.name,
+            emailVerified: true,
           });
           firebaseUid = created.uid;
+          firebaseAction = "created";
         } else {
-          throw e;
+          throw new Error(`Firebase email lookup error: ${e?.message || e?.code || "unknown"}`);
         }
       }
     }
 
-    // Update the Prisma password hash too (for direct login fallback)
+    // 3) Update local password hash too
     const hashedPassword = await hashPassword(newPassword);
     await prisma.user.update({
       where: { id },
       data: { firebaseUid, password: hashedPassword },
     });
 
-    return NextResponse.json({ success: true, message: "Contraseña actualizada" });
+    return NextResponse.json({
+      success: true,
+      message: `Contraseña actualizada para ${user.email}`,
+      email: user.email,
+      firebaseAction,
+    });
   } catch (error: any) {
     console.error("Error cambiando contraseña:", error);
     return NextResponse.json(

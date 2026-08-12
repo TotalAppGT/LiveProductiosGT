@@ -158,7 +158,7 @@ export default function PersonalPage() {
   }
 
   async function resetPassword(user: User) {
-    const newPassword = prompt(`Nueva contraseña para ${user.name} (mínimo 6 caracteres):`);
+    const newPassword = prompt(`Nueva contraseña para ${user.name} (${user.email}), mínimo 6 caracteres:`);
     if (!newPassword) return;
     try {
       const res = await fetch(`/api/users/${user.id}/reset-password`, {
@@ -168,7 +168,7 @@ export default function PersonalPage() {
       });
       const json: ApiResponse<User> = await res.json();
       if (json.success) {
-        toast.success(`Contraseña de ${user.name} actualizada`);
+        toast.success(`${json.message || "Contraseña actualizada"}`);
       } else {
         toast.error(json.error || "Error al cambiar contraseña");
       }
