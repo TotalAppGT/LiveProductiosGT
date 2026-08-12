@@ -549,13 +549,11 @@ async function runJobIfScheduled(job: CronJob) {
 
   const now = getGuatemalaTime();
   const hourDiff = now.getHours() - job.schedule.hour;
-  const isCurrentHour = hourDiff === 0;
-  // Catch-up: if deploy missed the scheduled hour, allow run during first 10 min of next hour
-  const isCatchUp = hourDiff >= 0 && hourDiff <= 1 && now.getMinutes() < 10;
-  const minuteMatch = now.getMinutes() >= job.schedule.minute && now.getMinutes() < job.schedule.minute + 10;
 
-  if (!isCurrentHour && !isCatchUp) return;
-  if (!minuteMatch && isCurrentHour) return;
+  // Future jobs: skip. Past jobs beyond 1 hour: skip.
+  if (hourDiff < 0 || hourDiff > 1) return;
+  // Catch-up from previous hour: only in first 10 minutes
+  if (hourDiff === 1 && now.getMinutes() >= 10) return;
 
   if (!(await shouldRunJob(job))) {
     console.log(`[Cron] ${job.name}: ya se ejecutó en esta hora, saltando (DB dedup)`);
