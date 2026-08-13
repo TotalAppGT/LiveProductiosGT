@@ -51,6 +51,11 @@ export async function GET(
 
     const safeArray = (arr: any): string[] => (Array.isArray(arr) ? arr : []);
 
+    const drawSectionTitle = (title: string) => {
+      doc.fontSize(11).fillColor("#1e40af").text(title, { align: "left" });
+      doc.moveDown(0.2);
+    };
+
     const drawPhotoGrid = (photos: string[], labels: string[], size: number, perRow: number = 3) => {
       const gap = 8;
       const labelH = 12;
@@ -97,57 +102,56 @@ export async function GET(
       doc.y = startY + rows * cellH + 8;
     };
 
-    // Encabezado: logo arriba, título abajo
+    // ===== ENCABEZADO (membrete con logo en esquina) =====
     const logo = getLogoBuffer();
-    let headerY = doc.page.margins.top;
     if (logo) {
       try {
-        doc.image(logo, doc.page.width / 2 - 35, headerY, { width: 70, height: 70 });
-        headerY += 78;
+        doc.image(logo, doc.page.margins.left, doc.page.margins.top, { width: 55, height: 55 });
       } catch {}
     }
-    doc.y = headerY;
-    doc.fontSize(18).fillColor("#1e40af").text("LIVE PRODUCTIONS GT", { align: "center" });
-    doc.moveDown(0.2);
-    doc.fontSize(10).fillColor("#666666").text("Informe de Uso de Vehículos", { align: "center" });
-    doc.moveDown(0.3);
-    doc.fontSize(12).fillColor("#222222").text(`Vehículo ${log.plate} — ${log.vehicleType}`, { align: "center" });
-    doc.fontSize(9).fillColor("#555555").text(`Conductor: ${log.driver?.name || "—"} · Generado: ${new Date().toLocaleString("es-GT")}`, { align: "center" });
+    const textX = doc.page.margins.left + 65;
+    doc.fontSize(16).fillColor("#1e40af").text("LIVE PRODUCTIONS GT", textX, doc.page.margins.top + 2, { align: "left" });
+    doc.fontSize(9).fillColor("#666666").text("Informe de Uso de Vehículos", textX, doc.page.margins.top + 22, { align: "left" });
+    doc.fontSize(9).fillColor("#555555").text(`Vehículo: ${log.plate} — ${log.vehicleType}`, textX, doc.page.margins.top + 34, { align: "left" });
+    // Línea divisoria
+    doc.moveTo(doc.page.margins.left, doc.page.margins.top + 62).lineTo(doc.page.width - doc.page.margins.right, doc.page.margins.top + 62).stroke("#1e40af");
+    doc.y = doc.page.margins.top + 70;
+
+    doc.fontSize(9).fillColor("#333333").text(`Conductor: ${log.driver?.name || "—"}    ·    Generado: ${new Date().toLocaleString("es-GT")}`, { align: "left" });
     doc.moveDown(0.8);
 
-    // Salida
-    doc.fontSize(11).fillColor("#1e40af").text("INFORMACIÓN DE SALIDA");
-    doc.moveDown(0.2);
+    // ===== SALIDA =====
+    drawSectionTitle("INFORMACIÓN DE SALIDA");
     doc.fontSize(9).fillColor("#333333");
-    doc.text(`Fecha de salida: ${new Date(log.startAt).toLocaleString("es-GT")}`);
-    doc.text(`Kilometraje inicial: ${log.startKm} km`);
-    doc.text(`Nivel de agua: ${log.startWater || "—"}    Nivel de aceite: ${log.startOil || "—"}`);
-    if (log.startComment) doc.text(`Comentario: ${log.startComment}`);
+    doc.text(`Fecha de salida: ${new Date(log.startAt).toLocaleString("es-GT")}`, { align: "left" });
+    doc.text(`Kilometraje inicial: ${log.startKm} km`, { align: "left" });
+    doc.text(`Nivel de agua: ${log.startWater || "—"}    Nivel de aceite: ${log.startOil || "—"}`, { align: "left" });
+    if (log.startComment) doc.text(`Comentario: ${log.startComment}`, { align: "left" });
     doc.moveDown(0.4);
 
     const startLabels = ["Frontal", "Trasera", "Lateral Izq", "Lateral Der", "Tablero/KM", "Interior"];
     drawPhotoGrid(safeArray(log.startPhotos), startLabels, 135);
 
-    // Combustible
+    // ===== COMBUSTIBLE (nueva página si hay) =====
     const fuelEntries = Array.isArray(log.fuelEntries) ? log.fuelEntries : [];
     if (fuelEntries.length > 0) {
-      doc.fontSize(11).fillColor("#1e40af").text(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`, { align: "left" });
-      doc.moveDown(0.2);
+      doc.addPage();
+      drawSectionTitle(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`);
       for (const f of fuelEntries) {
         doc.fontSize(9).fillColor("#333333").text(`Carga · ${new Date(f.createdAt).toLocaleString("es-GT")}`, { align: "left" });
         drawPhotoGrid(safeArray(f.photos), ["Tablero antes", "Bomba/Gasolinera", "Factura", "Tablero después"], 110, 4);
       }
     }
 
-    // Retorno
+    // ===== RETORNO (nueva página) =====
     if (log.status === "FINALIZADO" && log.endAt) {
-      doc.fontSize(11).fillColor("#1e40af").text("INFORMACIÓN DE RETORNO");
-      doc.moveDown(0.2);
+      doc.addPage();
+      drawSectionTitle("INFORMACIÓN DE RETORNO");
       doc.fontSize(9).fillColor("#333333");
-      doc.text(`Fecha de retorno: ${new Date(log.endAt).toLocaleString("es-GT")}`);
-      doc.text(`Kilometraje final: ${log.endKm} km    Recorrido total: ${(log.endKm || 0) - log.startKm} km`);
-      doc.text(`Nivel de agua: ${log.endWater || "—"}    Nivel de aceite: ${log.endOil || "—"}`);
-      if (log.endComment) doc.text(`Comentario: ${log.endComment}`);
+      doc.text(`Fecha de retorno: ${new Date(log.endAt).toLocaleString("es-GT")}`, { align: "left" });
+      doc.text(`Kilometraje final: ${log.endKm} km    Recorrido total: ${(log.endKm || 0) - log.startKm} km`, { align: "left" });
+      doc.text(`Nivel de agua: ${log.endWater || "—"}    Nivel de aceite: ${log.endOil || "—"}`, { align: "left" });
+      if (log.endComment) doc.text(`Comentario: ${log.endComment}`, { align: "left" });
       doc.moveDown(0.4);
       const endLabels = ["Frontal", "Trasera", "Lateral Izq", "Lateral Der"];
       drawPhotoGrid(safeArray(log.endPhotos), endLabels, 135);
