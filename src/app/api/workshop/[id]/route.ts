@@ -42,6 +42,27 @@ export async function PUT(
       }
     }
 
+    // Registrar transacción con detalle
+    if (status) {
+      const statusLabels: Record<string, string> = {
+        EN_REVISION: "En revisión",
+        EN_REPARACION: "En reparación",
+        REPARADO: "Reparado",
+        DESCARTADO: "Descartado",
+        DEVUELTO_A_BODEGA: "Devuelto a bodega",
+      };
+      const actor = await prisma.user.findUnique({ where: { id: auth.payload.userId }, select: { name: true } });
+      await prisma.activity.create({
+        data: {
+          userId: auth.payload.userId,
+          action: "TALLER_ACTUALIZAR",
+          resource: "WORKSHOP",
+          resourceId: id,
+          details: `${actor?.name || "Usuario"} cambió "${item.itemName}" a "${statusLabels[status] || status}"${diagnostic ? ` · Diagnóstico: ${diagnostic}` : ""}`,
+        },
+      });
+    }
+
     return NextResponse.json({ success: true, data: item });
   } catch (error) {
     console.error("Error en workshop PUT:", error);

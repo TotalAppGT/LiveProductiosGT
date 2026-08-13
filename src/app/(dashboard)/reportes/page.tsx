@@ -97,21 +97,21 @@ export default function ReportesPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
         {filtered.map((r) => (
           <button
             key={r.id}
             onClick={() => setViewing(r)}
-            className="border border-gray-200 rounded-xl p-4 text-left hover:border-blue-400 hover:shadow-md transition-all bg-white"
+            className="border border-gray-200 rounded-lg p-2.5 text-left hover:border-blue-400 hover:shadow-md transition-all bg-white"
           >
-            <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
-                <FileText className="w-5 h-5 text-red-500" />
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="w-7 h-7 bg-red-50 rounded-lg flex items-center justify-center">
+                <FileText className="w-4 h-4 text-red-500" />
               </div>
-              <span className="text-xs text-gray-400">{new Date(r.createdAt).toLocaleDateString("es-GT", {day:"numeric",month:"short"})}</span>
+              <span className="text-[10px] text-gray-400">{new Date(r.createdAt).toLocaleDateString("es-GT", {day:"numeric",month:"short"})}</span>
             </div>
-            <p className="text-sm font-medium text-gray-800 line-clamp-2">{r.title}</p>
-            <p className="text-xs text-gray-500 mt-1">{r.createdBy?.name}</p>
+            <p className="text-xs font-medium text-gray-800 line-clamp-2 leading-tight">{r.title}</p>
+            <p className="text-[10px] text-gray-500 mt-0.5 truncate">{r.createdBy?.name}</p>
           </button>
         ))}
         {filtered.length === 0 && (
@@ -137,9 +137,11 @@ export default function ReportesPage() {
               <button onClick={() => sendEmail(viewing)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600" title="Correo">
                 <Mail className="w-5 h-5" />
               </button>
-              <button onClick={() => { deleteReport(viewing.id); setViewing(null); }} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Eliminar">
-                <Trash2 className="w-5 h-5" />
-              </button>
+              {(user?.role === "ADMIN" || user?.role === "DUENO") && (
+                <button onClick={() => { deleteReport(viewing.id); setViewing(null); }} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Eliminar">
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
             </div>
           </div>
           <iframe src={printUrl(viewing)} className="flex-1 w-full bg-white" />
