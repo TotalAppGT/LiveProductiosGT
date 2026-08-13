@@ -312,7 +312,7 @@ async function formatTasksForUser(userId: string, period?: string) {
     if (todayTasks.length === 0) return "✅ No tienes tareas para hoy.";
     output = `📋 *HOY - ${today.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})}*\n\n`;
     output += formatTaskList(todayTasks);
-    output += `\n\n⚡ \`hecho 3\` completar | \`posponer 3 para mañana\` | \`ayuda\``;
+    output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output;
   }
 
@@ -320,14 +320,14 @@ async function formatTasksForUser(userId: string, period?: string) {
     output = `📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT")} - ${sunday.toLocaleDateString("es-GT")})\n\n`;
     if (thisWeekTasks.length > 0) output += formatTaskList(thisWeekTasks);
     if (todayTasks.length > 0) output += `\n📌 *Hoy:*\n${formatTaskList(todayTasks)}`;
-    output += `\n\n⚡ \`hecho 3\` completar | \`posponer 3 para mañana\` | \`ayuda\``;
+    output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output || "No hay tareas esta semana.";
   }
 
   if (period === "semana2") {
     output = `📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT")} - ${nextSunday.toLocaleDateString("es-GT")})\n\n`;
     if (nextWeekTasks.length > 0) output += formatTaskList(nextWeekTasks);
-    output += `\n\n⚡ \`hecho 3\` completar | \`posponer 3 para mañana\` | \`ayuda\``;
+    output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output || "No hay tareas para la próxima semana.";
   }
 
@@ -352,7 +352,7 @@ async function formatTasksForUser(userId: string, period?: string) {
     }
   }
 
-  output += `\n⚡ *Acciones:* \`hecho 3\` (completar #3) | \`posponer 3 para mañana\` | \`comentar 3 texto\` | \`transferir 3 a Diana\`\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`tareas semana 2\` | \`fijas lunes\` | \`ayuda\``;
+  output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`ayuda\``;
   return output;
 }
 
@@ -577,6 +577,17 @@ async function handleCommand(
     const task = tasks[num - 1];
     await completeTask(task.id, user);
     return `✅ Tarea *${task.title}* completada. ¡Buen trabajo ${user.name}!`;
+  }
+
+  if (cmd.startsWith("proceso ") || cmd.startsWith("iniciar ") || cmd.startsWith("en proceso ")) {
+    const numStr = cmd.replace(/^(proceso|iniciar|en proceso)\s+/i, "").trim();
+    const num = parseInt(numStr);
+    if (isNaN(num)) return "¿Cuál tarea? Ejemplo: *proceso 3*";
+    const tasks = await getPendingTasks(user.id);
+    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas. Elige un número del 1 al ${tasks.length}.`;
+    const task = tasks[num - 1];
+    await prisma.task.update({ where: { id: task.id }, data: { status: "EN_PROCESO" } });
+    return `🔄 Tarea *${task.title}* marcada en proceso.`;
   }
 
   if (cmd.startsWith("no ") && /^\d+$/.test(cmd.replace("no ", "").trim())) {
@@ -936,43 +947,36 @@ async function handleCommand(
     return `🤖 *LUNA - Tu Controladora Administrativa*
 
 📊 *Ver tareas:*
-tareas → Vista completa con números
-tareas hoy → Solo las de hoy
-tareas semana → Esta semana
-tareas semana 2 → Próxima semana
-fijas lunes → Fijas de un día
+tareas
+tareas hoy
+tareas semana
 
-⚡ *Acciones rápidas (usa el # de la tarea):*
-hecho 3 → ✅ Completar
-completar 5 → ✅ También
-completado 2 → ✅ O así
-posponer 3 → 🟣 Pregunta fecha y razón
-comentar 3 texto → 💬 Agregar comentario
-transferir 3 a Diana → 📤 Pasar a otro
+⚡ *Acciones de tareas (usa el #):*
+#1 Completada → hecho 1
+#2 En proceso → proceso 1
+#3 Posponer para mañana → posponer 1
+#4 Transferir → transferir 1 a Diana
+#5 Comentar → comentar 1 texto
 
 ➕ *Crear tareas:*
-crea tarea [título] mañana 10am → Directo
-crea tarea para Diana [tarea] viernes → Para otro
+crea tarea [título] mañana 10am
 
 ⏰ *Recordatorios:*
 recuérdame [tarea] mañana 3pm
-crea un recordatorio [tarea] viernes 10am
 
 📈 *Reportes (dueños/gerentes):*
-resumen → Mis tareas + eventos + cumplimiento
-cómo va el equipo → Visión general
-quién no ha entrado → Inactivos hoy
-ranking → Top cumplimiento del equipo
+resumen
+ranking
+cómo va el equipo
 
-🏢 *Sistema general:*
-inventario → Equipo e inventario
-inventario sonido → Buscar por categoría
-vehiculos → Flota vehicular
-cobros → Cobros pendientes
-empleados → Directorio del equipo
+🏢 *Sistema:*
+inventario
+vehiculos
+cobros
+empleados
 
 🎨 *Colores:*
-🟢 Baja | 🟡 Media | 🔴 Alta/Urgente | 🟣 Pospuesta | ✅ Hecha
+🟢 Baja | 🟡 Media | 🔴 Alta/Urgente
 
 📞 *Contacto:* +502 3090-3172
 🌐 liveproductionsgt.com`;
@@ -1118,7 +1122,7 @@ async function handleConversationStep(
 
 function isKnownCommand(text: string): boolean {
   const knownCommands = [
-    "tareas", "hoy", "semana", "completar", "hecho", "completado", "posponer", "comentar",
+    "tareas", "hoy", "semana", "completar", "hecho", "completado", "proceso", "iniciar", "en proceso", "posponer", "comentar",
     "transferir", "crea tarea", "crear tarea", "nueva tarea",
     "recuerda", "recordar", "recordatorio", "evento", "eventos",
     "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",

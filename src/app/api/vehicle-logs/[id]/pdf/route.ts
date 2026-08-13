@@ -52,7 +52,7 @@ export async function GET(
     const safeArray = (arr: any): string[] => (Array.isArray(arr) ? arr : []);
 
     const drawSectionTitle = (title: string) => {
-      doc.fontSize(11).fillColor("#1e40af").text(title, { align: "left" });
+      doc.fontSize(11).fillColor("#1e40af").text(title, { align: "center" });
       doc.moveDown(0.2);
     };
 
@@ -123,10 +123,10 @@ export async function GET(
     // ===== SALIDA =====
     drawSectionTitle("INFORMACIÓN DE SALIDA");
     doc.fontSize(9).fillColor("#333333");
-    doc.text(`Fecha de salida: ${new Date(log.startAt).toLocaleString("es-GT")}`, { align: "left" });
-    doc.text(`Kilometraje inicial: ${log.startKm} km`, { align: "left" });
-    doc.text(`Nivel de agua: ${log.startWater || "—"}    Nivel de aceite: ${log.startOil || "—"}`, { align: "left" });
-    if (log.startComment) doc.text(`Comentario: ${log.startComment}`, { align: "left" });
+    doc.text(`Fecha de salida: ${new Date(log.startAt).toLocaleString("es-GT")}`, { align: "center" });
+    doc.text(`Kilometraje inicial: ${log.startKm} km`, { align: "center" });
+    doc.text(`Nivel de agua: ${log.startWater || "—"}    Nivel de aceite: ${log.startOil || "—"}`, { align: "center" });
+    if (log.startComment) doc.text(`Comentario: ${log.startComment}`, { align: "center" });
     doc.moveDown(0.4);
 
     const startLabels = ["Frontal", "Trasera", "Lateral Izq", "Lateral Der", "Tablero/KM", "Interior"];
@@ -137,7 +137,7 @@ export async function GET(
     if (fuelEntries.length > 0) {
       drawSectionTitle(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`);
       for (const f of fuelEntries) {
-        doc.fontSize(9).fillColor("#333333").text(`Carga · ${new Date(f.createdAt).toLocaleString("es-GT")}`, { align: "left" });
+        doc.fontSize(9).fillColor("#333333").text(`Carga · ${new Date(f.createdAt).toLocaleString("es-GT")}`, { align: "center" });
         drawPhotoGrid(safeArray(f.photos), ["Tablero antes", "Bomba/Gasolinera", "Factura", "Tablero después"], 110, 4);
       }
     }
@@ -146,10 +146,10 @@ export async function GET(
     if (log.status === "FINALIZADO" && log.endAt) {
       drawSectionTitle("INFORMACIÓN DE RETORNO");
       doc.fontSize(9).fillColor("#333333");
-      doc.text(`Fecha de retorno: ${new Date(log.endAt).toLocaleString("es-GT")}`, { align: "left" });
-      doc.text(`Kilometraje final: ${log.endKm} km    Recorrido total: ${(log.endKm || 0) - log.startKm} km`, { align: "left" });
-      doc.text(`Nivel de agua: ${log.endWater || "—"}    Nivel de aceite: ${log.endOil || "—"}`, { align: "left" });
-      if (log.endComment) doc.text(`Comentario: ${log.endComment}`, { align: "left" });
+      doc.text(`Fecha de retorno: ${new Date(log.endAt).toLocaleString("es-GT")}`, { align: "center" });
+      doc.text(`Kilometraje final: ${log.endKm} km    Recorrido total: ${(log.endKm || 0) - log.startKm} km`, { align: "center" });
+      doc.text(`Nivel de agua: ${log.endWater || "—"}    Nivel de aceite: ${log.endOil || "—"}`, { align: "center" });
+      if (log.endComment) doc.text(`Comentario: ${log.endComment}`, { align: "center" });
       doc.moveDown(0.4);
       const endLabels = ["Frontal", "Trasera", "Lateral Izq", "Lateral Der"];
       drawPhotoGrid(safeArray(log.endPhotos), endLabels, 135);
