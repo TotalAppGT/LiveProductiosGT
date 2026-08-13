@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import PDFDocument from "pdfkit";
+import fs from "fs";
+import path from "path";
 
 function dataUrlToBuffer(dataUrl: string): Buffer | null {
   try {
@@ -9,6 +11,18 @@ function dataUrlToBuffer(dataUrl: string): Buffer | null {
     const base64 = dataUrl.split(",")[1];
     if (!base64) return null;
     return Buffer.from(base64, "base64");
+  } catch {
+    return null;
+  }
+}
+
+function getLogoBuffer(): Buffer | null {
+  try {
+    const logoPath = path.join(process.cwd(), "public", "logo.png");
+    if (fs.existsSync(logoPath)) {
+      return fs.readFileSync(logoPath);
+    }
+    return null;
   } catch {
     return null;
   }
@@ -39,40 +53,55 @@ export async function GET(
 
     const safeArray = (arr: any): string[] => (Array.isArray(arr) ? arr : []);
 
+    // Draw photos grid that continues on next page without losing photos
     const drawPhotoGrid = (photos: string[], labels: string[], size: number) => {
       const perRow = 3;
       const gap = 10;
       const x0 = doc.page.margins.left;
-      const startY = doc.y;
+      const labelH = 14;
       for (let i = 0; i < photos.length; i++) {
         const col = i % perRow;
-        const row = Math.floor(i / perRow);
         const x = x0 + col * (size + gap);
-        const y = startY + row * (size + 16);
-        if (y + size > doc.page.height - doc.page.margins.bottom) {
+        const y = doc.y + (i % perRow === 0 && i > 0 ? 0 : 0);
+        // Check page overflow before each photo
+        if (doc.y + labelH + size > doc.page.height - doc.page.margins.bottom) {
           doc.addPage();
           doc.y = doc.page.margins.top;
-          break;
         }
-        // label
-        doc.fontSize(7).fillColor("#555555").text(labels[i] || "Foto", x, y, { width: size, align: "center" });
-        // image
+        // After a row of 3, advance y
+        if (i > 0 && i % perRow === 0) {
+          doc.y += size + labelH + 8;
+          if (doc.y + labelH + size > doc.page.height - doc.page.margins.bottom) {
+            doc.addPage();
+            doc.y = doc.page.margins.top;
+          }
+        }
+        const curCol = i % perRow;
+        const curX = x0 + curCol * (size + gap);
+        doc.fontSize(7).fillColor("#555555").text(labels[i] || "Foto", curX, doc.y, { width: size, align: "center" });
         const buf = dataUrlToBuffer(photos[i]);
         if (buf) {
           try {
-            doc.image(buf, x, y + 12, { width: size, height: size });
+            doc.image(buf, curX, doc.y + 4, { width: size, height: size });
           } catch {
-            doc.rect(x, y + 12, size, size).stroke("#cccccc");
+            doc.rect(curX, doc.y + 4, size, size).stroke("#cccccc");
           }
         } else {
-          doc.rect(x, y + 12, size, size).stroke("#cccccc");
+          doc.rect(curX, doc.y + 4, size, size).stroke("#cccccc");
         }
       }
-      doc.y = startY + Math.ceil(photos.length / perRow) * (size + 16) + 10;
+      doc.y += size + labelH + 10;
     };
 
-    // Encabezado
-    doc.fontSize(16).fillColor("#2563eb").text("LIVE PRODUCTIONS GT", { align: "center" });
+    // Encabezado con logo
+    const logo = getLogoBuffer();
+    doc.fontSize(18).fillColor("#1e40af").text("LIVE PRODUCTIONS GT", { align: "center" });
+    if (logo) {
+      try {
+        doc.image(logo, doc.page.width / 2 - 40, 40, { width: 80, height: 80 });
+      } catch {}
+    }
+    doc.moveDown(3);
     doc.fontSize(10).fillColor("#666666").text("Informe de Uso de Vehículos", { align: "center" });
     doc.moveDown(0.5);
     doc.fontSize(12).fillColor("#222222").text(`Vehículo ${log.plate} — ${log.vehicleType}`, { align: "center" });
@@ -80,7 +109,7 @@ export async function GET(
     doc.moveDown(1);
 
     // Salida
-    doc.fontSize(11).fillColor("#2563eb").text("INFORMACIÓN DE SALIDA");
+    doc.fontSize(11).fillColor("#1e40af").text("INFORMACIÓN DE SALIDA");
     doc.moveDown(0.3);
     doc.fontSize(9).fillColor("#333333");
     doc.text(`Fecha de salida: ${new Date(log.startAt).toLocaleString("es-GT")}`);
@@ -95,7 +124,7 @@ export async function GET(
     // Combustible
     const fuelEntries = Array.isArray(log.fuelEntries) ? log.fuelEntries : [];
     if (fuelEntries.length > 0) {
-      doc.fontSize(11).fillColor("#2563eb").text(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`);
+      doc.fontSize(11).fillColor("#1e40af").text(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`);
       doc.moveDown(0.3);
       for (const f of fuelEntries) {
         doc.fontSize(9).fillColor("#333333").text(`Carga · ${new Date(f.createdAt).toLocaleString("es-GT")}`);
@@ -105,7 +134,7 @@ export async function GET(
 
     // Retorno
     if (log.status === "FINALIZADO" && log.endAt) {
-      doc.fontSize(11).fillColor("#2563eb").text("INFORMACIÓN DE RETORNO");
+      doc.fontSize(11).fillColor("#1e40af").text("INFORMACIÓN DE RETORNO");
       doc.moveDown(0.3);
       doc.fontSize(9).fillColor("#333333");
       doc.text(`Fecha de retorno: ${new Date(log.endAt).toLocaleString("es-GT")}`);
