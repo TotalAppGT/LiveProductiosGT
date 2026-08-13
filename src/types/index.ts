@@ -102,6 +102,8 @@ export interface User {
   avatar?: string | null;
   whatsappNumber?: string | null;
   active: boolean;
+  position?: string;
+  modules?: string;
   tenantId?: string | null;
   createdAt: string;
   updatedAt: string;

@@ -25,6 +25,8 @@ export async function POST(request: NextRequest) {
       whatsappNumber: true,
       avatar: true,
       active: true,
+      position: true,
+      modules: true,
       tenantId: true,
       createdAt: true,
     };
