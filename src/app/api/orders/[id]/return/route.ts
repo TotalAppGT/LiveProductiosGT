@@ -32,6 +32,7 @@ export async function POST(
       }
     }
 
+    const damagedItems: string[] = [];
     for (const item of order.items) {
       if (item.returnCondition === "BUENO") {
         // Regresa al inventario
@@ -45,6 +46,7 @@ export async function POST(
           });
         }
       } else if (item.returnCondition === "DANADO" || item.returnCondition === "PERDIDO") {
+        damagedItems.push(item.name);
         // Va al taller
         await prisma.workshopItem.create({
           data: {
@@ -92,7 +94,27 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({ success: true, message: "Devolución procesada" });
+    // Notificar a administradores si hay items dañados/perdidos
+    if (damagedItems.length > 0) {
+      const admins = await prisma.user.findMany({
+        where: { active: true, role: { in: ["DUENO", "ADMIN"] } },
+        select: { name: true, whatsappNumber: true, phone: true },
+      });
+      const { sendMessage } = await import("@/lib/whatsapp");
+      const msg = `🚨 *ALERTA: Items dañados/perdidos*\n\nPedido #${order.orderNumber} - ${order.eventName}\n\nItems enviados a taller:\n${damagedItems.map((n) => `• ${n}`).join("\n")}\n\nRevisá el módulo de Taller para el seguimiento.`;
+      for (const admin of admins) {
+        const to = admin.whatsappNumber || admin.phone;
+        if (to) await sendMessage(to, msg).catch(() => {});
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: damagedItems.length > 0
+        ? `Devolución procesada. ${damagedItems.length} item(s) enviados a taller.`
+        : "Devolución procesada",
+      damagedItems,
+    });
   } catch (error) {
     console.error("Error en return:", error);
     return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });

@@ -14,6 +14,7 @@ const STATUS_LABELS: Record<string, string> = {
   EN_REPARACION: "En reparación",
   REPARADO: "Reparado",
   DESCARTADO: "Descartado",
+  DEVUELTO_A_BODEGA: "Devuelto a bodega",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -21,6 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
   EN_REPARACION: "bg-orange-100 text-orange-700",
   REPARADO: "bg-green-100 text-green-700",
   DESCARTADO: "bg-red-100 text-red-700",
+  DEVUELTO_A_BODEGA: "bg-blue-100 text-blue-700",
 };
 
 export default function TallerPage() {
@@ -123,7 +125,7 @@ export default function TallerPage() {
       <div className="grid gap-3">
         {items.map((item: any) => (
           <Card key={item.id} className="p-4">
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[item.status] || "bg-gray-100"}`}>
@@ -131,21 +133,36 @@ export default function TallerPage() {
                   </span>
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{item.category}</span>
                 </div>
-                <h3 className="font-semibold mt-2">{item.itemName}</h3>
+                <h3 className="font-semibold mt-2 text-lg">{item.itemName}</h3>
                 <p className="text-sm text-gray-600 mt-1">🔴 Problema: {item.issue}</p>
                 {item.diagnostic && <p className="text-sm text-gray-600 mt-1">🔍 Diagnóstico: {item.diagnostic}</p>}
                 {item.assignedTo && <p className="text-xs text-gray-400 mt-1">👤 Encargado: {item.assignedTo.name}</p>}
               </div>
-              <div className="flex gap-1">
-                {isAdmin && item.status !== "REPARADO" && (
-                  <Button variant="ghost" size="sm" onClick={() => updateStatus(item.id, "REPARADO")} title="Marcar reparado">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  </Button>
+              <div className="flex flex-col gap-2 min-w-[160px]">
+                {item.status === "EN_REVISION" && (
+                  <button onClick={() => updateStatus(item.id, "EN_REPARACION")} className="px-3 py-3 rounded-lg text-sm font-bold bg-orange-500 text-white hover:bg-orange-600">
+                    🔧 Empezar reparación
+                  </button>
+                )}
+                {item.status === "EN_REPARACION" && (
+                  <button onClick={() => updateStatus(item.id, "REPARADO")} className="px-3 py-3 rounded-lg text-sm font-bold bg-green-500 text-white hover:bg-green-600">
+                    ✅ Marcar reparado
+                  </button>
+                )}
+                {item.status === "REPARADO" && (
+                  <button onClick={() => updateStatus(item.id, "DEVUELTO_A_BODEGA")} className="px-3 py-3 rounded-lg text-sm font-bold bg-blue-500 text-white hover:bg-blue-600">
+                    📦 Devolver a bodega
+                  </button>
+                )}
+                {item.status !== "DEVUELTO_A_BODEGA" && item.status !== "DESCARTADO" && (
+                  <button onClick={() => updateStatus(item.id, "DESCARTADO")} className="px-3 py-2 rounded-lg text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200">
+                    ❌ Descartar
+                  </button>
                 )}
                 {isAdmin && (
-                  <Button variant="ghost" size="sm" onClick={() => deleteItem(item.id)} title="Eliminar">
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </Button>
+                  <button onClick={() => deleteItem(item.id)} className="px-3 py-2 rounded-lg text-xs text-gray-500 hover:bg-gray-100">
+                    🗑 Eliminar
+                  </button>
                 )}
               </div>
             </div>

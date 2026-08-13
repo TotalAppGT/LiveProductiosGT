@@ -14,7 +14,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { status, diagnostic, assignedToId, notes } = body;
+    const { status, diagnostic, assignedToId, notes, inventoryItemId } = body;
 
     const data: Record<string, unknown> = {};
     if (status !== undefined) data.status = status;
@@ -27,6 +27,20 @@ export async function PUT(
       where: { id },
       data,
     });
+
+    // Si se devuelve a bodega, reingresar al inventario
+    if (status === "DEVUELTO_A_BODEGA") {
+      const invItem = await prisma.inventoryItem.findFirst({
+        where: { name: item.itemName, status: "DANADO" },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (invItem) {
+        await prisma.inventoryItem.update({
+          where: { id: invItem.id },
+          data: { status: "DISPONIBLE" },
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, data: item });
   } catch (error) {
