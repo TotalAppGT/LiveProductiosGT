@@ -132,10 +132,9 @@ export async function GET(
     const startLabels = ["Frontal", "Trasera", "Lateral Izq", "Lateral Der", "Tablero/KM", "Interior"];
     drawPhotoGrid(safeArray(log.startPhotos), startLabels, 135);
 
-    // ===== COMBUSTIBLE (nueva página si hay) =====
+    // ===== COMBUSTIBLE (fluye debajo de salida si hay) =====
     const fuelEntries = Array.isArray(log.fuelEntries) ? log.fuelEntries : [];
     if (fuelEntries.length > 0) {
-      doc.addPage();
       drawSectionTitle(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`);
       for (const f of fuelEntries) {
         doc.fontSize(9).fillColor("#333333").text(`Carga · ${new Date(f.createdAt).toLocaleString("es-GT")}`, { align: "left" });
@@ -143,9 +142,8 @@ export async function GET(
       }
     }
 
-    // ===== RETORNO (nueva página) =====
+    // ===== RETORNO (fluye debajo) =====
     if (log.status === "FINALIZADO" && log.endAt) {
-      doc.addPage();
       drawSectionTitle("INFORMACIÓN DE RETORNO");
       doc.fontSize(9).fillColor("#333333");
       doc.text(`Fecha de retorno: ${new Date(log.endAt).toLocaleString("es-GT")}`, { align: "left" });
