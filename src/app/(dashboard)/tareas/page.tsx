@@ -66,7 +66,7 @@ export default function TareasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("MIS_TAREAS");
-  const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
@@ -463,26 +463,38 @@ export default function TareasPage() {
                     </div>
                     <div className="space-y-2">
                       {columnTasks.map((task) => (
-                        <Card
+                        <div
                           key={task.id}
-                          variant="bordered"
-                          className="p-3 cursor-pointer hover:shadow-md transition-shadow"
+                          className={`border-l-4 rounded-lg cursor-pointer hover:shadow-md transition-shadow bg-white dark:bg-gray-800 border-y border-r border-gray-200 dark:border-gray-700 ${
+                            task.priority === "URGENTE" || task.priority === "ALTA"
+                              ? "border-l-red-500"
+                              : task.priority === "MEDIA"
+                              ? "border-l-yellow-400"
+                              : "border-l-green-500"
+                          }`}
                           onClick={() => toggleExpand(task.id)}
                         >
-                          <p className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2">
-                            {task.title}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                            <Badge size="sm" color={taskPriorityColor(task.priority)}>
-                              {taskPriorityLabel(task.priority)}
-                            </Badge>
-                            {task.assignedTo && (
-                              <span className="text-xs text-gray-500">
-                                {task.assignedTo.name}
-                              </span>
+                          <div className="p-3">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2">
+                              {task.title}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                              <Badge size="sm" color={taskPriorityColor(task.priority)}>
+                                {taskPriorityLabel(task.priority)}
+                              </Badge>
+                              {task.assignedTo && (
+                                <span className="text-xs text-gray-500">
+                                  {task.assignedTo.name}
+                                </span>
+                              )}
+                            </div>
+                            {task.dueDate && (
+                              <p className="text-xs text-gray-400 mt-1">
+                                📅 {new Date(task.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric",month:"short"})}
+                              </p>
                             )}
                           </div>
-                        </Card>
+                        </div>
                       ))}
                     </div>
                   </div>

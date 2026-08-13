@@ -82,9 +82,9 @@ export function taskStatusColor(status: string): BadgeColor {
 
 export function taskPriorityColor(priority: string): BadgeColor {
   const map: Record<string, BadgeColor> = {
-    BAJA: "gray",
-    MEDIA: "blue",
-    ALTA: "orange",
+    BAJA: "green",
+    MEDIA: "yellow",
+    ALTA: "red",
     URGENTE: "red",
   };
   return map[priority] || "gray";
