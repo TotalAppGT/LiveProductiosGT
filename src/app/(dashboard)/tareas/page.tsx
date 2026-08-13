@@ -290,6 +290,42 @@ export default function TareasPage() {
             Nueva Tarea
           </Button>
         </div>
+        <div className="flex gap-2">
+          <a
+            href="/api/tasks/template"
+            className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            📥 Plantilla XLSX
+          </a>
+          <label className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+            📤 Cargar masiva
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const formData = new FormData();
+                formData.append("file", file);
+                try {
+                  const res = await fetch("/api/tasks/bulk", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: formData,
+                  });
+                  const json = await res.json();
+                  if (json.success) {
+                    toast.success(json.message || `${json.created} tareas creadas`);
+                    fetchTasks();
+                  } else toast.error(json.error || "Error");
+                } catch {
+                  toast.error("Error al cargar");
+                }
+              }}
+            />
+          </label>
+        </div>
       </div>
 
       {selectedTasks.size > 0 && (

@@ -51,8 +51,7 @@ export async function GET(
 
     const safeArray = (arr: any): string[] => (Array.isArray(arr) ? arr : []);
 
-    const drawPhotoGrid = (photos: string[], labels: string[], size: number) => {
-      const perRow = 3;
+    const drawPhotoGrid = (photos: string[], labels: string[], size: number, perRow: number = 3) => {
       const gap = 8;
       const labelH = 12;
       const cellH = size + labelH;
@@ -67,7 +66,6 @@ export async function GET(
         if (y + size + labelH > doc.page.height - doc.page.margins.bottom) {
           doc.addPage();
           doc.y = doc.page.margins.top;
-          // re-draw remaining on new page
           const remaining = photos.slice(i);
           const remLabels = labels.slice(i);
           for (let j = 0; j < remaining.length; j++) {
@@ -133,11 +131,11 @@ export async function GET(
     // Combustible
     const fuelEntries = Array.isArray(log.fuelEntries) ? log.fuelEntries : [];
     if (fuelEntries.length > 0) {
-      doc.fontSize(11).fillColor("#1e40af").text(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`);
+      doc.fontSize(11).fillColor("#1e40af").text(`CARGAS DE COMBUSTIBLE (${fuelEntries.length})`, { align: "left" });
       doc.moveDown(0.2);
       for (const f of fuelEntries) {
-        doc.fontSize(9).fillColor("#333333").text(`Carga · ${new Date(f.createdAt).toLocaleString("es-GT")}`);
-        drawPhotoGrid(safeArray(f.photos), ["Tablero antes", "Bomba/Gasolinera", "Factura", "Tablero después"], 110);
+        doc.fontSize(9).fillColor("#333333").text(`Carga · ${new Date(f.createdAt).toLocaleString("es-GT")}`, { align: "left" });
+        drawPhotoGrid(safeArray(f.photos), ["Tablero antes", "Bomba/Gasolinera", "Factura", "Tablero después"], 110, 4);
       }
     }
 
