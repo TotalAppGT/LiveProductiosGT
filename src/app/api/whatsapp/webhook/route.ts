@@ -1034,6 +1034,40 @@ async function handleConversationStep(
     return await handleCommand(postponeText, user);
   }
 
+  if (conv.state === "postpone_date") {
+    const now = new Date();
+    const date = parseRelativeDate(text, now);
+    if (!date) {
+      return "No entendí la fecha. Usa: *mañana*, *viernes*, *lunes próximo*, *el 20 de agosto*.\n\n⏰ *Posponer Tarea*\n¿Para qué día?";
+    }
+    setConversation(fromNumber, "postpone_time", { ...conv.data, dueDate: date.toISOString() });
+    return `⏰ *Posponer Tarea*\n\nDía: ${date.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}\n\n¿A qué hora?\nEj: *9am*, *3pm*, *en la tarde*`;
+  }
+
+  if (conv.state === "postpone_time") {
+    let time = parseTimeExpression(text);
+    if (!time && /default/i.test(cmdLower)) {
+      time = { hours: 9, minutes: 0 };
+    }
+    if (!time) {
+      return "No entendí la hora. Usa: *9am*, *3pm*, *15:00*, o escribe *default*.\n\n⏰ *Posponer Tarea*\n¿A qué hora?";
+    }
+    const dueDate = new Date(conv.data.dueDate);
+    dueDate.setHours(time.hours, time.minutes, 0, 0);
+    setConversation(fromNumber, "postpone_reason", { ...conv.data, dueDate: dueDate.toISOString() });
+    return `⏰ *Posponer Tarea*\n\nHora: ${time.hours}:${String(time.minutes).padStart(2, "0")}\n\n¿Por qué la pospones? (comentario)\nO escribe *sin motivo*`;
+  }
+
+  if (conv.state === "postpone_reason") {
+    const reason = /sin\s+motivo/i.test(cmdLower) ? "Sin motivo especificado" : text;
+    const dueDate = new Date(conv.data.dueDate);
+    await postponeTask(conv.data.taskId, dueDate, reason, user);
+    conversations.delete(fromNumber);
+    const dateStr = dueDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" });
+    const timeStr = dueDate.toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" });
+    return `✅ Tarea *${conv.data.taskTitle}* pospuesta para *${dateStr} a las ${timeStr}*.\nMotivo: ${reason}\n_Se notificará al administrador._`;
+  }
+
   if (conv.state === "task_create_title") {
     setConversation(fromNumber, "task_create_person", { title: text });
     return `📝 *Nueva Tarea* - Paso 2/5\n¿Para quién es la tarea? (Ej: Diana, Jorge, Abel...)\nO escribe *para mi* si es para ti.`;
@@ -1291,6 +1325,20 @@ export async function POST(request: NextRequest) {
                         { success: true, message: "Webhook procesado exitosamente" },
                         { status: 200 }
                       );
+                    }
+                  }
+
+                  // Posponer interactivo: "posponer N" sin fecha → wizard
+                  const postponeBare = text.toLowerCase().trim().match(/^posponer\s+(\d+)$/i);
+                  if (postponeBare) {
+                    const tasks = await getPendingTasks(user.id);
+                    const num = parseInt(postponeBare[1]);
+                    if (num >= 1 && num <= tasks.length) {
+                      const task = tasks[num - 1];
+                      setConversation(normalizedFrom, "postpone_date", { taskId: task.id, taskTitle: task.title });
+                      const msg = `⏰ *Posponer Tarea #${num}*\n\n*${task.title}*\n\n¿Para qué día quieres posponerla?\nEj: *mañana*, *viernes*, *lunes próximo*, *el 20 de agosto*`;
+                      await sendMessage(fromNumber, msg);
+                      return NextResponse.json({ success: true, message: "Wizard posponer iniciado" });
                     }
                   }
 
