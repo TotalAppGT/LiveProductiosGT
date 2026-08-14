@@ -25,6 +25,7 @@ import type { Cobro, User, ApiResponse, PaginatedResponse } from "@/types";
 export default function CobrosPage() {
   const { user, token } = useAuth();
   const [cobros, setCobros] = useState<Cobro[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -41,12 +42,16 @@ export default function CobrosPage() {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams();
-      if (statusFilter) params.set("status", statusFilter);
-      if (search) params.set("search", search);
-      const res = await fetch(`/api/cobros?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const [res, usersRes] = await Promise.all([
+        fetch(`/api/cobros?${new URLSearchParams({ ...(statusFilter && { status: statusFilter }), ...(search && { search }) }).toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch("/api/users/list", { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (usersRes.ok) {
+        const uJson = await usersRes.json();
+        if (Array.isArray(uJson)) setUsers(uJson);
+      }
       if (!res.ok) throw new Error("Error al cargar cobros");
       const json: PaginatedResponse<Cobro> = await res.json();
       if (json.success) {
@@ -88,7 +93,7 @@ export default function CobrosPage() {
 
   const totalPending = cobros
     .filter((c) => c.status !== "COMPLETADO")
-    .reduce((sum, c) => sum + c.amount, 0);
+    .reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
   const collectedMonth = cobros
     .filter((c) => {
@@ -97,7 +102,7 @@ export default function CobrosPage() {
       const now = new Date();
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     })
-    .reduce((sum, c) => sum + c.amount, 0);
+    .reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -340,6 +345,7 @@ export default function CobrosPage() {
         }}
         token={token || ""}
         cobro={editingCobro}
+        users={users}
         onSaved={fetchCobros}
       />
 
@@ -397,12 +403,14 @@ function CobroFormModal({
   onClose,
   token,
   cobro,
+  users,
   onSaved,
 }: {
   isOpen: boolean;
   onClose: () => void;
   token: string;
   cobro: Cobro | null;
+  users: any[];
   onSaved: () => void;
 }) {
   const isEditing = !!cobro;
@@ -411,6 +419,7 @@ function CobroFormModal({
   const [invoiceNumber, setInvoiceNumber] = useState(cobro?.invoiceNumber || "");
   const [dueDate, setDueDate] = useState(cobro?.dueDate?.split("T")[0] || "");
   const [notes, setNotes] = useState(cobro?.notes || "");
+  const [assignedToId, setAssignedToId] = useState(cobro?.assignedToId || "");
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -432,6 +441,7 @@ function CobroFormModal({
           invoiceNumber: invoiceNumber.trim() || undefined,
           dueDate: dueDate || undefined,
           notes: notes.trim() || undefined,
+          assignedToId: assignedToId || undefined,
         }),
       });
       const json = await res.json();
@@ -454,6 +464,19 @@ function CobroFormModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label="Cliente" value={clientName} onChange={(e) => setClientName(e.target.value)} required />
         <Input label="Monto (GTQ)" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asignado a</label>
+          <select
+            value={assignedToId}
+            onChange={(e) => setAssignedToId(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          >
+            <option value="">Yo (predeterminado)</option>
+            {users.map((u: any) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        </div>
         <Input label="Número de factura" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
         <Input label="Fecha de vencimiento" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
         <div>

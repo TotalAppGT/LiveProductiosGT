@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         status: status || "PENDIENTE",
         invoiceNumber: invoiceNumber || null,
         dueDate: dueDate ? new Date(dueDate) : null,
-        assignedToId: assignedToId || null,
+        assignedToId: assignedToId || auth.payload.userId,
         notes: notes || null,
         eventId: eventId || null,
         tenantId: auth.payload.tenantId,

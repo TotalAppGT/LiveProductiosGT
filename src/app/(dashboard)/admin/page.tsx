@@ -469,6 +469,28 @@ export default function AdminPage() {
         >
           🗑️ Resetear sistema (borrar todo)
         </button>
+        <button
+          onClick={async () => {
+            if (!confirm("¿Eliminar tareas duplicadas? Se quitarán las repetidas (mismo título + asignado + fecha).")) return;
+            try {
+              const res = await fetch("/api/admin/dedupe", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              const json = await res.json();
+              if (json.success) {
+                toast.success(json.message || "Duplicados eliminados");
+              } else {
+                toast.error(json.error || "Error");
+              }
+            } catch {
+              toast.error("Error al eliminar duplicados");
+            }
+          }}
+          className="mt-3 ml-2 text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded-lg font-medium"
+        >
+          🧹 Eliminar tareas duplicadas
+        </button>
       </div>
 
       <Tabs defaultValue="ai">
