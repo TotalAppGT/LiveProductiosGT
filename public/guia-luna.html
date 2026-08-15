@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guía de LUNA - Live Productions</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; line-height: 1.5; padding: 24px; max-width: 700px; margin: auto; }
+.header { text-align: center; border-bottom: 3px solid #1e40af; padding-bottom: 16px; margin-bottom: 20px; }
+.header h1 { font-size: 24px; color: #1e40af; }
+.header p { color: #666; font-size: 13px; }
+h2 { font-size: 16px; color: #1e40af; margin: 20px 0 8px; border-left: 4px solid #1e40af; padding-left: 8px; }
+.section { margin-bottom: 16px; }
+table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+td { padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 13px; }
+td:first-child { width: 45%; font-weight: 600; }
+code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+li { margin: 4px 0 4px 18px; font-size: 13px; }
+.tip { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; }
+.footer { text-align: center; color: #999; font-size: 11px; margin-top: 24px; border-top: 1px solid #eee; padding-top: 10px; }
+.colors { display: flex; gap: 8px; flex-wrap: wrap; }
+.color-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🤖 GUÍA DE LUNA</h1>
+  <p>Asistente IA Administrativa · Live Productions GT</p>
+  <p>WhatsApp: +502 3084 0447</p>
+</div>
+
+<div class="section">
+  <h2>📊 MIS TAREAS</h2>
+  <ul>
+    <li><code>tareas</code> → todas mis tareas</li>
+    <li><code>tareas hoy</code> → solo las de hoy</li>
+    <li><code>tareas semana</code> → esta semana</li>
+    <li><code>tareas mes</code> → este mes</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>⚡ ACCIONES SOBRE TAREAS (usa el #)</h2>
+  <table>
+    <tr><td>✅ <code>hecho 1</code></td><td>Completar la tarea #1</td></tr>
+    <tr><td>🔄 <code>proceso 1</code></td><td>Marcar en proceso</td></tr>
+    <tr><td>⏰ <code>posponer 1</code></td><td>Posponer (pregunta día, hora y motivo)</td></tr>
+    <tr><td>📤 <code>transferir 1 a Diana</code></td><td>Reasignar a otra persona</td></tr>
+    <tr><td>💬 <code>comentar 1 texto</code></td><td>Agregar comentario</td></tr>
+    <tr><td>❌ <code>no 1</code></td><td>Marcar como no realizada</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <h2>➕ CREAR TAREAS</h2>
+  <ul>
+    <li><code>crea tarea revisar equipo mañana 10am</code></li>
+    <li><code>crea tarea para Diana llamar proveedor viernes 3pm</code></li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>⏰ RECORDATORIOS Y MENSAJES</h2>
+  <ul>
+    <li><code>recuérdame llamar a Juan a las 3pm</code></li>
+    <li><code>mándame un mensaje a las 2pm para la reunión</code></li>
+    <li><code>avísame mañana a las 9am revisar bodega</code></li>
+    <li><code>notifícame el viernes a las 4pm enviar reporte</code></li>
+  </ul>
+  <p style="font-size:12px;color:#666;">LUNA avisa 10 minutos antes y a la hora exacta.</p>
+</div>
+
+<div class="section">
+  <h2>🏢 CONSULTAR EL SISTEMA</h2>
+  <table>
+    <tr><td><code>inventario</code></td><td>Equipo disponible</td></tr>
+    <tr><td><code>inventario sonido</code></td><td>Solo audio</td></tr>
+    <tr><td><code>vehiculos</code></td><td>Flota vehicular</td></tr>
+    <tr><td><code>cobros</code></td><td>Cobros pendientes</td></tr>
+    <tr><td><code>empleados</code></td><td>Directorio del equipo</td></tr>
+    <tr><td><code>eventos</code></td><td>Próximos eventos</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <h2>📈 REPORTES (Dueño/Admin)</h2>
+  <table>
+    <tr><td><code>resumen</code></td><td>Mis tareas + eventos + cumplimiento</td></tr>
+    <tr><td><code>ranking</code></td><td>Top de cumplimiento del equipo</td></tr>
+    <tr><td><code>cómo va el equipo</code></td><td>Visión general</td></tr>
+    <tr><td><code>quién no ha entrado</code></td><td>Inactivos hoy</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <h2>🎨 PRIORIDADES</h2>
+  <div class="colors">
+    <span class="color-badge" style="background:#d1fae5;color:#047857;">🟢 Baja</span>
+    <span class="color-badge" style="background:#fef3c7;color:#b45309;">🟡 Media</span>
+    <span class="color-badge" style="background:#fee2e2;color:#b91c1c;">🔴 Alta/Urgente</span>
+  </div>
+</div>
+
+<div class="tip">
+  💡 <strong>Tip:</strong> Cada tarea sale numerada (1., 2., 3...) con su color de prioridad.
+  Usa ese número para las acciones. Si dudas, escribe <code>ayuda</code>.
+  Las tareas no hechas se reprograman al día siguiente automáticamente.
+</div>
+
+<div class="footer">Documento generado automáticamente · Live Productions GT · Guía de uso de LUNA</div>
+
+</body>
+</html>
