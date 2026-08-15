@@ -42,6 +42,7 @@ const STATUS_TABS = [
   { value: "COMPLETADA", label: "Completadas" },
   { value: "HOY", label: "Hoy" },
   { value: "SEMANA", label: "Esta Semana" },
+  { value: "MES", label: "Este Mes" },
 ];
 
 const CATEGORY_OPTIONS = [
@@ -90,7 +91,7 @@ export default function TareasPage() {
       const params = new URLSearchParams();
       if (activeTab === "MIS_TAREAS") {
         if (user?.id) params.set("assignedToId", user.id);
-      } else if (activeTab !== "TODAS" && activeTab !== "HOY" && activeTab !== "SEMANA") {
+      } else if (activeTab !== "TODAS" && activeTab !== "HOY" && activeTab !== "SEMANA" && activeTab !== "MES") {
         params.set("status", activeTab);
       }
       if (categoryFilter) params.set("category", categoryFilter);
@@ -100,6 +101,23 @@ export default function TareasPage() {
       if (activeTab === "HOY") {
         const today = new Date().toISOString().split("T")[0];
         params.set("dueDate", today);
+      }
+      if (activeTab === "SEMANA") {
+        const now = new Date();
+        const day = now.getDay();
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        params.set("dueDateFrom", monday.toISOString().split("T")[0]);
+        params.set("dueDateTo", sunday.toISOString().split("T")[0]);
+      }
+      if (activeTab === "MES") {
+        const now = new Date();
+        const first = new Date(now.getFullYear(), now.getMonth(), 1);
+        const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        params.set("dueDateFrom", first.toISOString().split("T")[0]);
+        params.set("dueDateTo", last.toISOString().split("T")[0]);
       }
 
       const res = await fetch(`/api/tasks?${params.toString()}`, {
