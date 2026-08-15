@@ -729,7 +729,10 @@ async function handleCommand(
   }
 
   if (cmd.startsWith("recuerda") || cmd.startsWith("recordar") || cmd.startsWith("recordatorio") ||
-      /\b(crea|creame|crear|agenda|programa|programar|pon|ponme|agendar|poner)\s+(un\s+|unos\s+|el\s+|una\s+|las\s+|los\s+)?recordatorio/i.test(cmd)) {
+      /\b(crea|creame|crear|agenda|programa|programar|pon|ponme|agendar|poner)\s+(un\s+|unos\s+|el\s+|una\s+|las\s+|los\s+)?recordatorio/i.test(cmd) ||
+      /mand(a|ame|enme|ele)?\s+(un\s+)?(mensaje|alerta|aviso)/i.test(cmd) ||
+      /(avisame|avisame|notifícame|notificame|avísame|avísame)\b/i.test(cmd) ||
+      /\b(ponme|pon|manda|mandame)\s+(una|un)\s+(alerta|aviso|recordatorio)\b/i.test(cmd)) {
     const parsed = await parseReminderFromText(cmd, user);
     if (!parsed) return "No pude entender la fecha/hora. Ejemplo: *recuérdame llamar a Juan mañana a las 3pm*";
 
@@ -1153,6 +1156,7 @@ function isKnownCommand(text: string): boolean {
     "tareas", "hoy", "semana", "completar", "hecho", "completado", "proceso", "iniciar", "en proceso", "posponer", "comentar",
     "transferir", "crea tarea", "crear tarea", "nueva tarea",
     "recuerda", "recordar", "recordatorio", "evento", "eventos",
+    "mandame", "mandame un mensaje", "mándame", "avisame", "avisame", "notificame", "notifícame",
     "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",
     "ranking", "no ",
     "inventario", "vehiculos", "vehículos", "cobros", "empleados", "personal",
