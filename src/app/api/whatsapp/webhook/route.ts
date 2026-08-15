@@ -7,23 +7,13 @@ import { normalizeGTPhone } from "@/lib/phone";
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
 
 function normalizeGuatemalaDate(input: string): Date {
-  const d = new Date(input);
-  if (!isNaN(d.getTime()) && /[zZ]|[+-]\d{2}:\d{2}$/.test(input.trim())) {
-    return d;
+  const trimmed = input.trim();
+  // Si ya trae zona horaria (Z o +hh:mm), parsea directo
+  if (/[zZ]|[+-]\d{2}:\d{2}$/.test(trimmed)) {
+    return new Date(trimmed);
   }
-  const gt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Guatemala",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-    hour12: false,
-  }).formatToParts(d);
-  const m = new Map(gt.map((p) => [p.type, p.value]));
-  return new Date(
-    Date.UTC(
-      Number(m.get("year")), Number(m.get("month")) - 1, Number(m.get("day")),
-      Number(m.get("hour")) % 24, Number(m.get("minute")), Number(m.get("second"))
-    )
-  );
+  // Hora sin zona: interpretarla como hora local de Guatemala (UTC-6)
+  return new Date(trimmed + "-06:00");
 }
 
 function getConversation(phone: string) {
@@ -374,19 +364,22 @@ async function parseReminderFromText(text: string, user: { id: string; name: str
 {
   "title": "título corto de la tarea/recordatorio",
   "description": "descripción o null",
-  "remindAt": "fecha ISO 8601 en timezone America/Guatemala",
+  "remindAt": "fecha y hora como YYYY-MM-DDTHH:mm:ss en hora LOCAL de Guatemala (sin Z ni offset)",
   "assignToName": "nombre de persona a asignar o null"
 }
 
 Texto: "${text}"
 Usuario actual: ${user.name}
 
-Fecha actual en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}
-Reglas:
+Fecha y hora actual en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}
+
+Reglas IMPORTANTES:
+- La hora que dice el usuario ES la hora de Guatemala. NO la conviertas a UTC ni a otra zona.
+- Si el usuario dice "9:15 am", remindAt debe tener "09:15", NUNCA "15:15".
 - "mañana" = día siguiente
 - "pasado mañana" = en 2 días
 - "el lunes" = próximo lunes
-- Si no se especifica hora, usa 9:00 AM
+- Si no se especifica hora, usa 09:00
 - Si menciona un nombre de persona (Diana, Jorge, Abel, Selvin, Exequiel, Javier, Brenda, Daniel), asígnalo
 
 Responde SOLO el JSON, sin markdown.`
@@ -418,7 +411,7 @@ async function parseTaskCreation(text: string, user: { id: string; name: string 
   "title": "título corto de la tarea",
   "description": "descripción o null",
   "assignToName": "nombre de la persona asignada o null",
-  "dueDate": "fecha ISO 8601 en timezone America/Guatemala o null",
+  "dueDate": "fecha y hora como YYYY-MM-DDTHH:mm:ss en hora LOCAL de Guatemala o null",
   "priority": "BAJA|MEDIA|ALTA|URGENTE (default MEDIA)",
   "isFixed": true or false,
   "frequency": "DIARIA|SEMANAL|MENSUAL o null",
@@ -428,13 +421,14 @@ async function parseTaskCreation(text: string, user: { id: string; name: string 
 Texto: "${text}"
 Usuario actual: ${user.name}
 
-Fecha actual en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}
+Fecha y hora actual en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}
 
-Reglas:
+Reglas IMPORTANTES:
+- La hora que dice el usuario ES la hora de Guatemala. NO la conviertas a UTC ni a otra zona.
 - "mañana" = día siguiente
 - "pasado mañana" = en 2 días
 - "el viernes" = próximo viernes
-- Si no se especifica hora, usa 9:00 AM
+- Si no se especifica hora, usa 09:00
 - Si menciona un nombre de persona (Diana, Jorge, Abel, Selvin, Exequiel, Javier, Brenda, Daniel), asígnalo
 - Si dice "todos los lunes" o "cada martes", isFixed=true con frequency=SEMANAL
 - Solo es FIJA si explícitamente dice "fija" o "recurrente" o "todos los" o "cada"
@@ -456,7 +450,7 @@ Responde SOLO el JSON, sin markdown.`
       title: json.title,
       description: json.description,
       assignToId,
-      dueDate: json.dueDate ? new Date(json.dueDate) : undefined,
+      dueDate: json.dueDate ? normalizeGuatemalaDate(json.dueDate) : undefined,
       priority: json.priority || "MEDIA",
       isFixed: json.isFixed || false,
       frequency: json.frequency,
