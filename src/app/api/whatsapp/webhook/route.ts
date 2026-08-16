@@ -713,6 +713,89 @@ async function handleCommand(
     return `📌 *Actividades Fijas ${day}*\n\n${formatTaskList(tasks)}`;
   }
 
+  // Consulta dinámica de tareas por fechas (lunes-sábado semana laboral)
+  const dynamicTaskMatch =
+    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?(?:la proxima semana|la semana que viene|la siguiente semana|proxima semana|el proximo mes|el mes que viene)/i.test(cmd) ||
+    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para)\b.*?\b(para mañana|mañana|el (lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo|hoy))\b/i.test(cmd);
+
+  if (dynamicTaskMatch) {
+    const now = new Date();
+    const today = new Date(now); today.setHours(0, 0, 0, 0);
+    const dayOfWeek = today.getDay(); // 0=domingo
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    const saturday = new Date(monday); saturday.setDate(monday.getDate() + 5); saturday.setHours(23, 59, 59);
+    const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7);
+    const nextSaturday = new Date(nextMonday); nextSaturday.setDate(nextMonday.getDate() + 5); nextSaturday.setHours(23, 59, 59);
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1); tomorrow.setHours(23, 59, 59);
+
+    const dayNames: Record<string, number> = {
+      lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4, viernes: 5, sabado: 6, sábado: 6, domingo: 0,
+    };
+
+    let title = "";
+    let dateFrom: Date | null = null;
+    let dateTo: Date | null = null;
+
+    if (/la proxima semana|la semana que viene|la siguiente semana|proxima semana/i.test(cmd)) {
+      title = "PRÓXIMA SEMANA";
+      dateFrom = nextMonday;
+      dateTo = nextSaturday;
+    } else if (/el proximo mes|el mes que viene/i.test(cmd)) {
+      title = "PRÓXIMO MES";
+      dateFrom = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      dateTo = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+    } else if (/para mañana|mañana\b/i.test(cmd) && !/el (lunes|martes|...)/i.test(cmd)) {
+      title = `MAÑANA - ${tomorrow.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
+      dateFrom = new Date(today); dateFrom.setDate(today.getDate() + 1); dateFrom.setHours(0, 0, 0, 0);
+      dateTo = new Date(dateFrom); dateTo.setHours(23, 59, 59);
+    } else {
+      // Día específico: "el lunes", "el sábado", "hoy"
+      let targetDay: number | null = null;
+      if (/el lunes/.test(cmd)) targetDay = 1;
+      else if (/el martes/.test(cmd)) targetDay = 2;
+      else if (/el miercoles|el miércoles/.test(cmd)) targetDay = 3;
+      else if (/el jueves/.test(cmd)) targetDay = 4;
+      else if (/el viernes/.test(cmd)) targetDay = 5;
+      else if (/el sabado|el sábado/.test(cmd)) targetDay = 6;
+      else if (/el domingo/.test(cmd)) targetDay = 0;
+      else if (/hoy/.test(cmd)) targetDay = dayOfWeek;
+
+      if (targetDay !== null) {
+        // Buscar el próximo día de la semana (si hoy es domingo y pide lunes, es mañana)
+        let delta = (targetDay - dayOfWeek + 7) % 7;
+        if (delta === 0) delta = 7; // si pide el mismo día de hoy, ir a la próxima semana? No - "hoy" es hoy
+        if (/hoy/.test(cmd)) delta = 0;
+        const targetDate = new Date(today);
+        targetDate.setDate(today.getDate() + delta);
+        targetDate.setHours(0, 0, 0, 0);
+        title = `${targetDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
+        dateFrom = new Date(targetDate); dateFrom.setHours(0, 0, 0, 0);
+        dateTo = new Date(targetDate); dateTo.setHours(23, 59, 59);
+      }
+    }
+
+    if (!dateFrom || !dateTo) {
+      return "No entendí bien la fecha. Prueba: *tareas para mañana*, *tareas del lunes*, *tareas de la próxima semana*";
+    }
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        assignedToId: user.id,
+        status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
+        dueDate: { gte: dateFrom, lte: dateTo },
+      },
+      orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+      take: 20,
+    });
+
+    if (tasks.length === 0) {
+      return `${user.name}, no tienes tareas para *${title}*. ¡Bien! 🎉`;
+    }
+
+    return `📅 *${title}*\n\n${formatTaskList(tasks)}\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
+  }
+
   if (
     cmd === "tareas" || cmd === "mis tareas" || cmd === "ver tareas" ||
     cmd === "muestrame mis tareas" || cmd === "muéstrame mis tareas" ||
@@ -1194,6 +1277,7 @@ function isKnownCommand(text: string): boolean {
     "recuerda", "recordar", "recordatorio", "evento", "eventos",
     "mandame", "mandame un mensaje", "mándame", "avisame", "avisame", "notificame", "notifícame",
     "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",
+    "que tengo", "que tengo para", "que hay", "tareas para mañana", "tareas del lunes", "tareas de la proxima semana", "tareas de la semana que viene",
     "ranking", "no ",
     "inventario", "vehiculos", "vehículos", "cobros", "empleados", "personal",
   ];
