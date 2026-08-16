@@ -19,6 +19,7 @@ code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13p
 li { margin: 4px 0 4px 18px; font-size: 13px; }
 .tip { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; }
 .note { background: #fefce8; border: 1px solid #fde68a; border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 13px; }
+.example { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin: 6px 0; font-size: 12px; white-space: pre-line; }
 .footer { text-align: center; color: #999; font-size: 11px; margin-top: 24px; border-top: 1px solid #eee; padding-top: 10px; }
 .colors { display: flex; gap: 8px; flex-wrap: wrap; }
 .color-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
@@ -33,13 +34,33 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
 </div>
 
 <div class="section">
-  <h2>📊 MIS TAREAS</h2>
+  <h2>📊 VER MIS TAREAS</h2>
+  <table>
+    <tr><td><code>tareas</code></td><td>Todas mis tareas (ordenadas por día y hora)</td></tr>
+    <tr><td><code>tareas hoy</code></td><td>Solo las de hoy (por hora)</td></tr>
+    <tr><td><code>tareas semana</code> / <code>tareas esta semana</code></td><td>Esta semana, día por día</td></tr>
+    <tr><td><code>tareas semana 2</code> / <code>tareas la próxima semana</code></td><td>La próxima semana</td></tr>
+    <tr><td><code>tareas mes</code></td><td>Este mes</td></tr>
+  </table>
+  <div class="example">📅 *lunes, 17 de agosto*
+1. 🔴 Llamar a Abel 📌 17 ago 08:00 a. m.
+2. 🟡 Actualizar drive 📌 17 ago 09:00 a. m.
+
+📅 *martes, 18 de agosto*
+3. 🔴 Revisar equipo 📌 18 ago 10:00 a. m.</div>
+  <p style="font-size:12px;color:#666;">Las tareas sin hora se muestran solo con fecha. Las que tienen hora, se ordenan de la más temprana a la más tarde.</p>
+</div>
+
+<div class="section">
+  <h2>🔍 CONSULTAS DINÁMICAS POR FECHA</h2>
   <ul>
-    <li><code>tareas</code> → todas mis tareas</li>
-    <li><code>tareas hoy</code> → solo las de hoy</li>
-    <li><code>tareas semana</code> → esta semana</li>
-    <li><code>tareas mes</code> → este mes</li>
+    <li><code>tareas para mañana</code></li>
+    <li><code>tareas del lunes</code> / <code>tareas del sábado</code></li>
+    <li><code>qué tengo el viernes</code></li>
+    <li><code>qué tengo para mañana</code></li>
+    <li><code>tareas de la próxima semana</code> / <code>tareas del mes que viene</code></li>
   </ul>
+  <p style="font-size:12px;color:#666;">Se considera la semana laboral de LUNES a SÁBADO (domingo descanso).</p>
 </div>
 
 <div class="section">
@@ -47,12 +68,11 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
   <table>
     <tr><td>✅ <code>hecho 1</code></td><td>Completar la tarea #1</td></tr>
     <tr><td>🔄 <code>proceso 1</code></td><td>Marcar como "en proceso"</td></tr>
-    <tr><td>⏰ <code>posponer 1</code></td><td>Posponer (te pregunta día, hora y motivo)</td></tr>
+    <tr><td>⏰ <code>posponer 1</code></td><td>Posponer (pregunta día, hora y motivo)</td></tr>
     <tr><td>📤 <code>transferir 1 a Diana</code></td><td>Reasignar a otra persona</td></tr>
-    <tr><td>💬 <code>comentar 1 texto</code></td><td>Agregar comentario a la tarea</td></tr>
+    <tr><td>💬 <code>comentar 1 texto</code></td><td>Agregar comentario</td></tr>
     <tr><td>❌ <code>no 1</code></td><td>Marcar como no realizada</td></tr>
   </table>
-  <p style="font-size:12px;color:#666;">En el sistema web: cada tarjeta tiene botones ✅ Hecho · 🔄 Proceso · ⏰ Posponer con un clic.</p>
 </div>
 
 <div class="section">
@@ -60,6 +80,8 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
   <ul>
     <li><code>crea tarea revisar equipo mañana 10am</code></li>
     <li><code>crea tarea para Diana llamar proveedor viernes 3pm</code></li>
+    <li><code>crea tarea para Jorge llamar a Abel mañana 8am</code> → notifica a Jorge</li>
+    <li><code>crea tarea fija revisar bodega cada lunes</code> → tarea fija semanal</li>
   </ul>
 </div>
 
@@ -79,15 +101,15 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
     <li><code>recuédale a Diana llamar a proveedor a las 3pm</code></li>
     <li><code>mándale un mensaje a Abel a las 2pm para la bodega</code></li>
     <li><code>para Brenda recordatorio de cobros mañana 9am</code></li>
-    <li><code>hazle un recordatorio a Selvin para el montaje sábado</code></li>
   </ul>
+  <p style="font-size:12px;color:#666;">La persona asignada recibe notificación inmediata + aviso 10 min antes y a la hora exacta.</p>
 </div>
 
 <div class="note">
-  <strong>💡 Cómo distinguir:</strong><br>
-  • "recuérdame / mándame / avísame" → el recordatorio es para ti<br>
+  <strong>💡 Cómo distinguir quién recibe:</strong><br>
+  • "recuérdame / mándame / avísame" → para ti<br>
   • "recuérdale a [nombre] / mándale a [nombre] / para [nombre]" → para esa persona<br>
-  • El nombre de la tarea (ej: "llamar a Juan") NO es quien recibe el aviso.
+  • El nombre de la tarea (ej: "llamar a Juan") NO es quien recibe.
 </div>
 
 <div class="section">
@@ -113,20 +135,23 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
 </div>
 
 <div class="section">
-  <h2>🎨 PRIORIDADES</h2>
+  <h2>🎨 PRIORIDADES Y ESTADOS</h2>
   <div class="colors">
     <span class="color-badge" style="background:#d1fae5;color:#047857;">🟢 Baja</span>
     <span class="color-badge" style="background:#fef3c7;color:#b45309;">🟡 Media</span>
     <span class="color-badge" style="background:#fee2e2;color:#b91c1c;">🔴 Alta/Urgente</span>
+    <span class="color-badge" style="background:#ede9fe;color:#6d28d9;">🟣 Pospuesta</span>
+    <span class="color-badge" style="background:#dcfce7;color:#166534;">✅ Completada</span>
   </div>
 </div>
 
 <div class="tip">
   💡 <strong>Tips:</strong><br>
-  • Cada tarea sale numerada (1., 2., 3...) con su color. Usa ese número para las acciones.<br>
+  • Cada tarea sale numerada y ordenada por hora/día. Usa el número para las acciones.<br>
+  • Las tareas pueden llevar hora o solo fecha (sin horario).<br>
   • LUNA avisa <strong>10 minutos antes</strong> y a la hora exacta de cada recordatorio.<br>
   • Las tareas no hechas se reprograman al día siguiente automáticamente.<br>
-  • Si dudas, escribe <code>ayuda</code> para ver los comandos.
+  • Si dudas, escribe <code>ayuda</code>.
 </div>
 
 <div class="footer">Documento generado automáticamente · Live Productions GT · Guía de uso de LUNA</div>

@@ -806,7 +806,8 @@ function CreateTaskModal({
     try {
       let finalDueDate: string | undefined;
       if (dueDate) {
-        const d = new Date(`${dueDate}T${dueTime || "09:00"}`);
+        // Si no hay hora, guardar a medianoche (00:00) para indicar "sin hora"
+        const d = new Date(`${dueDate}T${dueTime || "00:00"}`);
         finalDueDate = d.toISOString();
       }
       const res = await fetch("/api/tasks", {
@@ -944,7 +945,7 @@ function CreateTaskModal({
             onChange={(e) => setDueTime(e.target.value)}
           />
         </div>
-        <p className="text-xs text-gray-400 -mt-2">Los minutos se redondean a múltiplos de 5 (00, 05, 10...). Si no pones hora, será 9:00 AM.</p>
+        <p className="text-xs text-gray-400 -mt-2">Los minutos se redondean a múltiplos de 5. Si no pones hora, la tarea queda sin horario (solo fecha).</p>
         {type === "FIJA" && (
           <div className="grid grid-cols-2 gap-4">
             <div>

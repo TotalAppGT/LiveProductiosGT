@@ -387,8 +387,14 @@ function formatTaskList(tasks: any[], startNum: number = 1): string {
     if (t.dueDate) {
       const d = new Date(t.dueDate);
       const datePart = d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" });
-      const timePart = d.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" });
-      due = ` ${datePart} ${timePart}`;
+      const hours = d.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit", hour12: false });
+      // Si la hora es 00:00 (medianoche), es tarea sin hora → solo fecha
+      if (hours === "00:00") {
+        due = ` ${datePart}`;
+      } else {
+        const timePart = d.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" });
+        due = ` ${datePart} ${timePart}`;
+      }
     }
     return `${num}. ${prio} *${t.title}* ${status}${due}`;
   }).join("\n");
