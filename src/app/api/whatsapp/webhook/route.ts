@@ -909,7 +909,19 @@ async function handleCommand(
       return `${user.name}, no tienes tareas para *${title}*. ¡Bien! 🎉`;
     }
 
-    return `📅 *${title}*\n\n${formatTaskList(tasks)}\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
+    // Determinar si es un solo día o varios días
+    const isSingleDay = dateFrom.toDateString() === dateTo.toDateString();
+
+    let body: string;
+    if (isSingleDay) {
+      // Un solo día: lista plana ordenada por hora
+      body = formatTaskList(tasks);
+    } else {
+      // Varios días (semana/mes): agrupar por día
+      body = groupTasksByDay(tasks);
+    }
+
+    return `📅 *${title}*\n\n${body}\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
   }
 
   if (
