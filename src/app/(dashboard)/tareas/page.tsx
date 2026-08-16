@@ -319,12 +319,34 @@ export default function TareasPage() {
           </Button>
         </div>
         <div className="flex gap-2">
-          <a
-            href="/api/tasks/template"
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch("/api/tasks/template", {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) {
+                  const json = await res.json().catch(() => ({}));
+                  toast.error(json.error || "Error al descargar plantilla");
+                  return;
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "plantilla-tareas.xlsx";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+              } catch {
+                toast.error("Error al descargar plantilla");
+              }
+            }}
             className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             📥 Plantilla XLSX
-          </a>
+          </button>
           <label className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
             📤 Cargar masiva
             <input
