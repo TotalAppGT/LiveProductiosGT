@@ -47,8 +47,9 @@ const STATUS_TABS = [
 
 const CATEGORY_OPTIONS = [
   { value: "", label: "Todas las categorías" },
-  { value: "PRE_EVENTO", label: "Pre Evento" },
-  { value: "POST_EVENTO", label: "Post Evento" },
+  { value: "PRE_EVENTO", label: "🎪 Pre Evento" },
+  { value: "EVENTO", label: "🚀 Evento" },
+  { value: "POST_EVENTO", label: "🏁 Post Evento" },
   { value: "COTIZACION", label: "Cotización" },
   { value: "COBRO", label: "Cobro" },
   { value: "INVENTARIO", label: "Inventario" },
@@ -407,6 +408,27 @@ export default function TareasPage() {
             {viewMode === "kanban" ? "Lista" : "Kanban"}
           </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        {[
+          { value: "", label: "Todas" },
+          { value: "PRE_EVENTO", label: "🎪 Pre Evento", color: "border-blue-300 text-blue-700 bg-blue-50" },
+          { value: "EVENTO", label: "🚀 Evento", color: "border-purple-300 text-purple-700 bg-purple-50" },
+          { value: "POST_EVENTO", label: "🏁 Post Evento", color: "border-green-300 text-green-700 bg-green-50" },
+        ].map((chip) => (
+          <button
+            key={chip.value}
+            onClick={() => setCategoryFilter(chip.value)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              categoryFilter === chip.value
+                ? chip.color || "border-blue-500 text-blue-700 bg-blue-50"
+                : "border-gray-200 text-gray-600 hover:border-gray-300"
+            }`}
+          >
+            {chip.label}
+          </button>
+        ))}
       </div>
 
       {showFilters && (
