@@ -351,8 +351,14 @@ function formatTaskList(tasks: any[], startNum: number = 1): string {
     const num = startNum + i;
     const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
     const status = t.status === "COMPLETADA" ? "✅" : t.status === "REPROGRAMADA" ? "🟣 Pospuesta" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌";
-    const due = t.dueDate ? `${new Date(t.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric"})}` : "";
-    return `${num}. ${prio} *${t.title}* ${status}${due ? ` ${due}` : ""}`;
+    let due = "";
+    if (t.dueDate) {
+      const d = new Date(t.dueDate);
+      const datePart = d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" });
+      const timePart = d.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" });
+      due = ` ${datePart} ${timePart}`;
+    }
+    return `${num}. ${prio} *${t.title}* ${status}${due}`;
   }).join("\n");
 }
 
@@ -684,15 +690,15 @@ async function handleCommand(
     return `👥 *Equipo Live Productions*\n\n${list}\n\n_Para transferir una tarea: *transferir 2 a [nombre]*_`;
   }
 
-  if (cmd === "tareas hoy" || cmd === "hoy") {
+  if (cmd === "tareas hoy" || cmd === "hoy" || cmd === "tareas de hoy" || cmd === "tareas para hoy") {
     const tasks = await formatTasksForUser(user.id, "hoy");
     return tasks;
   }
-  if (cmd === "tareas semana" || cmd === "semana") {
+  if (cmd === "tareas semana" || cmd === "semana" || cmd === "tareas esta semana" || cmd === "esta semana" || cmd === "tareas de esta semana") {
     const tasks = await formatTasksForUser(user.id, "semana");
     return tasks;
   }
-  if (cmd === "tareas semana 2" || cmd === "semana 2") {
+  if (cmd === "tareas semana 2" || cmd === "semana 2" || cmd === "tareas la proxima semana" || cmd === "tareas la próxima semana" || cmd === "tareas de la proxima semana" || cmd === "tareas de la próxima semana") {
     const tasks = await formatTasksForUser(user.id, "semana2");
     return tasks;
   }

@@ -794,6 +794,9 @@ function CreateTaskModal({
   const [type, setType] = useState("DINAMICA");
   const [assignedToId, setAssignedToId] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [dueTime, setDueTime] = useState("");
+  const [frequency, setFrequency] = useState("DIARIA");
+  const [dayOfWeek, setDayOfWeek] = useState("LUNES");
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -801,6 +804,11 @@ function CreateTaskModal({
     if (!title.trim()) return;
     setSaving(true);
     try {
+      let finalDueDate: string | undefined;
+      if (dueDate) {
+        const d = new Date(`${dueDate}T${dueTime || "09:00"}`);
+        finalDueDate = d.toISOString();
+      }
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: {
@@ -814,7 +822,9 @@ function CreateTaskModal({
           category: category || undefined,
           type,
           assignedToId: assignedToId || undefined,
-          dueDate: dueDate || undefined,
+          dueDate: finalDueDate,
+          frequency: type === "FIJA" ? frequency : undefined,
+          dayOfWeek: type === "FIJA" && frequency === "SEMANAL" ? dayOfWeek : undefined,
         }),
       });
       const json = await res.json();
@@ -919,12 +929,59 @@ function CreateTaskModal({
             </select>
           </div>
         </div>
-        <Input
-          label="Fecha de vencimiento"
-          type="date"
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-        />
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Fecha de entrega"
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+          <Input
+            label="Hora"
+            type="time"
+            step="300"
+            value={dueTime}
+            onChange={(e) => setDueTime(e.target.value)}
+          />
+        </div>
+        <p className="text-xs text-gray-400 -mt-2">Los minutos se redondean a múltiplos de 5 (00, 05, 10...). Si no pones hora, será 9:00 AM.</p>
+        {type === "FIJA" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Frecuencia
+              </label>
+              <select
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="DIARIA">Diaria</option>
+                <option value="SEMANAL">Semanal</option>
+                <option value="MENSUAL">Mensual</option>
+              </select>
+            </div>
+            {frequency === "SEMANAL" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Día de la semana
+                </label>
+                <select
+                  value={dayOfWeek}
+                  onChange={(e) => setDayOfWeek(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="LUNES">Lunes</option>
+                  <option value="MARTES">Martes</option>
+                  <option value="MIERCOLES">Miércoles</option>
+                  <option value="JUEVES">Jueves</option>
+                  <option value="VIERNES">Viernes</option>
+                  <option value="SABADO">Sábado</option>
+                </select>
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="ghost" onClick={onClose} type="button">
             Cancelar
