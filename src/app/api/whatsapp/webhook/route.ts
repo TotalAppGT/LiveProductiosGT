@@ -759,7 +759,7 @@ async function handleCommand(
 
   // Consulta dinámica de tareas por fechas (lunes-sábado semana laboral)
   const dynamicTaskMatch =
-    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?(?:la proxima semana|la semana que viene|la siguiente semana|proxima semana|el proximo mes|el mes que viene)/i.test(cmd) ||
+    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?(?:la proxima semana|la semana que viene|la siguiente semana|proxima semana|el proximo mes|el mes que viene|el siguiente mes|siguiente mes)/i.test(cmd) ||
     /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para)\b.*?\b(para mañana|mañana|el (lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo|hoy))\b/i.test(cmd);
 
   if (dynamicTaskMatch) {
@@ -785,7 +785,7 @@ async function handleCommand(
       title = "PRÓXIMA SEMANA";
       dateFrom = nextMonday;
       dateTo = nextSaturday;
-    } else if (/el proximo mes|el mes que viene/i.test(cmd)) {
+    } else if (/el proximo mes|el mes que viene|el siguiente mes|siguiente mes/i.test(cmd)) {
       title = "PRÓXIMO MES";
       dateFrom = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       dateTo = new Date(now.getFullYear(), now.getMonth() + 2, 0);
