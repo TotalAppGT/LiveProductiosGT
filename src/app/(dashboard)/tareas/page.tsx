@@ -611,6 +611,18 @@ export default function TareasPage() {
                             className="mt-1 rounded border-gray-300"
                           />
                         )}
+                        {task.status !== "COMPLETADA" && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); updateTaskStatus(task.id, "COMPLETADA"); }}
+                            className="mt-0.5 w-6 h-6 rounded-full border-2 border-green-400 hover:bg-green-100 flex items-center justify-center text-green-500 shrink-0"
+                            title="Marcar realizado (OK)"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {task.status === "COMPLETADA" && (
+                          <CheckCircle2 className="mt-1 w-6 h-6 text-green-500 shrink-0" />
+                        )}
                         <div
                           className="flex-1 min-w-0 cursor-pointer"
                           onClick={() => toggleExpand(task.id)}
