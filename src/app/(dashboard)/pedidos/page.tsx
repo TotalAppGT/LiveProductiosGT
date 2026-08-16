@@ -35,6 +35,8 @@ export default function PedidosPage() {
   const [selectedCategory, setSelectedCategory] = useState("AUDIO");
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
   const [creating, setCreating] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -83,6 +85,40 @@ export default function PedidosPage() {
     } finally {
       setCreating(false);
     }
+  }
+
+  async function saveTemplate() {
+    if (selectedItems.length === 0) return toast.error("Añade items al cuadro primero");
+    const name = prompt("Nombre del cuadro (ej: Boda completa, Montaje sonido, Bautizo):");
+    if (!name) return;
+    try {
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name, items: selectedItems }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Cuadro guardado");
+        fetchData();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al guardar cuadro");
+    }
+  }
+
+  function loadTemplate(templateId: string) {
+    if (!templateId) return;
+    const t = templates.find((x) => x.id === templateId);
+    if (!t) return;
+    const items = (t.items || []).map((it: any) => ({
+      name: it.name,
+      category: it.category,
+      quantity: it.quantity || 1,
+      inventoryItemId: it.inventoryItemId || null,
+    }));
+    setSelectedItems(items);
+    toast.success(`Cuadro "${t.name}" cargado`);
   }
 
   const filteredOrders = orders.filter((o) =>
@@ -146,6 +182,22 @@ export default function PedidosPage() {
         <div className="space-y-4 p-1">
           <Input label="Nombre del evento" value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="Ej: Boda Pérez - Sábado" />
 
+          {templates.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium mb-1">📁 Cargar cuadro guardado</label>
+              <select
+                onChange={(e) => loadTemplate(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                defaultValue=""
+              >
+                <option value="">Seleccionar cuadro...</option>
+                {templates.map((t: any) => (
+                  <option key={t.id} value={t.id}>{t.name} ({(t.items || []).length} items)</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium mb-1">Selecciona categoría para ver items</label>
             <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
@@ -201,6 +253,7 @@ export default function PedidosPage() {
           )}
 
           <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={saveTemplate}>💾 Guardar Cuadro</Button>
             <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancelar</Button>
             <Button onClick={createOrder} isLoading={creating}>Crear Pedido</Button>
           </div>
