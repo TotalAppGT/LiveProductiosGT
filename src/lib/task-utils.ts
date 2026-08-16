@@ -1,29 +1,43 @@
 import { prisma } from "@/lib/prisma";
 
 export async function carryOverUncompletedTasks() {
-  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-  yesterday.setHours(0,0,0,0);
-  const yesterdayEnd = new Date(yesterday); yesterdayEnd.setHours(23,59,59);
+  // Mover a HOY todas las tareas vencidas no completadas (siguen corriendo hasta que se hagan)
+  const today = new Date(); today.setHours(0, 0, 0, 0);
 
-  const uncompleted = await prisma.task.findMany({
+  const overdue = await prisma.task.findMany({
     where: {
-      dueDate: { gte: yesterday, lte: yesterdayEnd },
+      dueDate: { lt: today },
       status: { in: ["PENDIENTE", "EN_PROCESO"] },
+      // Solo dinámicas/variables y fijas sin regeneración pendiente
+      OR: [{ type: "DINAMICA" }, { type: "FIJA" }],
     },
   });
 
-  const today = new Date(); today.setHours(0,0,0,0);
+  let carried = 0;
+  for (const task of overdue) {
+    // No mover si la tarea fija ya tiene su próxima ocurrencia futura (regenerada al completarse)
+    if (task.type === "FIJA") {
+      const nextOccurrence = await prisma.task.findFirst({
+        where: {
+          title: task.title,
+          type: "FIJA",
+          dueDate: { gte: today },
+          id: { not: task.id },
+        },
+      });
+      if (nextOccurrence) continue;
+    }
 
-  for (const task of uncompleted) {
     await prisma.task.update({
       where: { id: task.id },
       data: {
         dueDate: today,
-        postponeReason: "No completada ayer - reprogramada automáticamente",
+        postponeReason: "No completada - reprogramada automáticamente para hoy",
         postponeCount: { increment: 1 },
       },
     });
+    carried++;
   }
 
-  return uncompleted.length;
+  return carried;
 }
