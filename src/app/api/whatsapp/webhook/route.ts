@@ -760,7 +760,7 @@ async function handleCommand(
   // Consulta dinámica de tareas por fechas (lunes-sábado semana laboral)
   const dynamicTaskMatch =
     /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?(?:la proxima semana|la semana que viene|la siguiente semana|proxima semana|el proximo mes|el mes que viene|el siguiente mes|siguiente mes)/i.test(cmd) ||
-    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?\b(pasado mañana|pasado manana|para mañana|para manana|mañana|manana|hoy|el lunes|lunes|el martes|martes|el miercoles|el miércoles|miercoles|miércoles|el jueves|jueves|el viernes|viernes|el sabado|el sábado|sabado|sábado|el domingo|domingo)\b/i.test(cmd);
+    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame|ver)\b.*?\b(pasado mañana|pasado manana|para mañana|para manana|mañana|manana|hoy|el lunes|lunes|el martes|martes|el miercoles|el miércoles|miercoles|miércoles|el jueves|jueves|el viernes|viernes|el sabado|el sábado|sabado|sábado|el domingo|domingo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(cmd);
 
   if (dynamicTaskMatch) {
     const now = new Date();
@@ -774,6 +774,10 @@ async function handleCommand(
     const dayMap: Record<string, number> = {
       lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4, viernes: 5,
       sabado: 6, sábado: 6, domingo: 0,
+    };
+    const monthMap: Record<string, number> = {
+      enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+      julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11,
     };
 
     let title = "";
@@ -812,8 +816,27 @@ async function handleCommand(
       dateFrom = new Date(today); dateFrom.setHours(0, 0, 0, 0);
       dateTo = new Date(today); dateTo.setHours(23, 59, 59);
     }
-    // 6) Día específico de la semana (lunes, martes, etc.)
+    // 5.5) Mes específico por nombre (enero, febrero, ... septiembre, octubre)
     else {
+      let targetMonth: number | null = null;
+      for (const [name, idx] of Object.entries(monthMap)) {
+        const lowerCmd = cmd.toLowerCase();
+        if (lowerCmd.includes(name)) { targetMonth = idx; break; }
+      }
+      if (targetMonth !== null) {
+        let year = now.getFullYear();
+        // Si el mes ya pasó este año, es el próximo año
+        if (targetMonth < now.getMonth()) year += 1;
+        const monthName = new Date(year, targetMonth, 1).toLocaleDateString("es-GT", { month: "long", year: "numeric" });
+        title = `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}`;
+        dateFrom = new Date(year, targetMonth, 1);
+        dateFrom.setHours(0, 0, 0, 0);
+        dateTo = new Date(year, targetMonth + 1, 0);
+        dateTo.setHours(23, 59, 59);
+      }
+    }
+    // 6) Día específico de la semana (lunes, martes, etc.)
+    if (!dateFrom && !dateTo) {
       let targetDay: number | null = null;
       for (const [name, idx] of Object.entries(dayMap)) {
         const lowerCmd = cmd.toLowerCase();
