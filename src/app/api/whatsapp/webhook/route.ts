@@ -394,6 +394,10 @@ function formatTaskList(tasks: any[], startNum: number = 1): string {
     const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
     const status = t.status === "COMPLETADA" ? "✅" : t.status === "REPROGRAMADA" ? "🟣 Pospuesta" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌";
     const phaseTag = t.category === "PRE_EVENTO" ? "🎪" : t.category === "POST_EVENTO" ? "🏁" : "";
+    // Tipo: fija se mantiene (recurrente), variable es puntual
+    const typeTag = t.type === "FIJA"
+      ? `🔁 ${t.frequency === "SEMANAL" ? "Semanal" : t.frequency === "MENSUAL" ? "Mensual" : "Diaria"}`
+      : "";
     let due = "";
     if (t.dueDate) {
       const d = new Date(t.dueDate);
@@ -407,7 +411,7 @@ function formatTaskList(tasks: any[], startNum: number = 1): string {
         due = ` ${datePart} ${timePart}`;
       }
     }
-    return `${num}. ${prio} ${phaseTag} *${t.title}* ${status}${due}`;
+    return `${num}. ${prio} ${phaseTag} *${t.title}* ${status}${typeTag ? ` ${typeTag}` : ""}${due}`;
   }).join("\n");
 }
 
