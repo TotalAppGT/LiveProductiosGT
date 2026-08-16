@@ -27,6 +27,7 @@ import {
   Eye,
   Bell,
   FolderOpen,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -57,6 +58,12 @@ const navItems: NavItem[] = [
     label: "Cumplimiento",
     href: "/cumplimiento",
     icon: ClipboardCheck,
+    roles: ["DUENO", "ADMIN", "JEFE"],
+  },
+  {
+    label: "Ocupación",
+    href: "/ocupacion",
+    icon: TrendingUp,
     roles: ["DUENO", "ADMIN", "JEFE"],
   },
   {

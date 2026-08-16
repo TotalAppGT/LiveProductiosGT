@@ -366,6 +366,20 @@ export default function TareasPage() {
       )}
 
       <div className="flex flex-col sm:flex-row gap-3">
+        <select
+          value={activeTab === "MIS_TAREAS" ? "" : assignedFilter}
+          onChange={(e) => {
+            setAssignedFilter(e.target.value);
+            if (e.target.value) setActiveTab("TODAS");
+            else setActiveTab("MIS_TAREAS");
+          }}
+          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white sm:w-48"
+        >
+          <option value="">👤 Ver: Mis Tareas</option>
+          {users.map((u: any) => (
+            <option key={u.id} value={u.id}>👤 {u.name}</option>
+          ))}
+        </select>
         <div className="relative flex-1">
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <Input
