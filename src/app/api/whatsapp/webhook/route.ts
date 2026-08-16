@@ -760,7 +760,8 @@ async function handleCommand(
   // Consulta dinámica de tareas por fechas (lunes-sábado semana laboral)
   const dynamicTaskMatch =
     /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?(?:la proxima semana|la semana que viene|la siguiente semana|proxima semana|el proximo mes|el mes que viene|el siguiente mes|siguiente mes)/i.test(cmd) ||
-    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame|ver)\b.*?\b(pasado mañana|pasado manana|para mañana|para manana|mañana|manana|hoy|el lunes|lunes|el martes|martes|el miercoles|el miércoles|miercoles|miércoles|el jueves|jueves|el viernes|viernes|el sabado|el sábado|sabado|sábado|el domingo|domingo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(cmd);
+    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame|ver)\b.*?\b(pasado mañana|pasado manana|para mañana|para manana|mañana|manana|hoy|el lunes|lunes|el martes|martes|el miercoles|el miércoles|miercoles|miércoles|el jueves|jueves|el viernes|viernes|el sabado|el sábado|sabado|sábado|el domingo|domingo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|\d{1,2})\b/i.test(cmd) ||
+    /\b(\d{1,2})\s*(de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(cmd);
 
   if (dynamicTaskMatch) {
     const now = new Date();
@@ -815,6 +816,41 @@ async function handleCommand(
       title = `HOY - ${today.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
       dateFrom = new Date(today); dateFrom.setHours(0, 0, 0, 0);
       dateTo = new Date(today); dateTo.setHours(23, 59, 59);
+    }
+    // 5.25) Fecha específica con número: "25 agosto", "25 de agosto", "viernes 28 agosto", "lunes 17"
+    else if (/(\d{1,2})\s*(de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)/i.test(cmd)) {
+      const match = cmd.match(/(\d{1,2})\s*(de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)/i);
+      if (match) {
+        const dayNum = parseInt(match[1]);
+        const monthName = match[3].toLowerCase();
+        const monthIdx = monthMap[monthName];
+        let year = now.getFullYear();
+        // Si la fecha ya pasó este año, usar el próximo año
+        const candidate = new Date(year, monthIdx, dayNum);
+        if (candidate < today) year += 1;
+        const targetDate = new Date(year, monthIdx, dayNum);
+        targetDate.setHours(0, 0, 0, 0);
+        title = `${targetDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
+        dateFrom = new Date(targetDate); dateFrom.setHours(0, 0, 0, 0);
+        dateTo = new Date(targetDate); dateTo.setHours(23, 59, 59);
+      }
+    }
+    // 5.27) Día con número sin mes: "lunes 17", "tareas 17" (día del mes actual/próximo)
+    else if (/\b(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)?\s*(\d{1,2})\b/i.test(cmd) && !/la proxima semana|el mes que viene|mañana|manana|pasado/i.test(cmd)) {
+      const match = cmd.match(/\b(\d{1,2})\b/i);
+      if (match) {
+        const dayNum = parseInt(match[1]);
+        let targetDate = new Date(now.getFullYear(), now.getMonth(), dayNum);
+        targetDate.setHours(0, 0, 0, 0);
+        // Si ya pasó este mes, usar el próximo mes
+        if (targetDate < today) {
+          targetDate = new Date(now.getFullYear(), now.getMonth() + 1, dayNum);
+          targetDate.setHours(0, 0, 0, 0);
+        }
+        title = `${targetDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
+        dateFrom = new Date(targetDate); dateFrom.setHours(0, 0, 0, 0);
+        dateTo = new Date(targetDate); dateTo.setHours(23, 59, 59);
+      }
     }
     // 5.5) Mes específico por nombre (enero, febrero, ... septiembre, octubre)
     else {
