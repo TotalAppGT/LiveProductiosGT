@@ -343,6 +343,14 @@ async function formatTasksForUser(userId: string, period?: string) {
   return output;
 }
 
+function taskPhasePriority(t: any): number {
+  // Pre Evento = prioridad 1, Evento = 2, Post Evento = 3, resto = 4
+  if (t.category === "PRE_EVENTO") return 0;
+  if (t.category === "EVENTO") return 1;
+  if (t.category === "POST_EVENTO") return 2;
+  return 3;
+}
+
 function groupTasksByDay(tasks: any[], includeDate: boolean = true): string {
   // Agrupar por día en orden cronológico
   const days = new Map<string, any[]>();
@@ -361,9 +369,11 @@ function groupTasksByDay(tasks: any[], includeDate: boolean = true): string {
     return da.getTime() - db.getTime();
   });
 
-  // Ordenar tareas dentro de cada día por hora
+  // Ordenar tareas dentro de cada día: prioridad de fase (Pre Evento 1º, Post 2º) y luego por hora
   sortedDays.forEach(([, dayTasks]) => {
     dayTasks.sort((a, b) => {
+      const phaseDiff = taskPhasePriority(a) - taskPhasePriority(b);
+      if (phaseDiff !== 0) return phaseDiff;
       const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0;
       const tb = b.dueDate ? new Date(b.dueDate).getTime() : 0;
       return ta - tb;
@@ -383,6 +393,7 @@ function formatTaskList(tasks: any[], startNum: number = 1): string {
     const num = startNum + i;
     const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
     const status = t.status === "COMPLETADA" ? "✅" : t.status === "REPROGRAMADA" ? "🟣 Pospuesta" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌";
+    const phaseTag = t.category === "PRE_EVENTO" ? "🎪" : t.category === "POST_EVENTO" ? "🏁" : "";
     let due = "";
     if (t.dueDate) {
       const d = new Date(t.dueDate);
@@ -396,7 +407,7 @@ function formatTaskList(tasks: any[], startNum: number = 1): string {
         due = ` ${datePart} ${timePart}`;
       }
     }
-    return `${num}. ${prio} *${t.title}* ${status}${due}`;
+    return `${num}. ${prio} ${phaseTag} *${t.title}* ${status}${due}`;
   }).join("\n");
 }
 
