@@ -198,6 +198,7 @@ model User {
   createdTemplates  OrderTemplate[] @relation("OrderTemplateCreator")
   vehicleLogs       VehicleLog[]   @relation("VehicleLogDriver")
   createdReports    Report[]       @relation("ReportCreator")
+  personalNotes     PersonalNote[] @relation("PersonalNoteOwner")
 }
 
 model Task {
@@ -548,6 +549,19 @@ model Report {
   createdAt    DateTime @default(now())
 
   @@index([category])
+}
+
+model PersonalNote {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("PersonalNoteOwner", fields: [userId], references: [id])
+  title     String   @default("")
+  content   String
+  type      String   @default("NOTA")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model FileAttachment {

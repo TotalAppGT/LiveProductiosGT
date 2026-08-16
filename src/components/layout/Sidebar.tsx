@@ -28,6 +28,7 @@ import {
   Bell,
   FolderOpen,
   TrendingUp,
+  NotebookPen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -59,6 +60,11 @@ const navItems: NavItem[] = [
     href: "/cumplimiento",
     icon: ClipboardCheck,
     roles: ["DUENO", "ADMIN", "JEFE"],
+  },
+  {
+    label: "Notas",
+    href: "/notas",
+    icon: NotebookPen,
   },
   {
     label: "Ocupación",

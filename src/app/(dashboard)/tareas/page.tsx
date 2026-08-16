@@ -280,6 +280,15 @@ export default function TareasPage() {
     }
   });
 
+  // Ordenar cada columna cronológicamente por fecha/hora
+  Object.values(kanbanColumns).forEach((col) => {
+    col.sort((a, b) => {
+      const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return da - db;
+    });
+  });
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -536,6 +545,11 @@ export default function TareasPage() {
                               <Badge size="sm" color={taskPriorityColor(task.priority)}>
                                 {taskPriorityLabel(task.priority)}
                               </Badge>
+                              {task.type === "FIJA" && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium">
+                                  🔁 {task.frequency === "SEMANAL" ? "Semanal" : task.frequency === "MENSUAL" ? "Mensual" : "Diaria"}
+                                </span>
+                              )}
                               {task.assignedTo && (
                                 <span className="text-xs text-gray-500">
                                   {task.assignedTo.name}
@@ -544,7 +558,7 @@ export default function TareasPage() {
                             </div>
                             {task.dueDate && (
                               <p className="text-xs text-gray-400 mt-1">
-                                📅 {new Date(task.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric",month:"short"})}
+                                📅 {new Date(task.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric",month:"short"})} · {new Date(task.dueDate).toLocaleTimeString("es-GT", {hour:"2-digit",minute:"2-digit"})}
                               </p>
                             )}
                             <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
