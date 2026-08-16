@@ -851,7 +851,23 @@ async function handleCommand(
     const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
     const targetName = targetUser ? targetUser.name : "ti";
 
-    return `⏰ Recordatorio creado para ${targetName}: *${parsed.title}*\n📅 ${parsed.remindAt.toLocaleDateString("es-GT", {timeZone:"America/Guatemala",weekday:"long",day:"numeric",month:"long"})} a las ${parsed.remindAt.toLocaleTimeString("es-GT", {timeZone:"America/Guatemala",hour:"2-digit",minute:"2-digit"})}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
+    // Notificar a la persona asignada si no es el creador
+    if (targetUser && targetUser.id !== user.id) {
+      const to = targetUser.whatsappNumber || targetUser.phone;
+      if (to) {
+        const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+        await sendMessage(
+          to,
+          `⏰ *Recordatorio asignado*\n\n${user.name} te dejó un recordatorio:\n*${parsed.title}*\n${parsed.description ? `📝 ${parsed.description}\n` : ""}📅 ${dateStr}\n\nTe avisaré 10 minutos antes y a la hora exacta.`
+        ).catch(() => {});
+      }
+    }
+
+    const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+
+    return targetUser && targetUser.id !== user.id
+      ? `⏰ Recordatorio creado para *${targetName}*: *${parsed.title}*\n📅 ${dateStr}\n🔔 Notificación enviada a *${targetName}*.\n_Te avisará 10 minutos antes y a la hora exacta._`
+      : `⏰ Recordatorio creado para ti: *${parsed.title}*\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
   }
 
   if (cmd.startsWith("crea tarea") || cmd.startsWith("crear tarea")) {
