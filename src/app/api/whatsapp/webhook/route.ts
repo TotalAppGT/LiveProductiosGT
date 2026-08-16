@@ -760,7 +760,7 @@ async function handleCommand(
   // Consulta dinámica de tareas por fechas (lunes-sábado semana laboral)
   const dynamicTaskMatch =
     /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?(?:la proxima semana|la semana que viene|la siguiente semana|proxima semana|el proximo mes|el mes que viene|el siguiente mes|siguiente mes)/i.test(cmd) ||
-    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para)\b.*?\b(para mañana|mañana|el (lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo|hoy))\b/i.test(cmd);
+    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?\b(pasado mañana|pasado manana|para mañana|para manana|mañana|manana|hoy|el lunes|lunes|el martes|martes|el miercoles|el miércoles|miercoles|miércoles|el jueves|jueves|el viernes|viernes|el sabado|el sábado|sabado|sábado|el domingo|domingo)\b/i.test(cmd);
 
   if (dynamicTaskMatch) {
     const now = new Date();
@@ -768,48 +768,61 @@ async function handleCommand(
     const dayOfWeek = today.getDay(); // 0=domingo
     const monday = new Date(today);
     monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    const saturday = new Date(monday); saturday.setDate(monday.getDate() + 5); saturday.setHours(23, 59, 59);
     const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7);
     const nextSaturday = new Date(nextMonday); nextSaturday.setDate(nextMonday.getDate() + 5); nextSaturday.setHours(23, 59, 59);
-    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1); tomorrow.setHours(23, 59, 59);
 
-    const dayNames: Record<string, number> = {
-      lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4, viernes: 5, sabado: 6, sábado: 6, domingo: 0,
+    const dayMap: Record<string, number> = {
+      lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4, viernes: 5,
+      sabado: 6, sábado: 6, domingo: 0,
     };
 
     let title = "";
     let dateFrom: Date | null = null;
     let dateTo: Date | null = null;
 
+    // 1) Próxima semana
     if (/la proxima semana|la semana que viene|la siguiente semana|proxima semana/i.test(cmd)) {
       title = "PRÓXIMA SEMANA";
       dateFrom = nextMonday;
       dateTo = nextSaturday;
-    } else if (/el proximo mes|el mes que viene|el siguiente mes|siguiente mes/i.test(cmd)) {
+    }
+    // 2) Próximo mes
+    else if (/el proximo mes|el mes que viene|el siguiente mes|siguiente mes/i.test(cmd)) {
       title = "PRÓXIMO MES";
       dateFrom = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       dateTo = new Date(now.getFullYear(), now.getMonth() + 2, 0);
-    } else if (/para mañana|mañana\b/i.test(cmd) && !/el (lunes|martes|...)/i.test(cmd)) {
-      title = `MAÑANA - ${tomorrow.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
-      dateFrom = new Date(today); dateFrom.setDate(today.getDate() + 1); dateFrom.setHours(0, 0, 0, 0);
-      dateTo = new Date(dateFrom); dateTo.setHours(23, 59, 59);
-    } else {
-      // Día específico: "el lunes", "el sábado", "hoy"
+    }
+    // 3) Pasado mañana
+    else if (/pasado mañana|pasado manana/i.test(cmd)) {
+      const d = new Date(today); d.setDate(today.getDate() + 2);
+      title = `PASADO MAÑANA - ${d.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
+      dateFrom = new Date(d); dateFrom.setHours(0, 0, 0, 0);
+      dateTo = new Date(d); dateTo.setHours(23, 59, 59);
+    }
+    // 4) Mañana
+    else if (/mañana|manana/i.test(cmd)) {
+      const d = new Date(today); d.setDate(today.getDate() + 1);
+      title = `MAÑANA - ${d.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
+      dateFrom = new Date(d); dateFrom.setHours(0, 0, 0, 0);
+      dateTo = new Date(d); dateTo.setHours(23, 59, 59);
+    }
+    // 5) Hoy
+    else if (/hoy/.test(cmd)) {
+      title = `HOY - ${today.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
+      dateFrom = new Date(today); dateFrom.setHours(0, 0, 0, 0);
+      dateTo = new Date(today); dateTo.setHours(23, 59, 59);
+    }
+    // 6) Día específico de la semana (lunes, martes, etc.)
+    else {
       let targetDay: number | null = null;
-      if (/el lunes/.test(cmd)) targetDay = 1;
-      else if (/el martes/.test(cmd)) targetDay = 2;
-      else if (/el miercoles|el miércoles/.test(cmd)) targetDay = 3;
-      else if (/el jueves/.test(cmd)) targetDay = 4;
-      else if (/el viernes/.test(cmd)) targetDay = 5;
-      else if (/el sabado|el sábado/.test(cmd)) targetDay = 6;
-      else if (/el domingo/.test(cmd)) targetDay = 0;
-      else if (/hoy/.test(cmd)) targetDay = dayOfWeek;
-
+      for (const [name, idx] of Object.entries(dayMap)) {
+        const lowerCmd = cmd.toLowerCase();
+        if (lowerCmd.includes(name)) { targetDay = idx; break; }
+      }
       if (targetDay !== null) {
-        // Buscar el próximo día de la semana (si hoy es domingo y pide lunes, es mañana)
+        // Próxima ocurrencia de ese día (si hoy es el día pedido, va a la próxima semana)
         let delta = (targetDay - dayOfWeek + 7) % 7;
-        if (delta === 0) delta = 7; // si pide el mismo día de hoy, ir a la próxima semana? No - "hoy" es hoy
-        if (/hoy/.test(cmd)) delta = 0;
+        if (delta === 0) delta = 7;
         const targetDate = new Date(today);
         targetDate.setDate(today.getDate() + delta);
         targetDate.setHours(0, 0, 0, 0);
@@ -829,7 +842,7 @@ async function handleCommand(
         status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
         dueDate: { gte: dateFrom, lte: dateTo },
       },
-      orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+      orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
       take: 20,
     });
 
