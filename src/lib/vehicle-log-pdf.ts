@@ -138,7 +138,10 @@ export async function generateVehicleLogPdf(log: any): Promise<Buffer> {
   if (fuelEntries.length > 0) {
     drawSectionTitle(`2. CARGAS DE COMBUSTIBLE (${fuelEntries.length})`);
     for (const f of fuelEntries) {
-      doc.fontSize(9).fillColor("#333333").text(`Carga · ${new Date(f.createdAt).toLocaleString("es-GT")}`);
+      drawInfoTable([
+        ["Fecha", new Date(f.createdAt).toLocaleString("es-GT")],
+        ["Fotos", `${safeArray(f.photos).length} fotos`],
+      ]);
       drawPhotoGrid(safeArray(f.photos), ["Tablero antes", "Bomba/Gasolinera", "Factura", "Tablero después"], 90, 4);
     }
   }
@@ -159,17 +162,7 @@ export async function generateVehicleLogPdf(log: any): Promise<Buffer> {
     drawPhotoGrid(safeArray(log.endPhotos), ["Frontal", "Trasera", "Lateral Izq", "Lateral Der"], 100);
   }
 
-  // Firmas
   doc.moveDown(1);
-  if (doc.y > doc.page.height - doc.page.margins.bottom - 80) doc.addPage();
-  const sigY = doc.y;
-  doc.fontSize(9).fillColor("#333333");
-  doc.text("____________________________________", doc.page.margins.left, sigY);
-  doc.text("Firma del Conductor", doc.page.margins.left, sigY + 14);
-  doc.text("____________________________________", doc.page.margins.left + 240, sigY);
-  doc.text("Firma Encargado de Bodega", doc.page.margins.left + 240, sigY + 14);
-
-  doc.moveDown(2);
   doc.fontSize(7).fillColor("#999999").text("Documento generado automáticamente por el sistema · Live Productions GT", { align: "center" });
 
   doc.end();

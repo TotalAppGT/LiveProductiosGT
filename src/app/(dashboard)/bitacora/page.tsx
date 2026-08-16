@@ -202,6 +202,8 @@ function GeneralTab({ token }: { token: string | null }) {
   const [total, setTotal] = useState(0);
   const [searchAction, setSearchAction] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
+  const [userFilter, setUserFilter] = useState("");
+  const [users, setUsers] = useState<any[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const limit = 20;
@@ -216,6 +218,7 @@ function GeneralTab({ token }: { token: string | null }) {
       params.set("limit", limit.toString());
       if (searchAction) params.set("action", searchAction);
       if (resourceFilter) params.set("resource", resourceFilter);
+      if (userFilter) params.set("userId", userFilter);
       if (dateFrom) params.set("dateFrom", dateFrom);
       if (dateTo) params.set("dateTo", dateTo);
 
@@ -234,11 +237,19 @@ function GeneralTab({ token }: { token: string | null }) {
     } finally {
       setLoading(false);
     }
-  }, [token, page, searchAction, resourceFilter, dateFrom, dateTo]);
+  }, [token, page, searchAction, resourceFilter, userFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch("/api/users/list", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((json) => { if (Array.isArray(json)) setUsers(json); })
+      .catch(() => {});
+  }, [token]);
 
   function handleSearch() {
     setPage(1);
@@ -257,6 +268,16 @@ function GeneralTab({ token }: { token: string | null }) {
     <div className="space-y-4">
       <Card variant="bordered" className="p-4">
         <div className="flex flex-col sm:flex-row gap-3">
+          <select
+            value={userFilter}
+            onChange={(e) => setUserFilter(e.target.value)}
+            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          >
+            <option value="">Todas las personas</option>
+            {users.map((u: any) => (
+              <option key={u.id} value={u.id}>{u.name} ({u.position || u.role})</option>
+            ))}
+          </select>
           <Input
             placeholder="Filtrar por acción..."
             value={searchAction}
