@@ -276,7 +276,7 @@ async function formatTasksForUser(userId: string, period?: string) {
 
   const allTasks = await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
-    orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+    orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
     take: 30,
   });
 
@@ -527,7 +527,7 @@ async function formatEventsForUser(userId: string) {
 async function getPendingTasks(userId: string) {
   return prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
-    orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+    orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
     take: 20,
   });
 }
