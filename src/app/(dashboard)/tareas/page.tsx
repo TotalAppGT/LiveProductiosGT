@@ -511,6 +511,35 @@ export default function TareasPage() {
                                 📅 {new Date(task.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric",month:"short"})}
                               </p>
                             )}
+                            <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                              {task.status !== "COMPLETADA" && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); updateTaskStatus(task.id, "COMPLETADA"); }}
+                                  className="flex-1 text-[11px] font-bold bg-green-100 hover:bg-green-200 text-green-700 rounded px-1.5 py-1"
+                                  title="Completar"
+                                >
+                                  ✅ Hecho
+                                </button>
+                              )}
+                              {task.status === "PENDIENTE" && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); updateTaskStatus(task.id, "EN_PROCESO"); }}
+                                  className="flex-1 text-[11px] font-bold bg-blue-100 hover:bg-blue-200 text-blue-700 rounded px-1.5 py-1"
+                                  title="En proceso"
+                                >
+                                  🔄 Proceso
+                                </button>
+                              )}
+                              {task.status !== "COMPLETADA" && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); updateTaskStatus(task.id, "REPROGRAMADA"); }}
+                                  className="flex-1 text-[11px] font-bold bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded px-1.5 py-1"
+                                  title="Posponer"
+                                >
+                                  ⏰ Posponer
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}

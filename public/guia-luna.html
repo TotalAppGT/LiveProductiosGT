@@ -6,7 +6,7 @@
 <title>Guía de LUNA - Live Productions</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; line-height: 1.5; padding: 24px; max-width: 700px; margin: auto; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; line-height: 1.5; padding: 24px; max-width: 720px; margin: auto; }
 .header { text-align: center; border-bottom: 3px solid #1e40af; padding-bottom: 16px; margin-bottom: 20px; }
 .header h1 { font-size: 24px; color: #1e40af; }
 .header p { color: #666; font-size: 13px; }
@@ -18,6 +18,7 @@ td:first-child { width: 45%; font-weight: 600; }
 code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
 li { margin: 4px 0 4px 18px; font-size: 13px; }
 .tip { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; }
+.note { background: #fefce8; border: 1px solid #fde68a; border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 13px; }
 .footer { text-align: center; color: #999; font-size: 11px; margin-top: 24px; border-top: 1px solid #eee; padding-top: 10px; }
 .colors { display: flex; gap: 8px; flex-wrap: wrap; }
 .color-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
@@ -45,12 +46,13 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
   <h2>⚡ ACCIONES SOBRE TAREAS (usa el #)</h2>
   <table>
     <tr><td>✅ <code>hecho 1</code></td><td>Completar la tarea #1</td></tr>
-    <tr><td>🔄 <code>proceso 1</code></td><td>Marcar en proceso</td></tr>
-    <tr><td>⏰ <code>posponer 1</code></td><td>Posponer (pregunta día, hora y motivo)</td></tr>
+    <tr><td>🔄 <code>proceso 1</code></td><td>Marcar como "en proceso"</td></tr>
+    <tr><td>⏰ <code>posponer 1</code></td><td>Posponer (te pregunta día, hora y motivo)</td></tr>
     <tr><td>📤 <code>transferir 1 a Diana</code></td><td>Reasignar a otra persona</td></tr>
-    <tr><td>💬 <code>comentar 1 texto</code></td><td>Agregar comentario</td></tr>
+    <tr><td>💬 <code>comentar 1 texto</code></td><td>Agregar comentario a la tarea</td></tr>
     <tr><td>❌ <code>no 1</code></td><td>Marcar como no realizada</td></tr>
   </table>
+  <p style="font-size:12px;color:#666;">En el sistema web: cada tarjeta tiene botones ✅ Hecho · 🔄 Proceso · ⏰ Posponer con un clic.</p>
 </div>
 
 <div class="section">
@@ -62,14 +64,30 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
 </div>
 
 <div class="section">
-  <h2>⏰ RECORDATORIOS Y MENSAJES</h2>
+  <h2>⏰ RECORDATORIOS PARA TI</h2>
   <ul>
     <li><code>recuérdame llamar a Juan a las 3pm</code></li>
     <li><code>mándame un mensaje a las 2pm para la reunión</code></li>
     <li><code>avísame mañana a las 9am revisar bodega</code></li>
     <li><code>notifícame el viernes a las 4pm enviar reporte</code></li>
   </ul>
-  <p style="font-size:12px;color:#666;">LUNA avisa 10 minutos antes y a la hora exacta.</p>
+</div>
+
+<div class="section">
+  <h2>👥 RECORDATORIOS PARA OTROS (Dueño/Admin)</h2>
+  <ul>
+    <li><code>recuédale a Diana llamar a proveedor a las 3pm</code></li>
+    <li><code>mándale un mensaje a Abel a las 2pm para la bodega</code></li>
+    <li><code>para Brenda recordatorio de cobros mañana 9am</code></li>
+    <li><code>hazle un recordatorio a Selvin para el montaje sábado</code></li>
+  </ul>
+</div>
+
+<div class="note">
+  <strong>💡 Cómo distinguir:</strong><br>
+  • "recuérdame / mándame / avísame" → el recordatorio es para ti<br>
+  • "recuérdale a [nombre] / mándale a [nombre] / para [nombre]" → para esa persona<br>
+  • El nombre de la tarea (ej: "llamar a Juan") NO es quien recibe el aviso.
 </div>
 
 <div class="section">
@@ -104,9 +122,11 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
 </div>
 
 <div class="tip">
-  💡 <strong>Tip:</strong> Cada tarea sale numerada (1., 2., 3...) con su color de prioridad.
-  Usa ese número para las acciones. Si dudas, escribe <code>ayuda</code>.
-  Las tareas no hechas se reprograman al día siguiente automáticamente.
+  💡 <strong>Tips:</strong><br>
+  • Cada tarea sale numerada (1., 2., 3...) con su color. Usa ese número para las acciones.<br>
+  • LUNA avisa <strong>10 minutos antes</strong> y a la hora exacta de cada recordatorio.<br>
+  • Las tareas no hechas se reprograman al día siguiente automáticamente.<br>
+  • Si dudas, escribe <code>ayuda</code> para ver los comandos.
 </div>
 
 <div class="footer">Documento generado automáticamente · Live Productions GT · Guía de uso de LUNA</div>
