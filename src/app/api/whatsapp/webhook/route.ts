@@ -531,7 +531,7 @@ async function delegateTask(taskId: string, newUserId: string, reason: string, f
   });
   const newUser = await prisma.user.findUnique({ where: { id: newUserId } });
   if (newUser?.whatsappNumber) {
-    await sendMessage(newUser.whatsappNumber, `📩 ${fromUser.name} te ha transferido la tarea *${task.title}*\nRazón: ${reason}\n\nAccede al sistema: https://liveproductiosgt-production.up.railway.app`);
+    await sendMessage(newUser.whatsappNumber, `📩 ${fromUser.name} te ha transferido la tarea *${task.title}*\nRazón: ${reason}\n\nAccede al sistema: https://admin.liveproductionsgt.com`);
   }
 }
 
@@ -1008,7 +1008,27 @@ async function handleCreateTask(details: string, user: { id: string; name: strin
   const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
   const targetName = targetUser ? targetUser.name : user.name;
 
-  return `✅ Tarea creada para *${targetName}*: "${parsed.title}"\n📅 ${task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"}) : "Sin fecha"}`;
+  // Notificar al asignado si NO es el mismo que creó
+  if (targetUser && targetUser.id !== user.id) {
+    const to = targetUser.whatsappNumber || targetUser.phone;
+    if (to) {
+      const dateStr = task.dueDate
+        ? `${task.dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${task.dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`
+        : "Sin fecha";
+      const prioIcon = task.priority === "URGENTE" ? "🔴" : task.priority === "ALTA" ? "🔴" : task.priority === "MEDIA" ? "🟡" : "🟢";
+      await sendMessage(
+        to,
+        `📋 *Nueva Tarea Asignada*\n\n${prioIcon} *${task.title}*\n👤 Asignada por: ${user.name}\n📅 ${dateStr}\n\nEscribí *tareas* para verla.`
+      ).catch(() => {});
+    }
+  }
+
+  const dateStr = task.dueDate
+    ? `${task.dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${task.dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`
+    : "Sin fecha";
+  const prioIcon = task.priority === "URGENTE" ? "🔴" : task.priority === "ALTA" ? "🔴" : task.priority === "MEDIA" ? "🟡" : "🟢";
+
+  return `✅ Tarea creada para *${targetName}*: "${parsed.title}"\n${prioIcon} Prioridad: ${task.priority}\n📅 ${dateStr}\n🔔 ${targetUser && targetUser.id !== user.id ? `Notificación enviada a *${targetName}*` : "Todo listo"}`;
 }
 
 async function handleConversationStep(
@@ -1148,7 +1168,20 @@ async function handleConversationStep(
     const targetUser = assignToId !== user.id ? await prisma.user.findUnique({ where: { id: assignToId } }) : null;
     const targetName = targetUser ? targetUser.name : user.name;
 
-    return `✅ Tarea creada para *${targetName}*: "${data.title}"\n📅 ${dueDate.toLocaleDateString("es-GT", {timeZone:"America/Guatemala",weekday:"long",day:"numeric",month:"long"})} a las ${dueDate.toLocaleTimeString("es-GT", {timeZone:"America/Guatemala",hour:"2-digit",minute:"2-digit"})}\n🔵 Prioridad: ${priority}`;
+    // Notificar al asignado si no es el mismo creador
+    if (targetUser && targetUser.id !== user.id) {
+      const to = targetUser.whatsappNumber || targetUser.phone;
+      if (to) {
+        const prioIcon = priority === "URGENTE" || priority === "ALTA" ? "🔴" : priority === "MEDIA" ? "🟡" : "🟢";
+        const dateStr = `${dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+        await sendMessage(
+          to,
+          `📋 *Nueva Tarea Asignada*\n\n${prioIcon} *${data.title}*\n👤 Asignada por: ${user.name}\n📅 ${dateStr}\n\nEscribí *tareas* para verla.`
+        ).catch(() => {});
+      }
+    }
+
+    return `✅ Tarea creada para *${targetName}*: "${data.title}"\n📅 ${dueDate.toLocaleDateString("es-GT", {timeZone:"America/Guatemala",weekday:"long",day:"numeric",month:"long"})} a las ${dueDate.toLocaleTimeString("es-GT", {timeZone:"America/Guatemala",hour:"2-digit",minute:"2-digit"})}\n🔵 Prioridad: ${priority}\n🔔 ${targetUser && targetUser.id !== user.id ? `Notificación enviada a *${targetName}*` : "Todo listo"}`;
   }
 
   return null;
