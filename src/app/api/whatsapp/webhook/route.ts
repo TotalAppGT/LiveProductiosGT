@@ -308,42 +308,74 @@ async function formatTasksForUser(userId: string, period?: string) {
 
   if (period === "semana") {
     output = `📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT")} - ${sunday.toLocaleDateString("es-GT")})\n\n`;
-    if (thisWeekTasks.length > 0) output += formatTaskList(thisWeekTasks);
-    if (todayTasks.length > 0) output += `\n📌 *Hoy:*\n${formatTaskList(todayTasks)}`;
+    const weekAll = [...thisWeekTasks, ...todayTasks].filter((t, i, arr) => arr.indexOf(t) === i);
+    if (weekAll.length > 0) output += groupTasksByDay(weekAll);
     output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output || "No hay tareas esta semana.";
   }
 
   if (period === "semana2") {
     output = `📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT")} - ${nextSunday.toLocaleDateString("es-GT")})\n\n`;
-    if (nextWeekTasks.length > 0) output += formatTaskList(nextWeekTasks);
+    if (nextWeekTasks.length > 0) output += groupTasksByDay(nextWeekTasks);
     output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output || "No hay tareas para la próxima semana.";
   }
 
-  output = `📋 *Tareas - ${today.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})}*\n\n`;
+  output = `📋 *Tus Tareas*\n\n`;
 
-  if (todayTasks.length > 0) {
-    output += `📌 *HOY (${todayTasks.length})*\n${formatTaskList(todayTasks)}\n\n`;
-  }
-  if (thisWeekTasks.length > 0) {
-    output += `📅 *ESTA SEMANA (${thisWeekTasks.length})*\n${formatTaskList(thisWeekTasks)}\n\n`;
-  }
-  if (nextWeekTasks.length > 0) {
-    output += `📅 *PRÓXIMA SEMANA (${nextWeekTasks.length})*\n${formatTaskList(nextWeekTasks)}\n\n`;
-  }
-  if (thirdWeekTasks.length > 0) {
-    output += `📅 *3RA SEMANA (${thirdWeekTasks.length})*\n${formatTaskList(thirdWeekTasks)}\n\n`;
+  const allUpcoming = allTasks.filter((t) => t.dueDate && new Date(t.dueDate) >= today && new Date(t.dueDate) <= thirdSunday);
+  if (allUpcoming.length > 0) {
+    output += groupTasksByDay(allUpcoming);
+    output += "\n\n";
   }
 
-  for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
-    if (fixedByDay[day] && fixedByDay[day].length > 0) {
-      output += `📌 *ACTIVIDADES FIJAS ${day.toUpperCase()} (${fixedByDay[day].length})*\n${formatTaskList(fixedByDay[day])}\n\n`;
+  const todayFixed = allTasks.filter((t) => t.type === "FIJA" && !t.dueDate);
+  const hasFixed = Object.values(fixedByDay).some((arr) => arr.length > 0);
+  if (hasFixed) {
+    for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
+      if (fixedByDay[day] && fixedByDay[day].length > 0) {
+        output += `📌 *ACTIVIDADES FIJAS ${day.toUpperCase()}*\n${formatTaskList(fixedByDay[day])}\n\n`;
+      }
     }
   }
 
-  output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`ayuda\``;
+  output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`ayuda\``;
   return output;
+}
+
+function groupTasksByDay(tasks: any[], includeDate: boolean = true): string {
+  // Agrupar por día en orden cronológico
+  const days = new Map<string, any[]>();
+  tasks.forEach((t) => {
+    if (!t.dueDate) return;
+    const d = new Date(t.dueDate);
+    const key = d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" });
+    if (!days.has(key)) days.set(key, []);
+    days.get(key)!.push(t);
+  });
+
+  // Ordenar días por fecha
+  const sortedDays = Array.from(days.entries()).sort((a, b) => {
+    const da = new Date(a[1][0].dueDate);
+    const db = new Date(b[1][0].dueDate);
+    return da.getTime() - db.getTime();
+  });
+
+  // Ordenar tareas dentro de cada día por hora
+  sortedDays.forEach(([, dayTasks]) => {
+    dayTasks.sort((a, b) => {
+      const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const tb = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return ta - tb;
+    });
+  });
+
+  let startNum = 1;
+  return sortedDays.map(([dayLabel, dayTasks]) => {
+    const block = `📅 *${dayLabel}*\n${formatTaskList(dayTasks, startNum)}`;
+    startNum += dayTasks.length;
+    return block;
+  }).join("\n\n");
 }
 
 function formatTaskList(tasks: any[], startNum: number = 1): string {
