@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   CheckSquare,
   Calendar,
+  CalendarClock,
   ClipboardCheck,
   Package,
   Users,
@@ -88,6 +89,11 @@ const navItems: NavItem[] = [
     label: "Eventos",
     href: "/eventos",
     icon: Calendar,
+  },
+  {
+    label: "Ciclo de Eventos",
+    href: "/ciclo-eventos",
+    icon: CalendarClock,
   },
   {
     label: "Inventario",
