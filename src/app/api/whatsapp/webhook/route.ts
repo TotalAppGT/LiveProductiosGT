@@ -380,7 +380,10 @@ Reglas IMPORTANTES:
 - "pasado mañana" = en 2 días
 - "el lunes" = próximo lunes
 - Si no se especifica hora, usa 09:00
-- Si menciona un nombre de persona (Diana, Jorge, Abel, Selvin, Exequiel, Javier, Brenda, Daniel), asígnalo
+- assignToName = la persona que RECIBIRÁ el recordatorio.
+  * Si dice "recuérdame", "mándame", "avísame" → assignToName = null (es él mismo)
+  * Si dice "recuérdale a Diana", "mándale un mensaje a Diana", "para Diana" → assignToName = "Diana"
+  * El nombre de la tarea (ej: "llamar a Juan") NO es el asignado. Juan es parte de la tarea, no quien recibe.
 
 Responde SOLO el JSON, sin markdown.`
     }], { responseFormat: "json", temperature: 0.1, maxTokens: 300 });
@@ -765,7 +768,7 @@ async function handleCommand(
     const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
     const targetName = targetUser ? targetUser.name : "ti";
 
-    return `⏰ Recordatorio creado para ${targetName}: *${parsed.title}*\n📅 ${parsed.remindAt.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})} a las ${parsed.remindAt.toLocaleTimeString("es-GT", {hour:"2-digit",minute:"2-digit"})}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
+    return `⏰ Recordatorio creado para ${targetName}: *${parsed.title}*\n📅 ${parsed.remindAt.toLocaleDateString("es-GT", {timeZone:"America/Guatemala",weekday:"long",day:"numeric",month:"long"})} a las ${parsed.remindAt.toLocaleTimeString("es-GT", {timeZone:"America/Guatemala",hour:"2-digit",minute:"2-digit"})}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
   }
 
   if (cmd.startsWith("crea tarea") || cmd.startsWith("crear tarea")) {
@@ -1145,7 +1148,7 @@ async function handleConversationStep(
     const targetUser = assignToId !== user.id ? await prisma.user.findUnique({ where: { id: assignToId } }) : null;
     const targetName = targetUser ? targetUser.name : user.name;
 
-    return `✅ Tarea creada para *${targetName}*: "${data.title}"\n📅 ${dueDate.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})} a las ${dueDate.toLocaleTimeString("es-GT", {hour:"2-digit",minute:"2-digit"})}\n🔵 Prioridad: ${priority}`;
+    return `✅ Tarea creada para *${targetName}*: "${data.title}"\n📅 ${dueDate.toLocaleDateString("es-GT", {timeZone:"America/Guatemala",weekday:"long",day:"numeric",month:"long"})} a las ${dueDate.toLocaleTimeString("es-GT", {timeZone:"America/Guatemala",hour:"2-digit",minute:"2-digit"})}\n🔵 Prioridad: ${priority}`;
   }
 
   return null;

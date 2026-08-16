@@ -522,8 +522,11 @@ const jobs: CronJob[] = [
   { name: "bihourly16", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(16) },
 ];
 
-let cronInterval: ReturnType<typeof setInterval> | null = null;
-let initialized = false;
+// Usar globalThis para que el cron sea UN SOLO singleton entre todas las instancias del módulo
+const g = globalThis as any;
+if (!g.__cronInitialized) g.__cronInitialized = false;
+let cronInterval: ReturnType<typeof setInterval> | null = g.__cronInterval || null;
+let initialized = g.__cronInitialized;
 
 async function shouldRunJob(job: CronJob): Promise<boolean> {
   const now = getGuatemalaTime();
@@ -583,6 +586,7 @@ export function startCronManager(): void {
   }
 
   initialized = true;
+  g.__cronInitialized = true;
 
   const overallState = getJobState("__overall__");
   overallState.lastRun = new Date();
@@ -597,14 +601,15 @@ export function startCronManager(): void {
     }
   }
 
-  cronInterval = setInterval(runAllJobChecks, 5 * 60 * 1000);
+  cronInterval = setInterval(runAllJobChecks, 60 * 1000); // Cada 1 minuto para precisión
+  g.__cronInterval = cronInterval;
 
-  console.log(`[Cron] Cron manager iniciado con ${jobs.length} trabajos. Verificando cada 5 minutos.`);
+  console.log(`[Cron] Cron manager iniciado con ${jobs.length} trabajos. Verificando cada 1 minuto.`);
 
   const now = getGuatemalaTime();
   console.log(`[Cron] Hora actual en Guatemala: ${now.toLocaleTimeString("es-GT")}`);
 
-  // Immediate first check — no 5-min wait on deploy
+  // Immediate first check
   runAllJobChecks().catch((err) => console.error("[Cron] Error en verificación inicial:", err));
 }
 
@@ -612,7 +617,9 @@ export function stopCronManager(): void {
   if (cronInterval) {
     clearInterval(cronInterval);
     cronInterval = null;
+    g.__cronInterval = null;
     initialized = false;
+    g.__cronInitialized = false;
     console.log("[Cron] Cron manager detenido");
   }
 }
