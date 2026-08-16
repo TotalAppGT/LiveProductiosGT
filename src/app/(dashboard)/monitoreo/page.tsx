@@ -59,6 +59,7 @@ export default function MonitoreoPage() {
   const [activeTab, setActiveTab] = useState("HOY");
   const [sendingReminder, setSendingReminder] = useState<Set<string>>(new Set());
   const [sendingMassReminder, setSendingMassReminder] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
 
   const canAccess = currentUser?.role === "DUENO" || currentUser?.role === "ADMIN" || currentUser?.role === "JEFE";
 
@@ -281,9 +282,10 @@ export default function MonitoreoPage() {
                       key={u.userId}
                       variant="bordered"
                       className={cn(
-                        "p-4",
+                        "p-4 cursor-pointer hover:border-blue-400 transition-colors",
                         relativeTime.highlight && "border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-900/5"
                       )}
+                      onClick={() => setSelectedUser(u)}
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -347,6 +349,7 @@ export default function MonitoreoPage() {
                             variant="ghost"
                             size="sm"
                             leftIcon={<Eye className="h-3.5 w-3.5" />}
+                            onClick={(e) => { e.stopPropagation(); setSelectedUser(u); }}
                             title="Ver tareas"
                           >
                             Tareas
@@ -355,6 +358,7 @@ export default function MonitoreoPage() {
                             variant="ghost"
                             size="sm"
                             leftIcon={<DollarSign className="h-3.5 w-3.5" />}
+                            onClick={(e) => { e.stopPropagation(); setSelectedUser(u); }}
                             title="Ver ingresos"
                           >
                             Ingresos

@@ -55,18 +55,34 @@ export async function POST(
       },
     });
 
-    // Auto-generar reporte en el repositorio
-    await prisma.report.create({
+    // Auto-generar reporte en el repositorio + guardar PDF
+    let pdfBase64: string | null = null;
+    try {
+      const fullLog = await prisma.vehicleLog.findUnique({
+        where: { id },
+        include: { driver: { select: { name: true } }, fuelEntries: true },
+      });
+      if (fullLog) {
+        const { generateVehicleLogPdf } = await import("@/lib/vehicle-log-pdf");
+        const pdfBuffer = await generateVehicleLogPdf(fullLog);
+        pdfBase64 = pdfBuffer.toString("base64");
+      }
+    } catch (e) {
+      console.error("Error generando PDF en finish:", e);
+    }
+
+    const report = await prisma.report.create({
       data: {
         title: `Bitácora ${log.plate} - ${log.vehicleType}`,
         category: "USO_VEHICULOS",
         resourceType: "vehicle_log",
         resourceId: id,
+        pdfData: pdfBase64,
         createdById: auth.payload.userId,
       },
     });
 
-    return NextResponse.json({ success: true, data: log });
+    return NextResponse.json({ success: true, data: log, reportId: report.id });
   } catch (error) {
     console.error("Error en finish:", error);
     return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });

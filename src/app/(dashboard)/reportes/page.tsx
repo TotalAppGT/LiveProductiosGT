@@ -37,6 +37,7 @@ export default function ReportesPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   function printUrl(report: any): string {
+    if (report.pdfData) return `/api/reports/${report.id}/pdf`;
     if (report.resourceType === "vehicle_log") return `/api/vehicle-logs/${report.resourceId}/pdf`;
     if (report.resourceType === "order") return `/api/orders/${report.resourceId}/print`;
     return "#";

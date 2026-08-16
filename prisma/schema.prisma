@@ -542,6 +542,7 @@ model Report {
   category     String   @default("OTROS")
   resourceType String   @default("")
   resourceId   String   @default("")
+  pdfData      String?  @db.Text
   createdById  String
   createdBy    User     @relation("ReportCreator", fields: [createdById], references: [id])
   createdAt    DateTime @default(now())
