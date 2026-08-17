@@ -6,15 +6,29 @@ export function taskPhasePriority(t: { category?: string }): number {
 }
 
 export function orderTasksByDayHour(tasks: any[]): any[] {
+  const dayStart = (ts: string | Date | null): number => {
+    if (!ts) return Number.MAX_SAFE_INTEGER;
+    const d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  const timeOf = (ts: string | Date | null): number => {
+    if (!ts) return 0;
+    const d = new Date(ts);
+    return d.getHours() * 60 + d.getMinutes();
+  };
   return [...tasks].sort((a, b) => {
-    const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-    const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-    if (da !== db) return da - db;
+    // 1) Día cronológico
+    const dayDiff = dayStart(a.dueDate) - dayStart(b.dueDate);
+    if (dayDiff !== 0) return dayDiff;
+    // 2) Fase: Pre Evento → Evento → Post Evento
     const phaseDiff = taskPhasePriority(a) - taskPhasePriority(b);
     if (phaseDiff !== 0) return phaseDiff;
+    // 3) Fija antes que Variable
     const typeDiff = (a.type === "FIJA" ? 0 : 1) - (b.type === "FIJA" ? 0 : 1);
     if (typeDiff !== 0) return typeDiff;
-    return 0;
+    // 4) Hora del día
+    return timeOf(a.dueDate) - timeOf(b.dueDate);
   });
 }
 
