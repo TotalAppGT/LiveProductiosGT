@@ -78,6 +78,7 @@ export default function TareasPage() {
   const [showBulkAssign, setShowBulkAssign] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [quickTitle, setQuickTitle] = useState("");
   const [commentModal, setCommentModal] = useState<{ open: boolean; taskId: string; taskTitle: string }>({ open: false, taskId: "", taskTitle: "" });
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -193,6 +194,37 @@ export default function TareasPage() {
     }
   }
 
+  async function quickAddTask() {
+    const title = quickTitle.trim();
+    if (!title) return;
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title,
+          description: "",
+          priority: "MEDIA",
+          category: "PRE_EVENTO",
+          type: "DINAMICA",
+          frequency: "DIARIA",
+          assignedToId: user?.id,
+          dueDate: new Date(),
+        }),
+      });
+      const json: ApiResponse<Task> = await res.json();
+      if (json.success) {
+        toast.success("Tarea agregada");
+        setQuickTitle("");
+        fetchTasks();
+      } else {
+        throw new Error(json.error || "Error");
+      }
+    } catch {
+      toast.error("Error al agregar tarea");
+    }
+  }
+
   async function deleteTask(taskId: string) {
     if (!confirm("¿Seguro que deseas eliminar esta tarea? Esta acción no se puede deshacer.")) return;
     try {
@@ -290,25 +322,30 @@ export default function TareasPage() {
   });
 
   // Agrupación tipo hoja de cálculo: Pre Evento → Evento → Post Evento → Otros
+  // Dentro de cada fase: Fijas primero, luego Variables; todo ordenado por día y hora
   const sheetOrder = [
     { key: "PRE_EVENTO", label: "🎪 Pre Evento", bg: "bg-blue-600" },
     { key: "EVENTO", label: "🚀 Evento", bg: "bg-purple-600" },
     { key: "POST_EVENTO", label: "🏁 Post Evento", bg: "bg-emerald-600" },
     { key: "OTRO", label: "Otras tareas", bg: "bg-gray-600" },
   ];
-  const sheetGroups = sheetOrder.map((g) => ({
-    ...g,
-    tasks: filteredTasks
-      .filter((t) => g.key === "OTRO" ? !["PRE_EVENTO", "EVENTO", "POST_EVENTO"].includes(t.category) : t.category === g.key)
-      .sort((a, b) => {
-        const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-        const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-        if (da !== db) return da - db;
-        const pa = a.priority === "URGENTE" || a.priority === "ALTA" ? 1 : 0;
-        const pb = b.priority === "URGENTE" || b.priority === "ALTA" ? 1 : 0;
-        return pb - pa;
-      }),
-  }));
+  const sortByDayHour = (a: Task, b: Task) => {
+    const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+    const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+    if (da !== db) return da - db;
+    const pa = a.priority === "URGENTE" || a.priority === "ALTA" ? 1 : 0;
+    const pb = b.priority === "URGENTE" || b.priority === "ALTA" ? 1 : 0;
+    return pb - pa;
+  };
+  const sheetGroups = sheetOrder.flatMap((g) => {
+    const phaseTasks = filteredTasks.filter((t) => g.key === "OTRO" ? !["PRE_EVENTO", "EVENTO", "POST_EVENTO"].includes(t.category) : t.category === g.key);
+    const fijas = phaseTasks.filter((t) => t.type === "FIJA").sort(sortByDayHour);
+    const variables = phaseTasks.filter((t) => t.type !== "FIJA").sort(sortByDayHour);
+    const groups: { key: string; label: string; bg: string; tasks: Task[] }[] = [];
+    if (fijas.length > 0) groups.push({ ...g, label: `${g.label} · 🔁 Fijas`, tasks: fijas });
+    if (variables.length > 0) groups.push({ ...g, label: `${g.label} · Variables`, tasks: variables });
+    return groups;
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -641,93 +678,91 @@ export default function TareasPage() {
                 ))}
               </div>
             ) : viewMode === "sheet" ? (
+              <div className="space-y-2">
+                {/* Fila rápida: agregar tarea como en Excel */}
+                <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
+                  <input
+                    value={quickTitle}
+                    onChange={(e) => setQuickTitle(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && quickTitle.trim()) quickAddTask(); }}
+                    placeholder="➕ Agregar tarea y presionar Enter (ej: Confirmar staff para evento sábado)"
+                    className="flex-1 bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+                  />
+                  <Button variant="primary" size="sm" onClick={quickAddTask} disabled={!quickTitle.trim()}>
+                    Agregar
+                  </Button>
+                </div>
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 {/* Cabecera de hoja de cálculo */}
-                <div className="grid grid-cols-12 gap-2 px-3 py-2.5 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 min-w-[900px]">
+                <div className="grid grid-cols-12 gap-1.5 px-2 py-1.5 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 min-w-[880px] sticky top-0 z-10">
                   <div className="col-span-1 text-center">#</div>
                   <div className="col-span-4">Tarea</div>
-                  <div className="col-span-2">Categoría</div>
-                  <div className="col-span-2">Fecha / Hora</div>
-                  <div className="col-span-1 text-center">Tipo</div>
-                  <div className="col-span-1 text-center">Estado</div>
-                  <div className="col-span-1 text-center">Acciones</div>
+                  <div className="col-span-2">Día / Hora</div>
+                  <div className="col-span-2">Asignado</div>
+                  <div className="col-span-1 text-center">Prio</div>
+                  <div className="col-span-2 text-right">Acciones</div>
                 </div>
                 <div className="overflow-x-auto">
-                  <div className="min-w-[900px] divide-y divide-gray-100 dark:divide-gray-700">
-                    {sheetGroups.map((group) => (
-                      <div key={group.key}>
-                        <div className={`px-3 py-1.5 text-xs font-bold text-white ${group.bg} flex items-center gap-2`}>
+                  <div className="min-w-[880px]">
+                    {sheetGroups.map((group, gi) => (
+                      <div key={group.key + gi}>
+                        {/* Fila de fase: Pre / Evento / Post */}
+                        <div className={`px-2 py-1 text-[11px] font-bold text-white ${group.bg} flex items-center justify-between sticky left-0`}>
                           <span>{group.label}</span>
-                          <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">
-                            {group.tasks.length}
-                          </span>
+                          <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{group.tasks.length}</span>
                         </div>
                         {group.tasks.map((task, idx) => (
                           <div
                             key={task.id}
-                            className={`grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
-                              task.status === "COMPLETADA" ? "opacity-60" : ""
+                            className={`grid grid-cols-12 gap-1.5 px-2 py-1 text-[13px] items-center border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
+                              task.status === "COMPLETADA" ? "bg-green-50/50 dark:bg-green-900/10" : idx % 2 === 1 ? "bg-gray-50/60 dark:bg-gray-800/30" : ""
                             }`}
                           >
-                            <div className="col-span-1 text-center text-xs text-gray-400">{idx + 1}</div>
-                            <div className="col-span-4 flex items-center gap-2 min-w-0">
+                            <div className="col-span-1 text-center text-[11px] text-gray-400 font-mono">{idx + 1}</div>
+                            <div className="col-span-4 flex items-center gap-1.5 min-w-0">
                               <button
                                 onClick={() => updateTaskStatus(task.id, "COMPLETADA")}
-                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
                                   task.status === "COMPLETADA"
                                     ? "bg-green-500 border-green-500 text-white"
                                     : "border-gray-300 hover:border-green-400 hover:bg-green-50"
                                 }`}
                                 title={task.status === "COMPLETADA" ? "Desmarcar" : "Marcar realizado"}
                               >
-                                {task.status === "COMPLETADA" && <CheckCircle2 className="w-3 h-3" />}
+                                {task.status === "COMPLETADA" && <CheckCircle2 className="w-2.5 h-2.5" />}
                               </button>
-                              <span className={`truncate font-medium ${task.status === "COMPLETADA" ? "line-through text-gray-400" : "text-gray-900 dark:text-white"}`}>
+                              <span className={`truncate ${task.status === "COMPLETADA" ? "line-through text-gray-400" : "text-gray-900 dark:text-white"}`}>
                                 {task.title}
                               </span>
                             </div>
-                            <div className="col-span-2 text-xs text-gray-600 dark:text-gray-300 truncate">
-                              {task.category === "PRE_EVENTO" ? "🎪 Pre Evento" : task.category === "EVENTO" ? "🚀 Evento" : task.category === "POST_EVENTO" ? "🏁 Post Evento" : (CATEGORY_OPTIONS.find((c) => c.value === task.category)?.label || task.category || "—")}
-                            </div>
-                            <div className="col-span-2 text-xs text-gray-600 dark:text-gray-300">
+                            <div className="col-span-2 text-[11px] text-gray-600 dark:text-gray-300 truncate">
                               {task.dueDate ? (
-                                <div className="flex flex-col leading-tight">
-                                  <span>{new Date(task.dueDate).toLocaleDateString("es-GT", { day: "numeric", month: "short" })}</span>
-                                  <span className="text-[10px] text-gray-400">
-                                    {new Date(task.dueDate).toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" })} · {task.assignedTo?.name?.split(" ")[0] || "—"}
-                                  </span>
-                                </div>
+                                <>
+                                  <span className="font-medium">{new Date(task.dueDate).toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" })}</span>
+                                  <span className="text-gray-400"> · {new Date(task.dueDate).toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" })}</span>
+                                </>
                               ) : "—"}
                             </div>
-                            <div className="col-span-1 text-center">
-                              {task.type === "FIJA" ? (
-                                <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-semibold" title="Fija (recurrente)">
-                                  🔁 Fija
-                                </span>
-                              ) : (
-                                <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-semibold" title="Variable (puntual)">
-                                  Variable
-                                </span>
-                              )}
+                            <div className="col-span-2 text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                              {task.assignedTo?.name || "—"}
                             </div>
-                            <div className="col-span-1 flex items-center justify-center gap-1">
+                            <div className="col-span-1 flex items-center justify-center gap-0.5">
                               <span
                                 className="inline-block w-2 h-2 rounded-full"
                                 style={{ backgroundColor: task.priority === "URGENTE" || task.priority === "ALTA" ? "#ef4444" : task.priority === "MEDIA" ? "#eab308" : "#22c55e" }}
                                 title={task.priority}
                               />
-                              {task.status === "REPROGRAMADA" && (
-                                <span className="text-[9px] text-purple-500 font-semibold">⏰</span>
-                              )}
+                              {task.status === "REPROGRAMADA" && <span className="text-[9px]" title="Pospuesta">🟣</span>}
+                              {task.status === "EN_PROCESO" && <span className="text-[9px]" title="En proceso">🔄</span>}
                             </div>
-                            <div className="col-span-1 flex items-center justify-end gap-1">
+                            <div className="col-span-2 flex items-center justify-end gap-0.5">
                               {task.status !== "COMPLETADA" && (
                                 <button
                                   onClick={() => updateTaskStatus(task.id, "EN_PROCESO")}
                                   className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-500"
                                   title="En proceso"
                                 >
-                                  <Play className="w-3.5 h-3.5" />
+                                  <Play className="w-3 h-3" />
                                 </button>
                               )}
                               {task.status !== "COMPLETADA" && (
@@ -736,7 +771,7 @@ export default function TareasPage() {
                                   className="p-1 rounded hover:bg-yellow-50 dark:hover:bg-yellow-900/30 text-yellow-600"
                                   title="Posponer"
                                 >
-                                  <CalendarClock className="w-3.5 h-3.5" />
+                                  <CalendarClock className="w-3 h-3" />
                                 </button>
                               )}
                               <button
@@ -744,7 +779,7 @@ export default function TareasPage() {
                                 className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
                                 title="Comentar"
                               >
-                                <MessageSquare className="w-3.5 h-3.5" />
+                                <MessageSquare className="w-3 h-3" />
                               </button>
                               {(user?.role === "DUENO" || user?.role === "ADMIN") && (
                                 <button
@@ -752,7 +787,7 @@ export default function TareasPage() {
                                   className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-red-400"
                                   title="Eliminar"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3 h-3" />
                                 </button>
                               )}
                             </div>
@@ -762,6 +797,7 @@ export default function TareasPage() {
                     ))}
                   </div>
                 </div>
+              </div>
               </div>
             ) : (
               <div className="space-y-2">

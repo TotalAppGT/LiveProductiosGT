@@ -323,23 +323,32 @@ async function formatTasksForUser(userId: string, period?: string) {
 
   output = `📋 *Tus Tareas*\n\n`;
 
-  const allUpcoming = allTasks.filter((t) => t.dueDate && new Date(t.dueDate) >= today && new Date(t.dueDate) <= thirdSunday);
-  if (allUpcoming.length > 0) {
-    output += groupTasksByDay(allUpcoming);
-    output += "\n\n";
+  // Prioridad: semana a semana (esta → próxima → siguiente), agrupado por día
+  const thisWeekAll = [...todayTasks, ...thisWeekTasks].filter((t, i, arr) => arr.indexOf(t) === i);
+  const blocks: string[] = [];
+  if (thisWeekAll.length > 0) {
+    blocks.push(`📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})\n${groupTasksByDay(thisWeekAll)}`);
   }
+  if (nextWeekTasks.length > 0) {
+    blocks.push(`📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})\n${groupTasksByDay(nextWeekTasks)}`);
+  }
+  if (thirdWeekTasks.length > 0) {
+    blocks.push(`📅 *SIGUIENTE SEMANA* (${thirdMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${thirdSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})\n${groupTasksByDay(thirdWeekTasks)}`);
+  }
+  if (blocks.length > 0) output += blocks.join("\n\n") + "\n\n";
 
-  const todayFixed = allTasks.filter((t) => t.type === "FIJA" && !t.dueDate);
   const hasFixed = Object.values(fixedByDay).some((arr) => arr.length > 0);
   if (hasFixed) {
+    output += `📌 *ACTIVIDADES FIJAS*\n`;
     for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
       if (fixedByDay[day] && fixedByDay[day].length > 0) {
-        output += `📌 *ACTIVIDADES FIJAS ${day.toUpperCase()}*\n${formatTaskList(fixedByDay[day])}\n\n`;
+        output += `${formatTaskList(fixedByDay[day])}\n`;
       }
     }
+    output += "\n";
   }
 
-  output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`ayuda\``;
+  output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`tareas mes\` | \`ayuda\``;
   return output;
 }
 
@@ -369,11 +378,13 @@ function groupTasksByDay(tasks: any[], includeDate: boolean = true): string {
     return da.getTime() - db.getTime();
   });
 
-  // Ordenar tareas dentro de cada día: prioridad de fase (Pre Evento 1º, Post 2º) y luego por hora
+  // Ordenar tareas dentro de cada día: fase (Pre 1º, Evento 2º, Post 3º), luego tipo (Fija antes que Variable), luego hora
   sortedDays.forEach(([, dayTasks]) => {
     dayTasks.sort((a, b) => {
       const phaseDiff = taskPhasePriority(a) - taskPhasePriority(b);
       if (phaseDiff !== 0) return phaseDiff;
+      const typeDiff = (a.type === "FIJA" ? 0 : 1) - (b.type === "FIJA" ? 0 : 1);
+      if (typeDiff !== 0) return typeDiff;
       const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0;
       const tb = b.dueDate ? new Date(b.dueDate).getTime() : 0;
       return ta - tb;

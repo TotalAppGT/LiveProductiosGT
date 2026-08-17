@@ -36,30 +36,42 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
 <div class="section">
   <h2>📊 VER MIS TAREAS</h2>
   <table>
-    <tr><td><code>tareas</code></td><td>Todas mis tareas (ordenadas por día y hora)</td></tr>
+    <tr><td><code>tareas</code></td><td>Todas mis tareas, semana a semana (esta → próxima → siguiente), día por día y por hora</td></tr>
     <tr><td><code>tareas hoy</code></td><td>Solo las de hoy (por hora)</td></tr>
     <tr><td><code>tareas semana</code> / <code>tareas esta semana</code></td><td>Esta semana, día por día</td></tr>
-    <tr><td><code>tareas semana 2</code> / <code>tareas la próxima semana</code></td><td>La próxima semana</td></tr>
-    <tr><td><code>tareas mes</code></td><td>Este mes</td></tr>
+    <tr><td><code>tareas semana 2</code> / <code>tareas la próxima semana</code> / <code>tareas de la próxima semana</code></td><td>La próxima semana</td></tr>
+    <tr><td><code>tareas mes</code> / <code>tareas este mes</code></td><td>Este mes</td></tr>
+    <tr><td><code>tareas fijas</code></td><td>Actividades fijas/recurrentes (🔁)</td></tr>
   </table>
-  <div class="example">📅 *lunes, 17 de agosto*
-1. 🔴 Llamar a Abel 📌 17 ago 08:00 a. m.
-2. 🟡 Actualizar drive 📌 17 ago 09:00 a. m.
+  <div class="example">📋 *Tus Tareas*
+
+📅 *ESTA SEMANA* (17 ago - 22 ago)
+
+📅 *lunes, 17 de agosto*
+1. 🔴 🎪 Confirmar staff 📌 🔁 Diaria 17 ago 08:00 a. m.
+2. 🟡 🎪 Revisar cuadro equipo 📌 17 ago 09:00 a. m.
 
 📅 *martes, 18 de agosto*
-3. 🔴 Revisar equipo 📌 18 ago 10:00 a. m.</div>
-  <p style="font-size:12px;color:#666;">Las tareas sin hora se muestran solo con fecha. Las que tienen hora, se ordenan de la más temprana a la más tarde.</p>
+3. 🔴 🏁 Reporte proveedores 📌 17 ago 02:00 p. m.
+
+📅 *PRÓXIMA SEMANA* (24 ago - 29 ago)
+...</div>
+  <p style="font-size:12px;color:#666;">
+    Orden dentro de cada día: <strong>🎪 Pre Evento → 🚀 Evento → 🏁 Post Evento</strong>, luego <strong>Fijas (🔁)</strong> antes que Variables, y de la hora más temprana a la más tarde.
+  </p>
 </div>
 
 <div class="section">
   <h2>🔍 CONSULTAS DINÁMICAS POR FECHA</h2>
-  <ul>
-    <li><code>tareas para mañana</code></li>
-    <li><code>tareas del lunes</code> / <code>tareas del sábado</code></li>
-    <li><code>qué tengo el viernes</code></li>
-    <li><code>qué tengo para mañana</code></li>
-    <li><code>tareas de la próxima semana</code> / <code>tareas del mes que viene</code></li>
-  </ul>
+  <table>
+    <tr><td><code>tareas hoy</code> / <code>tareas mañana</code> / <code>tareas pasado mañana</code></td><td>Día puntual</td></tr>
+    <tr><td><code>tareas lunes</code> / <code>tareas el viernes</code> / <code>tareas sábado</code></td><td>Próximo día de la semana</td></tr>
+    <tr><td><code>tareas 25 agosto</code> / <code>tareas 25 de agosto</code></td><td>Fecha específica</td></tr>
+    <tr><td><code>viernes 28 agosto</code> / <code>lunes 17</code></td><td>Día con fecha</td></tr>
+    <tr><td><code>tareas septiembre</code> / <code>ver octubre</code></td><td>Mes específico</td></tr>
+    <tr><td><code>tareas de la próxima semana</code> / <code>tareas del mes que viene</code></td><td>Próximo periodo</td></tr>
+    <tr><td><code>qué tengo el viernes</code> / <code>que tengo para mañana</code></td><td>Preguntas naturales</td></tr>
+  </table>
   <p style="font-size:12px;color:#666;">Se considera la semana laboral de LUNES a SÁBADO (domingo descanso).</p>
 </div>
 
@@ -79,16 +91,19 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
   <h2>➕ CREAR TAREAS</h2>
   <ul>
     <li><code>crea tarea revisar equipo mañana 10am</code></li>
-    <li><code>crea tarea para Diana llamar proveedor viernes 3pm</code></li>
+    <li><code>crea tarea para Diana llamar proveedor viernes 3pm</code> → notifica a Diana</li>
     <li><code>crea tarea para Jorge llamar a Abel mañana 8am</code> → notifica a Jorge</li>
-    <li><code>crea tarea fija revisar bodega cada lunes</code> → tarea fija semanal</li>
+    <li><code>crea tarea fija revisar bodega cada lunes</code> → tarea fija semanal (🔁)</li>
+    <li><code>crea tarea</code> → asistente paso a paso</li>
   </ul>
+  <p style="font-size:12px;color:#666;"><strong>Fija (🔁)</strong> = se repite (Diaria/Semanal/Mensual) y se regenera al completarla. <strong>Variable</strong> = puntual.</p>
 </div>
 
 <div class="section">
   <h2>⏰ RECORDATORIOS PARA TI</h2>
   <ul>
     <li><code>recuérdame llamar a Juan a las 3pm</code></li>
+    <li><code>mándame un mensaje a las 8am mañana</code></li>
     <li><code>mándame un mensaje a las 2pm para la reunión</code></li>
     <li><code>avísame mañana a las 9am revisar bodega</code></li>
     <li><code>notifícame el viernes a las 4pm enviar reporte</code></li>
@@ -119,7 +134,7 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
     <tr><td><code>inventario sonido</code></td><td>Solo audio</td></tr>
     <tr><td><code>vehiculos</code></td><td>Flota vehicular</td></tr>
     <tr><td><code>cobros</code></td><td>Cobros pendientes</td></tr>
-    <tr><td><code>empleados</code></td><td>Directorio del equipo</td></tr>
+    <tr><td><code>empleados</code> / <code>personal</code></td><td>Directorio del equipo</td></tr>
     <tr><td><code>eventos</code></td><td>Próximos eventos</td></tr>
   </table>
 </div>
@@ -142,15 +157,19 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
     <span class="color-badge" style="background:#fee2e2;color:#b91c1c;">🔴 Alta/Urgente</span>
     <span class="color-badge" style="background:#ede9fe;color:#6d28d9;">🟣 Pospuesta</span>
     <span class="color-badge" style="background:#dcfce7;color:#166534;">✅ Completada</span>
+    <span class="color-badge" style="background:#e0e7ff;color:#4338ca;">🎪 Pre Evento</span>
+    <span class="color-badge" style="background:#fae8ff;color:#a21caf;">🚀 Evento</span>
+    <span class="color-badge" style="background:#d1fae5;color:#065f46;">🏁 Post Evento</span>
   </div>
 </div>
 
 <div class="tip">
   💡 <strong>Tips:</strong><br>
-  • Cada tarea sale numerada y ordenada por hora/día. Usa el número para las acciones.<br>
+  • Cada tarea sale numerada y ordenada por fase (Pre/Evento/Post), luego fija/variable, y por hora/día. Usa el número para las acciones.<br>
   • Las tareas pueden llevar hora o solo fecha (sin horario).<br>
   • LUNA avisa <strong>10 minutos antes</strong> y a la hora exacta de cada recordatorio.<br>
-  • Las tareas no hechas se reprograman al día siguiente automáticamente.<br>
+  • Las tareas no hechas se reprograman al día siguiente automáticamente y siguen apareciendo hasta completarse.<br>
+  • En la web, Tareas se ve como hoja de cálculo (Excel): marca el círculo ✅ para realizarla, botones ▶ ⏰ 💬 🗑 a la derecha.<br>
   • Si dudas, escribe <code>ayuda</code>.
 </div>
 
