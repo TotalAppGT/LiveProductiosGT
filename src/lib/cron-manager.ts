@@ -89,7 +89,7 @@ async function morningBriefing() {
           assignedToId: user.id,
           status: { in: ["PENDIENTE", "EN_PROCESO"] },
         },
-        orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+        orderBy: [{ dueDate: "asc" }],
         take: 10,
       });
 
@@ -118,15 +118,12 @@ async function morningBriefing() {
         aiMessage = `¡Buenos días ${user.name}! Soy LUNA. Hoy tienes ${tasks.length} tareas pendientes. ¡A darle con todo! 💪`;
       }
 
-      const taskLines = tasks
-        .map((t, i) => {
-          const priorityEmoji = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
-          const dueDate = t.dueDate ? ` → ${new Date(t.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric"})}` : "";
-          return `${i + 1}. ${priorityEmoji} *${t.title}*${dueDate}`;
-        })
-        .join("\n");
+      const { orderTasksByDayHour, groupTasksByDayText } = await import("@/lib/task-view");
+      const orderedTasks = orderTasksByDayHour(tasks);
+      const taskLines = orderedTasks.length > 0 ? groupTasksByDayText(orderedTasks) : "";
 
       const eventLines = events
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
         .map((e) => `🎪 ${e.name} - ${new Date(e.date).toLocaleDateString("es-GT")}`)
         .join("\n");
 

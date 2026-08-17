@@ -842,7 +842,7 @@ export async function sendBihourlyReminders(): Promise<{
 
       if (lastReminder) continue;
 
-      const pendingTasks = await prisma.task.count({
+      const pendingTasksCount = await prisma.task.count({
         where: {
           assignedToId: user.id,
           status: { in: ["PENDIENTE", "EN_PROCESO"] },
@@ -857,11 +857,32 @@ export async function sendBihourlyReminders(): Promise<{
         },
       });
 
-      if (pendingTasks === 0) continue;
+      if (pendingTasksCount === 0) continue;
 
-      let message = `Tienes ${pendingTasks} tareas pendientes`;
+      // Incluir digest ordenado de las próximas tareas
+      let digest = "";
+      try {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const end = new Date(today); end.setDate(end.getDate() + 7); end.setHours(23, 59, 59);
+        const upcomingTasks = await prisma.task.findMany({
+          where: {
+            assignedToId: user.id,
+            status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
+            dueDate: { gte: today, lte: end },
+          },
+          orderBy: { dueDate: "asc" },
+          take: 10,
+        });
+        const { formatTaskDigest } = await import("@/lib/task-view");
+        const d = formatTaskDigest(upcomingTasks);
+        if (d) digest = `\n\n${d}`;
+      } catch {
+        // silencioso
+      }
+
+      let message = `Tienes ${pendingTasksCount} tareas pendientes`;
       if (overdueTasks > 0) message += `, ${overdueTasks} vencidas`;
-      message += `. Escribe *tareas* para verlas.`;
+      message += `:${digest}\n\n_Escribe *tareas* para verlas todas y usa el # para completarlas (ej: *hecho 1*)._`;
 
       await sendMessage(to, message).catch(() => {});
 
@@ -879,12 +900,12 @@ export async function sendBihourlyReminders(): Promise<{
         "BIHOURLY_REMINDER",
         "USER",
         user.id,
-        `Recordatorio bi-horario enviado a ${user.name} (${pendingTasks} pendientes)`,
+        `Recordatorio bi-horario enviado a ${user.name} (${pendingTasksCount} pendientes)`,
         "system"
       );
 
       usersReminded++;
-      totalPendingTasks += pendingTasks;
+      totalPendingTasks += pendingTasksCount;
     }
 
     return { usersReminded, totalPendingTasks };

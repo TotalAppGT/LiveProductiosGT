@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { handleWhatsAppMessage, askAI } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
+import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
 
@@ -367,90 +368,16 @@ async function formatTasksForUser(userId: string, period?: string) {
   return output;
 }
 
-function taskPhasePriority(t: any): number {
-  // Pre Evento = prioridad 1, Evento = 2, Post Evento = 3, resto = 4
-  if (t.category === "PRE_EVENTO") return 0;
-  if (t.category === "EVENTO") return 1;
-  if (t.category === "POST_EVENTO") return 2;
-  return 3;
-}
-
 function orderTasksForDisplay(tasks: any[]): any[] {
-  return [...tasks].sort((a, b) => {
-    // Primero por fase (Pre → Evento → Post), luego Fija antes que Variable, luego por día/hora
-    const phaseDiff = taskPhasePriority(a) - taskPhasePriority(b);
-    if (phaseDiff !== 0) return phaseDiff;
-    const typeDiff = (a.type === "FIJA" ? 0 : 1) - (b.type === "FIJA" ? 0 : 1);
-    if (typeDiff !== 0) return typeDiff;
-    const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-    const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-    return da - db;
-  });
+  return orderTasksByDayHour(tasks);
 }
 
-function groupTasksByDay(tasks: any[], startNum: number = 1, includeDate: boolean = true): string {
-  // Agrupar por día en orden cronológico
-  const days = new Map<string, any[]>();
-  tasks.forEach((t) => {
-    if (!t.dueDate) return;
-    const d = new Date(t.dueDate);
-    const key = d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" });
-    if (!days.has(key)) days.set(key, []);
-    days.get(key)!.push(t);
-  });
-
-  // Ordenar días por fecha
-  const sortedDays = Array.from(days.entries()).sort((a, b) => {
-    const da = new Date(a[1][0].dueDate);
-    const db = new Date(b[1][0].dueDate);
-    return da.getTime() - db.getTime();
-  });
-
-  // Ordenar tareas dentro de cada día: fase (Pre 1º, Evento 2º, Post 3º), luego tipo (Fija antes que Variable), luego hora
-  sortedDays.forEach(([, dayTasks]) => {
-    dayTasks.sort((a, b) => {
-      const phaseDiff = taskPhasePriority(a) - taskPhasePriority(b);
-      if (phaseDiff !== 0) return phaseDiff;
-      const typeDiff = (a.type === "FIJA" ? 0 : 1) - (b.type === "FIJA" ? 0 : 1);
-      if (typeDiff !== 0) return typeDiff;
-      const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-      const tb = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-      return ta - tb;
-    });
-  });
-
-  return sortedDays.map(([dayLabel, dayTasks]) => {
-    const block = `📅 *${dayLabel}*\n${formatTaskList(dayTasks, startNum)}`;
-    startNum += dayTasks.length;
-    return block;
-  }).join("\n\n");
+function groupTasksByDay(tasks: any[], startNum: number = 1): string {
+  return groupTasksByDayText(tasks, startNum);
 }
 
 function formatTaskList(tasks: any[], startNum: number = 1): string {
-  return tasks.map((t, i) => {
-    const num = startNum + i;
-    const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
-    const status = t.status === "COMPLETADA" ? "✅" : t.status === "REPROGRAMADA" ? "🟣 Pospuesta" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌";
-    const phaseTag = t.category === "PRE_EVENTO" ? "🎪" : t.category === "POST_EVENTO" ? "🏁" : "";
-    // Tipo: fija se mantiene (recurrente), variable es puntual
-    const typeTag = t.type === "FIJA"
-      ? `🔁 ${t.frequency === "SEMANAL" ? "Semanal" : t.frequency === "MENSUAL" ? "Mensual" : "Diaria"}`
-      : "";
-    let due = "";
-    if (t.dueDate) {
-      const d = new Date(t.dueDate);
-      const datePart = d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" });
-      const hours = d.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit", hour12: false });
-      // Si la hora es 00:00 (medianoche), es tarea sin hora → solo fecha
-      if (hours === "00:00") {
-        due = ` ${datePart}`;
-      } else {
-        const timePart = d.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" });
-        due = ` ${datePart} ${timePart}`;
-      }
-    }
-    return `${num}. ${prio} ${phaseTag} *${t.title}* ${status}${typeTag ? ` ${typeTag}` : ""}${due}`;
-  }).join("\n");
+  return tasks.map((t, i) => formatTaskLine(t, startNum + i)).join("\n");
 }
 
 function parseReminderLocal(text: string, user: { id: string; name: string }) {
@@ -660,6 +587,23 @@ function saveTaskView(userId: string, tasks: { id: string }[]) {
   lastViewTasks.set(userId, { ids: tasks.map((t) => t.id), expires: Date.now() + 30 * 60 * 1000 });
 }
 
+// Digest ordenado de tareas próximas de un usuario (para notificaciones)
+async function getOrderedTaskDigest(userId: string): Promise<string> {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const end = new Date(today); end.setDate(end.getDate() + 21); end.setHours(23, 59, 59);
+  const tasks = await prisma.task.findMany({
+    where: {
+      assignedToId: userId,
+      status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
+      dueDate: { gte: today, lte: end },
+    },
+    orderBy: { dueDate: "asc" },
+    take: 15,
+  });
+  if (tasks.length === 0) return "";
+  return formatTaskDigest(tasks);
+}
+
 async function resolveTaskByNumber(userId: string, num: number) {
   const view = lastViewTasks.get(userId);
   if (view && Date.now() < view.expires && num >= 1 && num <= view.ids.length) {
@@ -735,6 +679,114 @@ async function listTasksForSelection(userId: string): Promise<string> {
     const due = t.dueDate ? ` → ${new Date(t.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric"})}` : "";
     return `${i + 1}. ${prio} *${t.title}* ${status}${due}`;
   }).join("\n");
+}
+
+// 📅 Reunión: crear recordatorio para varias personas por nombre y notificarlas
+async function handleMeetingCommand(cmd: string, user: { id: string; name: string; role: string }) {
+  // Extraer nombres: "reunión con Diana y Abel mañana a las 8 am" / "junta para Jorge, Diana y Abel el viernes 3pm"
+  const nameRegex = /(?:con|para)\s+([a-záéíóúñA-ZÁÉÍÓÚÑ]+(?:\s+y\s+[a-záéíóúñA-ZÁÉÍÓÚÑ]+)*)/i;
+  const nameMatch = cmd.match(nameRegex);
+  if (!nameMatch) {
+    return "Para crear una reunión necesito saber con quién. Ejemplo: *hacer reunión con Diana y Abel mañana a las 8am*";
+  }
+
+  // Separar nombres por "y" o ","
+  const namesRaw = nameMatch[1].replace(/,\s*y\s+/gi, " y ").replace(/,\s+/gi, " y ").split(/\s+y\s+/i).map((n) => n.trim()).filter(Boolean);
+  if (namesRaw.length === 0) return "No entendí los nombres. Ejemplo: *reunión con Diana y Abel mañana a las 8am*";
+
+  // El nombre de la persona puede ser compuesto (ej: "Jorge Mérida") → intentar coincidir por nombre o apellido
+  const allUsers = await prisma.user.findMany({
+    where: { active: true },
+    select: { id: true, name: true, whatsappNumber: true, phone: true },
+  });
+
+  const targets: { id: string; name: string; to?: string | null }[] = [];
+  for (const raw of namesRaw) {
+    const normalized = raw.toLowerCase();
+    const match = allUsers.find(
+      (u) =>
+        u.name.toLowerCase() === normalized ||
+        u.name.toLowerCase().includes(normalized) ||
+        normalized.includes(u.name.toLowerCase().split(" ")[0])
+    );
+    if (match) targets.push({ id: match.id, name: match.name, to: match.whatsappNumber || match.phone });
+  }
+
+  if (targets.length === 0) {
+    return `No encontré a ninguna de esas personas. Usa *equipo* para ver los nombres registrados.`;
+  }
+
+  // Extraer fecha/hora (reutilizando parseadores locales)
+  const time = parseTimeExpression(cmd);
+  let meetDate: Date | null = null;
+
+  if (/\bpasado\s*mañana\b/.test(cmd)) {
+    meetDate = new Date(); meetDate.setDate(meetDate.getDate() + 2);
+  } else if (/\bmañana\b/.test(cmd) && !/\ben la mañana\b/.test(cmd)) {
+    meetDate = new Date(); meetDate.setDate(meetDate.getDate() + 1);
+  } else if (/\bhoy\b/.test(cmd)) {
+    meetDate = new Date();
+  } else if (/\ben la tarde\b/.test(cmd) && !time) {
+    meetDate = new Date();
+  } else if (/\ben la noche\b/.test(cmd) && !time) {
+    meetDate = new Date();
+  } else {
+    meetDate = parseRelativeDate(cmd, new Date());
+  }
+
+  if (!meetDate) meetDate = new Date();
+  if (time) {
+    meetDate.setHours(time.hours, time.minutes, 0, 0);
+  } else if (!/en la (mañana|tarde|noche)/.test(cmd)) {
+    meetDate.setHours(9, 0, 0, 0);
+  } else if (/en la mañana/.test(cmd)) {
+    meetDate.setHours(9, 0, 0, 0);
+  } else if (/en la tarde/.test(cmd)) {
+    meetDate.setHours(15, 0, 0, 0);
+  } else if (/en la noche/.test(cmd)) {
+    meetDate.setHours(19, 0, 0, 0);
+  }
+
+  const title = `📅 Reunión con ${targets.map((t) => t.name).join(" y ")}`;
+  const dateStr = `${meetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${meetDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+
+  const created: string[] = [];
+  for (const target of targets) {
+    // Recordatorio para cada involucrado
+    await prisma.reminder.create({
+      data: {
+        title,
+        description: `Reunión agendada por ${user.name} para ${dateStr}.`,
+        remindAt: meetDate,
+        createdById: user.id,
+        assignedToId: target.id,
+      },
+    });
+    await prisma.task.create({
+      data: {
+        title: `🔔 ${title}`,
+        description: `Reunión agendada por ${user.name} para ${dateStr}.`,
+        assignedToId: target.id,
+        assignedById: user.id,
+        dueDate: meetDate,
+        priority: "ALTA",
+        category: "OTRO",
+        type: "DINAMICA",
+        frequency: "DIARIA",
+        status: "PENDIENTE",
+      },
+    });
+    // Notificar a cada persona
+    if (target.to && target.id !== user.id) {
+      await sendMessage(
+        target.to,
+        `📅 *Reunión Agendada*\n\n${title}\n👤 Agendada por: ${user.name}\n🕐 ${dateStr}\n\nTe avisaré 10 minutos antes.`
+      ).catch(() => {});
+    }
+    created.push(target.name);
+  }
+
+  return `📅 *Reunión agendada*\n\n${title}\n🕐 ${dateStr}\n\n👥 Involucrados (${created.length}): ${created.join(", ")}\n🔔 Se les envió notificación a cada uno.\n_Te avisaré a todos 10 minutos antes._`;
 }
 
 async function handleCommand(
@@ -1084,6 +1136,11 @@ async function handleCommand(
     return tasks;
   }
 
+  // 📅 REUNIÓN: "hacer reunión con Diana y Abel mañana a las 8am"
+  if (/\b(reuni[oó]n|junta|meeting|sesi[oó]n)\b/.test(cmd) && /\b(con|para)\b/.test(cmd)) {
+    return await handleMeetingCommand(cmd, user);
+  }
+
   if (cmd.startsWith("recuerda") || cmd.startsWith("recordar") || cmd.startsWith("recordatorio") ||
       /\b(crea|creame|crear|agenda|programa|programar|pon|ponme|agendar|poner)\s+(un\s+|unos\s+|el\s+|una\s+|las\s+|los\s+)?recordatorio/i.test(cmd) ||
       /mand(a|ame|enme|ele)?\s+(un\s+)?(mensaje|alerta|aviso)/i.test(cmd) ||
@@ -1385,9 +1442,11 @@ async function handleCreateTask(details: string, user: { id: string; name: strin
         ? `${task.dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${task.dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`
         : "Sin fecha";
       const prioIcon = task.priority === "URGENTE" ? "🔴" : task.priority === "ALTA" ? "🔴" : task.priority === "MEDIA" ? "🟡" : "🟢";
+      const digest = await getOrderedTaskDigest(targetUser.id);
+      const digestBlock = digest ? `\n\n📋 *Tus próximas tareas (ordenadas)*\n${digest}` : "";
       await sendMessage(
         to,
-        `📋 *Nueva Tarea Asignada*\n\n${prioIcon} *${task.title}*\n👤 Asignada por: ${user.name}\n📅 ${dateStr}\n\nEscribí *tareas* para verla.`
+        `📋 *Nueva Tarea Asignada*\n\n${prioIcon} *${task.title}*\n👤 Asignada por: ${user.name}\n📅 ${dateStr}${digestBlock}\n\nEscribí *tareas* para verlas todas.`
       ).catch(() => {});
     }
   }
@@ -1543,9 +1602,11 @@ async function handleConversationStep(
       if (to) {
         const prioIcon = priority === "URGENTE" || priority === "ALTA" ? "🔴" : priority === "MEDIA" ? "🟡" : "🟢";
         const dateStr = `${dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+        const digest = await getOrderedTaskDigest(targetUser.id);
+        const digestBlock = digest ? `\n\n📋 *Tus próximas tareas (ordenadas)*\n${digest}` : "";
         await sendMessage(
           to,
-          `📋 *Nueva Tarea Asignada*\n\n${prioIcon} *${data.title}*\n👤 Asignada por: ${user.name}\n📅 ${dateStr}\n\nEscribí *tareas* para verla.`
+          `📋 *Nueva Tarea Asignada*\n\n${prioIcon} *${data.title}*\n👤 Asignada por: ${user.name}\n📅 ${dateStr}${digestBlock}\n\nEscribí *tareas* para verlas todas.`
         ).catch(() => {});
       }
     }
@@ -1560,6 +1621,7 @@ function isKnownCommand(text: string): boolean {
   const knownCommands = [
     "tareas", "hoy", "semana", "completar", "hecho", "completado", "proceso", "iniciar", "en proceso", "posponer", "comentar",
     "deshacer", "revertir", "transferir", "crea tarea", "crear tarea", "nueva tarea",
+    "reunion", "reunión", "junta", "meeting", "hacer reunion", "hacer reunión",
     "recuerda", "recordar", "recordatorio", "evento", "eventos",
     "mandame", "mandame un mensaje", "mándame", "avisame", "avisame", "notificame", "notifícame", "enviame un mensaje", "envíame",
     "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",
