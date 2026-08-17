@@ -415,6 +415,55 @@ function formatTaskList(tasks: any[], startNum: number = 1): string {
   }).join("\n");
 }
 
+function parseReminderLocal(text: string, user: { id: string; name: string }) {
+  const t = text.toLowerCase().trim();
+
+  // Detectar a quién va asignado
+  let assignToName: string | null = null;
+  const assignMatch = t.match(/(?:recu[ée]rdale|recu[ée]rdale\s*a|m[aá]ndale|m[aá]ndale\s*un\s*mensaje\s*a|para|a)\s+([a-záéíóúñ]+)\b/i);
+  const toMe = /(recu[ée]rdame|m[aá]ndame|av[íi]same|notif[íi]came|env[íi]ame)/i.test(t);
+  if (assignMatch && !toMe) {
+    const candidate = assignMatch[1].replace(/^a\s+|^para\s+/i, "");
+    if (!/mensaje|recordatorio|nota|alerta|aviso/i.test(candidate)) {
+      assignToName = candidate;
+    }
+  }
+
+  // Fecha/hora
+  const time = parseTimeExpression(t);
+  let date = parseRelativeDate(t, new Date());
+
+  if (!date) {
+    // "a las 8 am mañana" → tiempo y mañana
+    let base = new Date();
+    if (/\bpasado\s*mañana\b/.test(t)) base.setDate(base.getDate() + 2);
+    else if (/\bmañana\b/.test(t) && !/\ben la mañana\b/.test(t)) base.setDate(base.getDate() + 1);
+    else if (/\bhoy\b/.test(t)) base.setDate(base.getDate());
+    else if (/\ben la noche\b/.test(t)) base.setDate(base.getDate());
+    else if (time) base.setDate(base.getDate()); // solo hora → hoy
+    base.setHours(time?.hours ?? 9, time?.minutes ?? 0, 0, 0);
+    date = base;
+  } else if (time) {
+    date.setHours(time.hours, time.minutes, 0, 0);
+  }
+
+  // Título: quitar prefijos de comando y asignación
+  let title = text
+    .replace(/(recu[ée]rdame|recu[ée]rdale|m[aá]ndame\s+un\s+mensaje|m[aá]ndame|m[aá]ndale\s+un\s+mensaje|m[aá]ndale|av[íi]same|notif[íi]came|por\s+fa\s+)/gi, "")
+    .replace(/\b(para|a)\s+[a-záéíóúñ]+\b/gi, "")
+    .replace(/\b(a\s+las\s+\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?|a\s+las|hoy|mañana|manana|pasado\s+mañana|en\s+la\s+mañana|en\s+la\s+tarde|en\s+la\s+noche|al\s+mediod[ií]a)\b/gi, "")
+    .replace(/\b(a\s+las\s+)?\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?/gi, "")
+    .replace(/[.,;]+$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (!title) title = "Recordatorio";
+  // Normalizar primera letra mayúscula
+  title = title.charAt(0).toUpperCase() + title.slice(1);
+
+  return { title, description: null, remindAt: date, assignToName };
+}
+
 async function parseReminderFromText(text: string, user: { id: string; name: string }) {
   try {
     const response = await askAI([{
@@ -460,7 +509,20 @@ Responde SOLO el JSON, sin markdown.`
 
     return { title: json.title, description: json.description, remindAt, assignToId };
   } catch {
-    return null;
+    // Fallback local: parsear hora/fecha/título sin depender de la IA
+    try {
+      const parsed = parseReminderLocal(text, user);
+      let assignToId: string | undefined;
+      if (parsed.assignToName) {
+        const target = await prisma.user.findFirst({
+          where: { name: { contains: parsed.assignToName, mode: "insensitive" }, active: true },
+        });
+        assignToId = target?.id;
+      }
+      return { title: parsed.title, description: parsed.description, remindAt: parsed.remindAt, assignToId };
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -1434,7 +1496,7 @@ function isKnownCommand(text: string): boolean {
     "tareas", "hoy", "semana", "completar", "hecho", "completado", "proceso", "iniciar", "en proceso", "posponer", "comentar",
     "transferir", "crea tarea", "crear tarea", "nueva tarea",
     "recuerda", "recordar", "recordatorio", "evento", "eventos",
-    "mandame", "mandame un mensaje", "mándame", "avisame", "avisame", "notificame", "notifícame",
+    "mandame", "mandame un mensaje", "mándame", "avisame", "avisame", "notificame", "notifícame", "enviame un mensaje", "envíame",
     "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",
     "que tengo", "que tengo para", "que hay", "tareas para mañana", "tareas del lunes", "tareas de la proxima semana", "tareas de la semana que viene",
     "ranking", "no ",

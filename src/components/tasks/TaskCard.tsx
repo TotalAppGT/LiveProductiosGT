@@ -45,6 +45,7 @@ const priorityBorderColors: Record<string, string> = {
 
 const categoryLabels: Record<TaskCategory, string> = {
   PRE_EVENTO: "Pre-evento",
+  EVENTO: "Evento",
   POST_EVENTO: "Post-evento",
   COTIZACION: "Cotización",
   COBRO: "Cobro",

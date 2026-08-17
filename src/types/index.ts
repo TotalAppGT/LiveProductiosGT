@@ -24,6 +24,7 @@ export type TaskPriority = 'BAJA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 
 export type TaskCategory =
   | 'PRE_EVENTO'
+  | 'EVENTO'
   | 'POST_EVENTO'
   | 'COTIZACION'
   | 'COBRO'

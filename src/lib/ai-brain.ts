@@ -27,6 +27,7 @@ COMANDOS QUE EL USUARIO PUEDE USAR (conocelos y sugerilos cuando sea útil):
 - "crea tarea [título] viernes 3pm" → Crear tarea
 - "crea tarea para Jorge llamar a Abel mañana 8am" → Crear tarea asignada (notifica)
 - "recuérdame [tarea] mañana 9am" → Recordatorio con aviso 10min antes
+- "mándame un mensaje a las 8am mañana" → Recordatorio genérico para ti a esa hora
 - "recuérdale a Diana [tarea] 3pm" / "mándale un mensaje a Abel 2pm" → Recordatorio para otra persona
 - "ranking" → Ver top de cumplimiento del equipo
 - "resumen" → Mis tareas + eventos + cumplimiento
