@@ -324,29 +324,44 @@ async function formatTasksForUser(userId: string, period?: string) {
   output = `📋 *Tus Tareas*\n\n`;
 
   // Prioridad: semana a semana (esta → próxima → siguiente), agrupado por día
+  // Números continuos para que los comandos (#) coincidan con lo mostrado
   const thisWeekAll = [...todayTasks, ...thisWeekTasks].filter((t, i, arr) => arr.indexOf(t) === i);
+  const weekBlocks: { label: string; tasks: any[] }[] = [];
+  if (thisWeekAll.length > 0) weekBlocks.push({ label: `ESTA SEMANA (${monday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: thisWeekAll });
+  if (nextWeekTasks.length > 0) weekBlocks.push({ label: `PRÓXIMA SEMANA (${nextMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: nextWeekTasks });
+  if (thirdWeekTasks.length > 0) weekBlocks.push({ label: `SIGUIENTE SEMANA (${thirdMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${thirdSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: thirdWeekTasks });
+
   const blocks: string[] = [];
-  if (thisWeekAll.length > 0) {
-    blocks.push(`📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})\n${groupTasksByDay(thisWeekAll)}`);
+  let runningNum = 1;
+  const orderedForView: any[] = [];
+  for (const wb of weekBlocks) {
+    const ordered = orderTasksForDisplay(wb.tasks);
+    orderedForView.push(...ordered);
+    blocks.push(`📅 *${wb.label}*\n${groupTasksByDay(ordered, runningNum)}`);
+    runningNum += ordered.length;
   }
-  if (nextWeekTasks.length > 0) {
-    blocks.push(`📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})\n${groupTasksByDay(nextWeekTasks)}`);
+  if (blocks.length > 0) {
+    output += blocks.join("\n\n") + "\n\n";
+    // Guardar la lista para que los comandos por # operen sobre lo que el usuario vio
+    saveTaskView(userId, orderedForView);
   }
-  if (thirdWeekTasks.length > 0) {
-    blocks.push(`📅 *SIGUIENTE SEMANA* (${thirdMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${thirdSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})\n${groupTasksByDay(thirdWeekTasks)}`);
-  }
-  if (blocks.length > 0) output += blocks.join("\n\n") + "\n\n";
 
   const hasFixed = Object.values(fixedByDay).some((arr) => arr.length > 0);
   if (hasFixed) {
     output += `📌 *ACTIVIDADES FIJAS*\n`;
+    const fixedOrdered: any[] = [];
     for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
       if (fixedByDay[day] && fixedByDay[day].length > 0) {
-        output += `${formatTaskList(fixedByDay[day])}\n`;
+        const od = orderTasksForDisplay(fixedByDay[day]);
+        output += `${formatTaskList(od, runningNum)}\n`;
+        fixedOrdered.push(...od);
+        runningNum += od.length;
       }
     }
+    if (fixedOrdered.length > 0) orderedForView.push(...fixedOrdered);
     output += "\n";
   }
+  if (orderedForView.length > 0) saveTaskView(userId, orderedForView);
 
   output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`tareas mes\` | \`ayuda\``;
   return output;
@@ -360,7 +375,20 @@ function taskPhasePriority(t: any): number {
   return 3;
 }
 
-function groupTasksByDay(tasks: any[], includeDate: boolean = true): string {
+function orderTasksForDisplay(tasks: any[]): any[] {
+  return [...tasks].sort((a, b) => {
+    // Primero por fase (Pre → Evento → Post), luego Fija antes que Variable, luego por día/hora
+    const phaseDiff = taskPhasePriority(a) - taskPhasePriority(b);
+    if (phaseDiff !== 0) return phaseDiff;
+    const typeDiff = (a.type === "FIJA" ? 0 : 1) - (b.type === "FIJA" ? 0 : 1);
+    if (typeDiff !== 0) return typeDiff;
+    const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+    const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+    return da - db;
+  });
+}
+
+function groupTasksByDay(tasks: any[], startNum: number = 1, includeDate: boolean = true): string {
   // Agrupar por día en orden cronológico
   const days = new Map<string, any[]>();
   tasks.forEach((t) => {
@@ -391,7 +419,6 @@ function groupTasksByDay(tasks: any[], includeDate: boolean = true): string {
     });
   });
 
-  let startNum = 1;
   return sortedDays.map(([dayLabel, dayTasks]) => {
     const block = `📅 *${dayLabel}*\n${formatTaskList(dayTasks, startNum)}`;
     startNum += dayTasks.length;
@@ -622,8 +649,27 @@ async function getPendingTasks(userId: string) {
   return prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
-    take: 20,
+    take: 30,
   });
+}
+
+// Guardar la lista que el usuario vio por última vez para que los comandos por # funcionen bien
+const lastViewTasks = new Map<string, { ids: string[]; expires: number }>();
+
+function saveTaskView(userId: string, tasks: { id: string }[]) {
+  lastViewTasks.set(userId, { ids: tasks.map((t) => t.id), expires: Date.now() + 30 * 60 * 1000 });
+}
+
+async function resolveTaskByNumber(userId: string, num: number) {
+  const view = lastViewTasks.get(userId);
+  if (view && Date.now() < view.expires && num >= 1 && num <= view.ids.length) {
+    const id = view.ids[num - 1];
+    const t = await prisma.task.findUnique({ where: { id } });
+    if (t) return t;
+  }
+  const tasks = await getPendingTasks(userId);
+  if (num < 1 || num > tasks.length) return null;
+  return tasks[num - 1];
 }
 
 async function completeTask(taskId: string, user: { id: string; name: string }) {
@@ -701,29 +747,40 @@ async function handleCommand(
     const numStr = cmd.replace(/^(completar|hecho|completado)\s+/i, "").trim();
     const num = parseInt(numStr);
     if (isNaN(num)) return "¿Cuál tarea? Ejemplo: *hecho 3* o *completar 5*";
-    const tasks = await getPendingTasks(user.id);
-    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas. Elige un número del 1 al ${tasks.length}.`;
-    const task = tasks[num - 1];
+    const task = await resolveTaskByNumber(user.id, num);
+    if (!task) return "No pude encontrar esa tarea. Escribí *tareas* para ver la lista actual.";
     await completeTask(task.id, user);
-    return `✅ Tarea *${task.title}* completada. ¡Buen trabajo ${user.name}!`;
+    return `✅ Tarea *${task.title}* completada. ¡Buen trabajo ${user.name}!\n_Si fue un error, escribe *deshacer ${num}* para revertirla._`;
+  }
+
+  if (cmd === "deshacer" || cmd.startsWith("deshacer ") || cmd.startsWith("revertir ") || cmd.startsWith("deshacer la ")) {
+    const numStr = cmd.replace(/^(deshacer\s+(la\s+)?|revertir\s+)/i, "").trim();
+    const num = parseInt(numStr);
+    if (isNaN(num)) return "¿Cuál tarea quieres revertir? Ejemplo: *deshacer 3*";
+    const task = await resolveTaskByNumber(user.id, num);
+    if (!task) return "No pude encontrar esa tarea. Escribí *tareas* para ver la lista actual.";
+    if (task.status !== "COMPLETADA") return `La tarea *${task.title}* no está completada.`;
+    await prisma.task.update({ where: { id: task.id }, data: { status: "PENDIENTE", confirmedAt: null } });
+    await prisma.taskHistory.create({
+      data: { taskId: task.id, userId: user.id, action: "DESHECHA via WhatsApp", previousStatus: "COMPLETADA", newStatus: "PENDIENTE" },
+    });
+    return `↩️ Tarea *${task.title}* deshecha: vuelve a estar pendiente.`;
   }
 
   if (cmd.startsWith("proceso ") || cmd.startsWith("iniciar ") || cmd.startsWith("en proceso ")) {
     const numStr = cmd.replace(/^(proceso|iniciar|en proceso)\s+/i, "").trim();
     const num = parseInt(numStr);
     if (isNaN(num)) return "¿Cuál tarea? Ejemplo: *proceso 3*";
-    const tasks = await getPendingTasks(user.id);
-    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas. Elige un número del 1 al ${tasks.length}.`;
-    const task = tasks[num - 1];
+    const task = await resolveTaskByNumber(user.id, num);
+    if (!task) return "No pude encontrar esa tarea. Escribí *tareas* para ver la lista actual.";
     await prisma.task.update({ where: { id: task.id }, data: { status: "EN_PROCESO" } });
     return `🔄 Tarea *${task.title}* marcada en proceso.`;
   }
 
   if (cmd.startsWith("no ") && /^\d+$/.test(cmd.replace("no ", "").trim())) {
     const num = parseInt(cmd.replace("no ", "").trim());
-    const tasks = await getPendingTasks(user.id);
-    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas.`;
-    const task = tasks[num - 1];
+    const task = await resolveTaskByNumber(user.id, num);
+    if (!task) return "No pude encontrar esa tarea. Escribí *tareas* para ver la lista actual.";
     const reason = "No realizada - sin motivo especificado";
     await prisma.task.update({
       where: { id: task.id },
@@ -756,9 +813,8 @@ async function handleCommand(
     const num = parseInt(parts[0]);
     if (isNaN(num)) return "Formato: *posponer 3* o *posponer 3 para mañana* o *posponer 3 para el viernes a las 3pm el cliente no contestó*";
 
-    const tasks = await getPendingTasks(user.id);
-    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas. Elige un número del 1 al ${tasks.length}.`;
-    const task = tasks[num - 1];
+    const task = await resolveTaskByNumber(user.id, num);
+    if (!task) return "No pude encontrar esa tarea. Escribí *tareas* para ver la lista actual.";
 
     const afterNum = rest.slice(parts[0].length).trim();
     const { newDate, reason } = parsePostponeDetails(afterNum);
@@ -777,9 +833,8 @@ async function handleCommand(
     const num = parseInt(parts[0]);
     if (isNaN(num)) return "Formato: *comentar 3 el cliente no contestó*";
     const comment = parts.slice(1).join(" ") || "Sin comentario";
-    const tasks = await getPendingTasks(user.id);
-    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas.`;
-    const task = tasks[num - 1];
+    const task = await resolveTaskByNumber(user.id, num);
+    if (!task) return "No pude encontrar esa tarea. Escribí *tareas* para ver la lista actual.";
     await addTaskComment(task.id, user.id, comment);
     return `💬 Comentario agregado a *${task.title}*: "${comment}"`;
   }
@@ -799,9 +854,8 @@ async function handleCommand(
       reason = "Transferida";
     }
     if (!targetName) return "¿A quién? Ejemplo: *transferir 3 a Diana*";
-    const tasks = await getPendingTasks(user.id);
-    if (num < 1 || num > tasks.length) return `Solo tienes ${tasks.length} tareas.`;
-    const task = tasks[num - 1];
+    const task = await resolveTaskByNumber(user.id, num);
+    if (!task) return "No pude encontrar esa tarea. Escribí *tareas* para ver la lista actual.";
     const targetUser = await prisma.user.findFirst({
       where: { name: { contains: targetName, mode: "insensitive" }, active: true },
     });
@@ -1505,7 +1559,7 @@ async function handleConversationStep(
 function isKnownCommand(text: string): boolean {
   const knownCommands = [
     "tareas", "hoy", "semana", "completar", "hecho", "completado", "proceso", "iniciar", "en proceso", "posponer", "comentar",
-    "transferir", "crea tarea", "crear tarea", "nueva tarea",
+    "deshacer", "revertir", "transferir", "crea tarea", "crear tarea", "nueva tarea",
     "recuerda", "recordar", "recordatorio", "evento", "eventos",
     "mandame", "mandame un mensaje", "mándame", "avisame", "avisame", "notificame", "notifícame", "enviame un mensaje", "envíame",
     "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",

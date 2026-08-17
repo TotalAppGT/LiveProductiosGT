@@ -741,13 +741,13 @@ export default function TareasPage() {
                             <div className="col-span-1 text-center text-[11px] text-gray-400 font-mono">{idx + 1}</div>
                             <div className="col-span-3 flex items-center gap-1.5 min-w-0">
                               <button
-                                onClick={() => updateTaskStatus(task.id, "COMPLETADA")}
+                                onClick={() => updateTaskStatus(task.id, task.status === "COMPLETADA" ? "PENDIENTE" : "COMPLETADA")}
                                 className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
                                   task.status === "COMPLETADA"
                                     ? "bg-green-500 border-green-500 text-white"
                                     : "border-gray-300 hover:border-green-400 hover:bg-green-50"
                                 }`}
-                                title={task.status === "COMPLETADA" ? "Desmarcar" : "Marcar realizado"}
+                                title={task.status === "COMPLETADA" ? "Desmarcar (volver a pendiente)" : "Marcar realizado"}
                               >
                                 {task.status === "COMPLETADA" && <CheckCircle2 className="w-2.5 h-2.5" />}
                               </button>
