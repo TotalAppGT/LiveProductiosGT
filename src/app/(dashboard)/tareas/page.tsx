@@ -80,6 +80,12 @@ export default function TareasPage() {
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [quickTitle, setQuickTitle] = useState("");
   const [quickCategory, setQuickCategory] = useState("PRE_EVENTO");
+  const [quickPriority, setQuickPriority] = useState("MEDIA");
+  const [quickIsFija, setQuickIsFija] = useState(false);
+  const [quickFrequency, setQuickFrequency] = useState("DIARIA");
+  const [quickDate, setQuickDate] = useState("");
+  const [quickTime, setQuickTime] = useState("");
+  const [quickAssignTo, setQuickAssignTo] = useState("");
   const [commentModal, setCommentModal] = useState<{ open: boolean; taskId: string; taskTitle: string }>({ open: false, taskId: "", taskTitle: "" });
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -199,18 +205,26 @@ export default function TareasPage() {
     const title = quickTitle.trim();
     if (!title) return;
     try {
+      const dueDate = quickDate ? new Date(quickDate) : new Date();
+      if (quickDate) dueDate.setDate(dueDate.getDate());
+      if (quickTime) {
+        const [h, m] = quickTime.split(":").map(Number);
+        dueDate.setHours(h, m, 0, 0);
+      } else if (quickDate) {
+        dueDate.setHours(9, 0, 0, 0);
+      }
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           title,
           description: "",
-          priority: "MEDIA",
+          priority: quickPriority,
           category: quickCategory,
-          type: "DINAMICA",
-          frequency: "DIARIA",
-          assignedToId: user?.id,
-          dueDate: new Date(),
+          type: quickIsFija ? "FIJA" : "DINAMICA",
+          frequency: quickIsFija ? quickFrequency : "DIARIA",
+          assignedToId: quickAssignTo || user?.id,
+          dueDate,
         }),
       });
       const json: ApiResponse<Task> = await res.json();
@@ -685,45 +699,118 @@ export default function TareasPage() {
             ) : viewMode === "sheet" ? (
               <div className="space-y-2">
                 {/* Fila rápida: agregar tarea como en Excel */}
-                <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
-                  <select
-                    value={quickCategory}
-                    onChange={(e) => setQuickCategory(e.target.value)}
-                    className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-white"
-                    title="Categoría"
-                  >
-                    <option value="PRE_EVENTO">🎪 Pre Evento</option>
-                    <option value="EVENTO">🚀 Evento</option>
-                    <option value="POST_EVENTO">🏁 Post Evento</option>
-                    <option value="COTIZACION">Cotización</option>
-                    <option value="INVENTARIO">Inventario</option>
-                    <option value="OTRO">Otro</option>
-                  </select>
-                  <input
-                    value={quickTitle}
-                    onChange={(e) => setQuickTitle(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && quickTitle.trim()) quickAddTask(); }}
-                    placeholder="➕ Agregar tarea y presionar Enter (ej: Confirmar staff para evento sábado)"
-                    className="flex-1 bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
-                  />
-                  <Button variant="primary" size="sm" onClick={quickAddTask} disabled={!quickTitle.trim()}>
-                    Agregar
-                  </Button>
+                <div className="px-3 py-2 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={quickTitle}
+                      onChange={(e) => setQuickTitle(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && quickTitle.trim()) quickAddTask(); }}
+                      placeholder="➕ Agregar tarea y presionar Enter"
+                      className="flex-1 bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+                    />
+                    <Button variant="primary" size="sm" onClick={quickAddTask} disabled={!quickTitle.trim()}>
+                      Agregar
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                    <label className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                      Tipo:
+                      <select
+                        value={quickCategory}
+                        onChange={(e) => setQuickCategory(e.target.value)}
+                        className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 text-xs text-gray-900 dark:text-white"
+                      >
+                        <option value="PRE_EVENTO">🎪 Pre Evento</option>
+                        <option value="EVENTO">🚀 Evento</option>
+                        <option value="POST_EVENTO">🏁 Post Evento</option>
+                        <option value="COTIZACION">Cotización</option>
+                        <option value="INVENTARIO">Inventario</option>
+                        <option value="VEHICULO">Vehículo</option>
+                        <option value="PERSONAL">Personal</option>
+                        <option value="BODEGA">Bodega</option>
+                        <option value="OTRO">Otro</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                      Prioridad:
+                      <select
+                        value={quickPriority}
+                        onChange={(e) => setQuickPriority(e.target.value)}
+                        className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 text-xs text-gray-900 dark:text-white"
+                      >
+                        <option value="BAJA">🟢 Baja</option>
+                        <option value="MEDIA">🟡 Media</option>
+                        <option value="ALTA">🔴 Alta</option>
+                        <option value="URGENTE">🔴 Urgente</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                      <input
+                        type="checkbox"
+                        checked={quickIsFija}
+                        onChange={(e) => setQuickIsFija(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      🔁 Fija
+                    </label>
+                    {quickIsFija && (
+                      <label className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                        Frecuencia:
+                        <select
+                          value={quickFrequency}
+                          onChange={(e) => setQuickFrequency(e.target.value)}
+                          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 text-xs text-gray-900 dark:text-white"
+                        >
+                          <option value="DIARIA">Diaria</option>
+                          <option value="SEMANAL">Semanal</option>
+                          <option value="MENSUAL">Mensual</option>
+                        </select>
+                      </label>
+                    )}
+                    <label className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                      Día:
+                      <input
+                        type="date"
+                        value={quickDate}
+                        onChange={(e) => setQuickDate(e.target.value)}
+                        className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 text-xs text-gray-900 dark:text-white"
+                      />
+                    </label>
+                    <label className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                      Hora:
+                      <input
+                        type="time"
+                        value={quickTime}
+                        onChange={(e) => setQuickTime(e.target.value)}
+                        className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 text-xs text-gray-900 dark:text-white"
+                      />
+                    </label>
+                    <label className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                      Para:
+                      <select
+                        value={quickAssignTo}
+                        onChange={(e) => setQuickAssignTo(e.target.value)}
+                        className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 text-xs text-gray-900 dark:text-white"
+                      >
+                        <option value="">Yo</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                 </div>
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 {/* Cabecera de hoja de cálculo */}
-                <div className="grid grid-cols-12 gap-1.5 px-2 py-1.5 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 min-w-[1000px] sticky top-0 z-10">
+                <div className="grid grid-cols-12 gap-1 px-2 py-1.5 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 min-w-[720px] sticky top-0 z-10">
                   <div className="col-span-1 text-center">#</div>
-                  <div className="col-span-3">Tarea</div>
-                  <div className="col-span-2">Categoría</div>
-                  <div className="col-span-1 text-center">Tipo</div>
-                  <div className="col-span-2">Día / Hora</div>
-                  <div className="col-span-1">Asignado</div>
+                  <div className="col-span-5">Tarea</div>
+                  <div className="col-span-3">Día / Hora</div>
                   <div className="col-span-1 text-center">Prio</div>
-                  <div className="col-span-1 text-right">Acciones</div>
+                  <div className="col-span-2 text-right">Acciones</div>
                 </div>
                 <div className="overflow-x-auto">
-                  <div className="min-w-[1000px]">
+                  <div className="min-w-[720px]">
                     {sheetGroups.map((group, gi) => (
                       <div key={group.key + gi}>
                         {/* Fila de fase: Pre / Evento / Post */}
@@ -734,12 +821,12 @@ export default function TareasPage() {
                         {group.tasks.map((task, idx) => (
                           <div
                             key={task.id}
-                            className={`grid grid-cols-12 gap-1.5 px-2 py-1 text-[13px] items-center border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
+                            className={`grid grid-cols-12 gap-1 px-2 py-1 text-[13px] items-center border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
                               task.status === "COMPLETADA" ? "bg-green-50/50 dark:bg-green-900/10" : idx % 2 === 1 ? "bg-gray-50/60 dark:bg-gray-800/30" : ""
                             }`}
                           >
                             <div className="col-span-1 text-center text-[11px] text-gray-400 font-mono">{idx + 1}</div>
-                            <div className="col-span-3 flex items-center gap-1.5 min-w-0">
+                            <div className="col-span-5 flex items-center gap-1.5 min-w-0">
                               <button
                                 onClick={() => updateTaskStatus(task.id, task.status === "COMPLETADA" ? "PENDIENTE" : "COMPLETADA")}
                                 className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
@@ -754,31 +841,20 @@ export default function TareasPage() {
                               <span className={`truncate ${task.status === "COMPLETADA" ? "line-through text-gray-400" : "text-gray-900 dark:text-white"}`}>
                                 {task.title}
                               </span>
-                            </div>
-                            <div className="col-span-2 flex items-center gap-1 text-[10px]">
-                              {task.category === "PRE_EVENTO" ? (
-                                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-semibold">🎪 Pre</span>
-                              ) : task.category === "EVENTO" ? (
-                                <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 font-semibold">🚀 Evento</span>
-                              ) : task.category === "POST_EVENTO" ? (
-                                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 font-semibold">🏁 Post</span>
-                              ) : (
-                                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">•</span>
+                              {task.type === "FIJA" && (
+                                <span className="shrink-0 text-[9px] px-1 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 font-semibold">🔁</span>
                               )}
-                              <span className={`text-[10px] font-semibold ${task.type === "FIJA" ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>
-                                {task.type === "FIJA" ? "🔁 Fija" : "Var"}
-                              </span>
+                              {task.assignedTo && (
+                                <span className="shrink-0 text-[10px] text-gray-400">· {task.assignedTo.name.split(" ")[0]}</span>
+                              )}
                             </div>
-                            <div className="col-span-2 text-[11px] text-gray-600 dark:text-gray-300 truncate">
+                            <div className="col-span-3 text-[11px] text-gray-600 dark:text-gray-300 truncate">
                               {task.dueDate ? (
                                 <>
                                   <span className="font-medium">{new Date(task.dueDate).toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" })}</span>
                                   <span className="text-gray-400"> · {new Date(task.dueDate).toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" })}</span>
                                 </>
                               ) : "—"}
-                            </div>
-                            <div className="col-span-1 text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                              {task.assignedTo?.name?.split(" ")[0] || "—"}
                             </div>
                             <div className="col-span-1 flex items-center justify-center gap-0.5">
                               <span
@@ -789,7 +865,7 @@ export default function TareasPage() {
                               {task.status === "REPROGRAMADA" && <span className="text-[9px]" title="Pospuesta">🟣</span>}
                               {task.status === "EN_PROCESO" && <span className="text-[9px]" title="En proceso">🔄</span>}
                             </div>
-                            <div className="col-span-1 flex items-center justify-end gap-0.5">
+                            <div className="col-span-2 flex items-center justify-end gap-0.5">
                               {task.status !== "COMPLETADA" && (
                                 <button
                                   onClick={() => updateTaskStatus(task.id, "EN_PROCESO")}
