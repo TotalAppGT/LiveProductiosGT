@@ -740,6 +740,18 @@ async function resolveTaskByNumber(userId: string, num: number) {
   return tasks[num - 1];
 }
 
+// Extrae números de un texto como "1 2 3", "1, 2 y 3", "1 y 2", "hecho 1 hecho 2"
+function extractNumbers(text: string): number[] {
+  // Quitar palabras "y" y separadores, dejar solo números y espacios
+  const cleaned = text
+    .replace(/\b(y|e|hecho|hechos|completar|completado|completada|completadas|proceso|posponer|transferir|comentar|no)\b/gi, " ")
+    .replace(/[,\/]/g, " ");
+  const matches = cleaned.match(/\d+/g);
+  if (!matches) return [];
+  const nums = matches.map((m) => parseInt(m)).filter((n) => !isNaN(n) && n > 0);
+  return Array.from(new Set(nums));
+}
+
 async function completeTask(taskId: string, user: { id: string; name: string }) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) throw new Error("Tarea no encontrada");
@@ -919,14 +931,26 @@ async function handleCommand(
 ): Promise<string | null> {
   const cmd = command.toLowerCase().trim().replace(/[áéíóúñ]/g, (c: string) => ({ á: "a", é: "e", í: "i", ó: "o", ú: "u", ñ: "n" }[c] || c));
 
-  if (cmd.startsWith("completar ") || cmd.startsWith("hecho ") || cmd.startsWith("completado ")) {
-    const numStr = cmd.replace(/^(completar|hecho|completado)\s+/i, "").trim();
-    const num = parseInt(numStr);
-    if (isNaN(num)) return "¿Cuál tarea? Ejemplo: *hecho 3* o *completar 5*";
-    const task = await resolveTaskByNumber(user.id, num);
-    if (!task) return "No pude encontrar esa tarea. Escribí *tareas* para ver la lista actual.";
-    await completeTask(task.id, user);
-    return `✅ Tarea *${task.title}* completada. ¡Buen trabajo ${user.name}!\n_Si fue un error, escribe *deshacer ${num}* para revertirla._`;
+  if (cmd.startsWith("completar ") || cmd.startsWith("hecho ") || cmd.startsWith("completado ") || cmd.startsWith("hechos ") || cmd.startsWith("completadas ")) {
+    const numStr = cmd.replace(/^(completar|completado|completadas|hecho|hechos)\s+/i, "").trim();
+    const nums = extractNumbers(numStr);
+    if (nums.length === 0) return "¿Cuáles tareas? Ejemplo: *hecho 3* o *hecho 1 2 3* o *hechos 1 y 2*";
+    const completed: string[] = [];
+    const failed: string[] = [];
+    for (const num of nums) {
+      const task = await resolveTaskByNumber(user.id, num);
+      if (!task) { failed.push(String(num)); continue; }
+      if (task.status === "COMPLETADA") { failed.push(`${num} (ya estaba hecha)`); continue; }
+      await completeTask(task.id, user);
+      completed.push(task.title);
+    }
+    if (completed.length === 0) {
+      return `⚠️ No pude completar: ${failed.join(", ")}. Escribí *tareas* para ver la lista actual.`;
+    }
+    let reply = `✅ *${completed.length} tarea${completed.length > 1 ? "s" : ""} completada${completed.length > 1 ? "s" : ""}:*\n${completed.map((t) => `• ${t}`).join("\n")}`;
+    if (failed.length > 0) reply += `\n\n⚠️ No se pudo: ${failed.join(", ")}`;
+    reply += `\n\n_Si fue un error, escribe *deshacer [número]*._`;
+    return reply;
   }
 
   if (cmd === "deshacer" || cmd.startsWith("deshacer ") || cmd.startsWith("revertir ") || cmd.startsWith("deshacer la ")) {
@@ -945,12 +969,18 @@ async function handleCommand(
 
   if (cmd.startsWith("proceso ") || cmd.startsWith("iniciar ") || cmd.startsWith("en proceso ")) {
     const numStr = cmd.replace(/^(proceso|iniciar|en proceso)\s+/i, "").trim();
-    const num = parseInt(numStr);
-    if (isNaN(num)) return "¿Cuál tarea? Ejemplo: *proceso 3*";
-    const task = await resolveTaskByNumber(user.id, num);
-    if (!task) return "No pude encontrar esa tarea. Escribí *tareas* para ver la lista actual.";
-    await prisma.task.update({ where: { id: task.id }, data: { status: "EN_PROCESO" } });
-    return `🔄 Tarea *${task.title}* marcada en proceso.`;
+    const nums = extractNumbers(numStr);
+    if (nums.length === 0) return "¿Cuáles tareas? Ejemplo: *proceso 3* o *proceso 1 2 3*";
+    const done: string[] = [];
+    const failed: string[] = [];
+    for (const num of nums) {
+      const task = await resolveTaskByNumber(user.id, num);
+      if (!task) { failed.push(String(num)); continue; }
+      await prisma.task.update({ where: { id: task.id }, data: { status: "EN_PROCESO" } });
+      done.push(task.title);
+    }
+    if (done.length === 0) return `⚠️ No pude marcar: ${failed.join(", ")}. Escribí *tareas* para ver la lista.`;
+    return `🔄 *${done.length} tarea${done.length > 1 ? "s" : ""} en proceso:*\n${done.map((t) => `• ${t}`).join("\n")}`;
   }
 
   if (cmd.startsWith("no ") && /^\d+$/.test(cmd.replace("no ", "").trim())) {
@@ -1571,10 +1601,11 @@ tareas semana
 
 ⚡ *Acciones de tareas (usa el #):*
 #1 Completada → hecho 1
-#2 En proceso → proceso 1
-#3 Posponer para mañana → posponer 1
-#4 Transferir → transferir 1 a Diana
-#5 Comentar → comentar 1 texto
+#2 Varias a la vez → hecho 1 2 3
+#3 En proceso → proceso 1
+#4 Posponer para mañana → posponer 1
+#5 Transferir → transferir 1 a Diana
+#6 Comentar → comentar 1 texto
 
 ➕ *Crear tareas:*
 crea tarea [título] mañana 10am

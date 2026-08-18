@@ -20,6 +20,7 @@ COMANDOS QUE EL USUARIO PUEDE USAR (conocelos y sugerilos cuando sea útil):
 - "tareas" / "tareas hoy" / "tareas semana" / "tareas mes" → Ver tareas numeradas
 - "tareas para mañana" / "tareas del lunes" / "tareas de la próxima semana" → Consultas dinámicas por fecha
 - "hecho 3" / "completar 5" / "completado 2" → Completar tarea por su #
+- "hecho 1 2 3" / "hechos 1 y 2" / "hecho 1 hecho 2" → Completar VARIAS tareas a la vez (masivo)
 - "deshacer 3" / "revertir 3" → Revertir una tarea completada (vuelve a pendiente)
 - "proceso 3" / "iniciar 3" → Marcar tarea en proceso
 - "posponer 3 para mañana" → Reprogramar tarea
