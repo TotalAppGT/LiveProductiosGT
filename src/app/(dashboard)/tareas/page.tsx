@@ -91,6 +91,7 @@ export default function TareasPage() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [purchases, setPurchases] = useState<any[]>([]);
   const [quickBuyTitle, setQuickBuyTitle] = useState("");
+  const [reminders, setReminders] = useState<any[]>([]);
 
   const isAdminOrJefe = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
 
@@ -103,6 +104,21 @@ export default function TareasPage() {
       if (res.ok) {
         const json = await res.json();
         if (json.success) setPurchases(json.data || []);
+      }
+    } catch {
+      // silencioso
+    }
+  }, [token]);
+
+  const fetchReminders = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/reminders?status=PENDIENTE&limit=200", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setReminders(json.data || []);
       }
     } catch {
       // silencioso
@@ -183,7 +199,8 @@ export default function TareasPage() {
     fetchTasks();
     fetchUsers();
     fetchPurchases();
-  }, [fetchTasks, fetchUsers, fetchPurchases]);
+    fetchReminders();
+  }, [fetchTasks, fetchUsers, fetchPurchases, fetchReminders]);
 
   async function updateTaskStatus(taskId: string, status: TaskStatus) {
     try {
@@ -308,6 +325,36 @@ export default function TareasPage() {
       fetchPurchases();
     } catch {
       toast.error("Error al eliminar compra");
+    }
+  }
+
+  async function completeReminder(id: string) {
+    try {
+      const res = await fetch(`/api/reminders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ isCompleted: true }),
+      });
+      if (res.ok) {
+        toast.success("Recordatorio completado");
+        fetchReminders();
+      }
+    } catch {
+      toast.error("Error al completar recordatorio");
+    }
+  }
+
+  async function deleteReminder(id: string) {
+    if (!confirm("¿Eliminar este recordatorio?")) return;
+    try {
+      await fetch(`/api/reminders/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Recordatorio eliminado");
+      fetchReminders();
+    } catch {
+      toast.error("Error al eliminar recordatorio");
     }
   }
 
@@ -975,6 +1022,68 @@ export default function TareasPage() {
                         ))}
                       </div>
                     ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ⏰ RECORDATORIOS - hoja de cálculo */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="px-2 py-1 text-[11px] font-bold text-white bg-sky-600 flex items-center justify-between">
+                  <span>⏰ Recordatorios</span>
+                  <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{reminders.length}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <div className="min-w-[720px]">
+                    <div className="grid grid-cols-12 gap-1 px-2 py-1.5 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      <div className="col-span-1 text-center">#</div>
+                      <div className="col-span-5">Recordatorio</div>
+                      <div className="col-span-3">Fecha / Hora</div>
+                      <div className="col-span-1">Asignado</div>
+                      <div className="col-span-2 text-right">Acciones</div>
+                    </div>
+                    {reminders.map((r, idx) => (
+                      <div
+                        key={r.id}
+                        className={`grid grid-cols-12 gap-1 px-2 py-1 text-[13px] items-center border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${idx % 2 === 1 ? "bg-gray-50/60 dark:bg-gray-800/30" : ""}`}
+                      >
+                        <div className="col-span-1 text-center text-[11px] text-gray-400 font-mono">{idx + 1}</div>
+                        <div className="col-span-5 flex items-center gap-1.5 min-w-0">
+                          <button
+                            onClick={() => completeReminder(r.id)}
+                            className="w-4 h-4 rounded border-2 border-gray-300 hover:border-sky-400 hover:bg-sky-50 flex items-center justify-center shrink-0"
+                            title="Completar"
+                          >
+                            <CheckCircle2 className="w-2.5 h-2.5 text-transparent" />
+                          </button>
+                          <span className="truncate text-gray-900 dark:text-white">{r.title}</span>
+                        </div>
+                        <div className="col-span-3 text-[11px] text-gray-600 dark:text-gray-300 truncate">
+                          {new Date(r.remindAt).toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" })} · {new Date(r.remindAt).toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                        <div className="col-span-1 text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                          {r.assignedTo?.name?.split(" ")[0] || "—"}
+                        </div>
+                        <div className="col-span-2 flex items-center justify-end gap-0.5">
+                          <button
+                            onClick={() => completeReminder(r.id)}
+                            className="p-0.5 rounded hover:bg-sky-50 dark:hover:bg-sky-900/30 text-sky-600"
+                            title="Completar"
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => deleteReminder(r.id)}
+                            className="p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-red-400"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {reminders.length === 0 && (
+                      <div className="px-3 py-3 text-xs text-gray-400 text-center">No hay recordatorios pendientes</div>
+                    )}
                   </div>
                 </div>
               </div>
