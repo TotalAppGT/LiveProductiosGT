@@ -197,7 +197,34 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
     <li>Columnas: <code>titulo</code>, <code>asignado_a</code> (nombre exacto), <code>categoria</code>, <code>tipo</code> (FIJA/DINAMICA), <code>frecuencia</code>, <code>dia_semana</code>, <code>fecha</code> (YYYY-MM-DD), <code>hora</code> (HH:MM), <code>prioridad</code>.</li>
     <li>Para tareas <strong>fijas</strong> (ej. "revisar chat de pagos cada lunes"): tipo=FIJA, frecuencia=SEMANAL, dia_semana=LUNES, dejar <code>fecha</code> vacía.</li>
     <li>Para tareas <strong>variables</strong> (puntuales): tipo=DINAMICA y llenar <code>fecha</code> (y hora si aplica).</li>
-    <li>Borrar la fila de ejemplo antes de subir. Se aceptan fechas DD/MM/AAAA también.</li>
+    <li>Borrar la fila de ejemplo antes de subir. Se aceptan fechas DD/MM/AAAA también. Las tareas duplicadas (mismo título y asignado) se omiten automáticamente.</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>🖥️ VISTA WEB DE TAREAS (tipo Excel)</h2>
+  <p style="font-size:12px;color:#666;">
+    La pestaña <strong>Tareas</strong> se organiza por <strong>Fase → Día → Fijas/Variables</strong>:
+  </p>
+  <div class="example">🎪 PRE EVENTO
+  📅 Lunes
+    🔁 Fijas (3)
+    ⚡ Variables (2)
+  📅 Martes
+    🔁 Fijas (1)
+🚀 EVENTO
+  📅 Sábado
+    ⚡ Variables (2)
+🏁 POST EVENTO
+  📅 Lunes
+    🔁 Fijas (4)</div>
+  <ul>
+    <li><strong>Botón +</strong> en cada fase o segmento → inserta una nueva fila/tarea ahí.</li>
+    <li><strong>Filtros</strong>: 🎪 Pre Evento / 🚀 Evento / 🏁 Post Evento, y 🔁 Fijas / ⚡ Variables.</li>
+    <li><strong>Botón "Por Día"</strong> → cambia a vista agrupada solo por día (Lunes-Sábado).</li>
+    <li><strong>Acciones por fila</strong>: ✓ completar, ↑↓ subir/bajar (reordenar), ✏️ editar, ▶ en proceso, ⏰ posponer, 💬 comentar, 🗑 eliminar.</li>
+    <li>Al completar una tarea, se quita del listado; si es <strong>fija</strong>, se regenera para su próxima semana/mes.</li>
+    <li>Debajo de las tareas aparecen los bloques de <strong>⏰ Recordatorios</strong> y <strong>🛒 Compras</strong>, todos ordenados por día y hora.</li>
   </ul>
 </div>
 
@@ -217,11 +244,12 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
 
 <div class="tip">
   💡 <strong>Tips:</strong><br>
-  • Cada tarea sale numerada y ordenada por fase (Pre/Evento/Post), luego fija/variable, y por hora/día. Usa el número para las acciones.<br>
+  • Cada tarea sale numerada y ordenada por fase (Pre/Evento/Post), luego día, luego fija/variable, y por hora. Usa el número para las acciones.<br>
+  • Podés completar varias de una vez: <code>hecho 1 2 3</code>.<br>
   • Las tareas pueden llevar hora o solo fecha (sin horario).<br>
   • LUNA avisa <strong>10 minutos antes</strong> y a la hora exacta de cada recordatorio.<br>
   • Las tareas no hechas se reprograman al día siguiente automáticamente y siguen apareciendo hasta completarse.<br>
-  • En la web, Tareas se ve como hoja de cálculo (Excel): marca el círculo ✅ para realizarla, botones ▶ ⏰ 💬 🗑 a la derecha.<br>
+  • En la web, Tareas se ve como hoja de cálculo (Excel), organizada por Fase → Día → Fijas/Variables, con botón + para insertar filas, ↑↓ para reordenar y ✏️ para editar.<br>
   • Si dudas, escribe <code>ayuda</code>.
 </div>
 
