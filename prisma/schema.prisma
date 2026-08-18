@@ -587,6 +587,20 @@ model Purchase {
   @@index([assignedToId])
 }
 
+model ScheduledMessage {
+  id          String    @id @default(cuid())
+  toNumber    String
+  message     String
+  scheduledAt DateTime
+  status      String    @default("PENDIENTE") // PENDIENTE | ENVIADO | CANCELADO
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+  @@index([scheduledAt])
+}
+
 model FileAttachment {
   id           String         @id @default(uuid())
   fileName     String

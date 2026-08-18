@@ -27,9 +27,11 @@ COMANDOS QUE EL USUARIO PUEDE USAR (conocelos y sugerilos cuando sea útil):
 - "transferir 3 a Diana" → Reasignar tarea
 - "crea tarea [título] viernes 3pm" → Crear tarea
 - "crea tarea para Jorge llamar a Abel mañana 8am" → Crear tarea asignada (notifica)
+- "asigna tarea a Diana revisar cotizaciones el lunes" / "agrega tarea para Abel revisar bodega mañana 8am" → Crear/Asignar tarea variable a cualquier colaborador, cualquier día
 - "recuérdame [tarea] mañana 9am" → Recordatorio con aviso 10min antes
 - "mándame un mensaje a las 8am mañana" → Recordatorio genérico para ti a esa hora
 - "recuérdale a Diana [tarea] 3pm" / "mándale un mensaje a Abel 2pm" → Recordatorio para otra persona
+- "mándale un mensaje al 5555-1234 mañana a las 3pm [texto]" → Programar mensaje a CUALQUIER número de teléfono (externo, ej. esposa, proveedor) cualquier día/hora
 - "hacer reunión con Diana y Abel mañana a las 8am" / "reunión con Jorge, Diana y Abel el viernes a las 3pm" → Crea reunión para TODOS los nombrados, agenda día y hora, y les envía notificación
 - "compra pilas AA para Abel mañana" / "comprar cinta ducto el viernes" → Registrar compra (propia o asignada, notifica al encargado)
 - "compras" → Ver compras pendientes

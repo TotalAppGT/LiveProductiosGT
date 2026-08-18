@@ -1242,12 +1242,33 @@ async function handleCommand(
     return `📅 *${title}*\n\n${body}\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
   }
 
+  // ➕ CREAR/ASIGNAR TAREA (antes de "ver tareas" para no confundirse)
+  // "crea tarea X", "asigna tarea a Diana X", "agrega tarea para Jorge X", "ponle tarea a Abel X"
+  const createTaskMatch = cmd.match(/^(crea|crear|asigna|asignar|agrega|agregar|ponle|ponele|pon|deja|dejale|d[ée]jale)\s+(una\s+)?tarea\b/i);
+  if (createTaskMatch) {
+    let details = cmd.replace(/^(crea|crear|asigna|asignar|agrega|agregar|ponle|ponele|pon|deja|dejale|d[ée]jale)\s+(una\s+)?tarea\b/i, "").trim();
+    // Si empieza con "para X" o "a X", normalizar a "para X" para el parser
+    details = details.replace(/^\s*(para|a)\s+/i, "para ");
+    if (!details) {
+      return "📝 *Nueva Tarea*\n\nEscribí todo junto: *asigna tarea para Diana revisar cotizaciones mañana 10am*";
+    }
+    return await handleCreateTask(details, user);
+  }
+
+  if (cmd.startsWith("nueva tarea")) {
+    const details = cmd.replace(/^nueva\s+tarea\s*/i, "").trim();
+    if (!details) {
+      return "📝 *Nueva Tarea*\n\nEscribí todo junto: *crea tarea para Diana revisar cotizaciones mañana 10am*";
+    }
+    return await handleCreateTask(details, user);
+  }
+
   if (
     cmd === "tareas" || cmd === "mis tareas" || cmd === "ver tareas" ||
     cmd === "muestrame mis tareas" || cmd === "muéstrame mis tareas" ||
     cmd === "quiero ver mis tareas" || cmd === "ver mis tareas" ||
     /^(ver|mostrar|muestra|muéstrame|dame|consultar|listar|revisar)\s+(mis\s+)?tareas/.test(cmd) ||
-    (cmd.includes("tarea") && !cmd.startsWith("tareas hoy") && !cmd.startsWith("tareas semana") && !cmd.includes("crea") && !cmd.includes("crear") && !cmd.includes("nueva"))
+    (cmd.includes("tarea") && !cmd.startsWith("tareas hoy") && !cmd.startsWith("tareas semana") && !cmd.includes("crea") && !cmd.includes("crear") && !cmd.includes("nueva") && !cmd.includes("asigna") && !cmd.includes("asignar") && !cmd.includes("agrega") && !cmd.includes("agregar") && !cmd.includes("ponle") && !cmd.includes("deja"))
   ) {
     const tasks = await formatTasksForUser(user.id);
     if (!tasks) return `Hola ${user.name}, no tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
@@ -1258,6 +1279,46 @@ async function handleCommand(
     const tasks = await formatTasksForUser(user.id);
     if (!tasks) return `${user.name}, no tienes tareas pendientes. ¡Todo al día! ✅`;
     return tasks;
+  }
+
+  // 💬 MENSAJE A CUALQUIER NÚMERO: "mándale un mensaje al 5555-1234 mañana a las 3pm que..."
+  if (/^(m[aá]ndale|m[aá]nda|env[íi]a|env[íi]ale|mensaje|m[aá]ndame)\b/.test(cmd) && /\b(?:al\s+|para\s+el\s+)?\d{8}\b/.test(cmd)) {
+    const phoneMatch = cmd.match(/\d{8}/);
+    if (phoneMatch) {
+      const rawNumber = phoneMatch[0];
+      const targetNumber = normalizeGTPhone(rawNumber);
+      // Extraer mensaje y fecha/hora
+      const time = parseTimeExpression(cmd);
+      let when = parseRelativeDate(cmd, new Date());
+      if (!when) {
+        when = new Date();
+        if (time) when.setHours(time.hours, time.minutes, 0, 0);
+        else when.setHours(9, 0, 0, 0);
+      } else if (time) {
+        when.setHours(time.hours, time.minutes, 0, 0);
+      }
+      // Quitar el número, fecha/hora y prefijos del mensaje
+      let msgText = cmd
+        .replace(/\d{8}/, "")
+        .replace(/^(m[aá]ndale|m[aá]nda|env[íi]a|env[íi]ale|m[aá]ndame)\s+(un\s+)?(mensaje|whats|sms)\b/i, "")
+        .replace(/\b(al|para\s+el|a\s+las|al\s+numero|numero)\b/gi, "")
+        .replace(/\b(mañana|manana|pasado\s+mañana|hoy|el\s+(lunes|martes|miercoles|jueves|viernes|sabado|domingo))\b/gi, "")
+        .replace(/\b(a\s+las\s+)?\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?/gi, "")
+        .replace(/[.,;]+$/, "").replace(/\s{2,}/g, " ").trim();
+      if (!msgText) msgText = "Mensaje de Live Productions";
+
+      await prisma.scheduledMessage.create({
+        data: {
+          toNumber: targetNumber,
+          message: msgText,
+          scheduledAt: when,
+          createdById: user.id,
+        },
+      });
+
+      const dateStr = `${when.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${when.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+      return `💬 *Mensaje programado*\n\nPara: ${targetNumber}\n🕐 ${dateStr}\nTexto: "${msgText}"\n\nLo enviaré a esa hora.`;
+    }
   }
 
   // 📅 REUNIÓN: "hacer reunión con Diana y Abel mañana a las 8am"
@@ -1322,22 +1383,6 @@ async function handleCommand(
     return targetUser && targetUser.id !== user.id
       ? `⏰ Recordatorio creado para *${targetName}*: *${parsed.title}*\n📅 ${dateStr}\n🔔 Notificación enviada a *${targetName}*.\n_Te avisará 10 minutos antes y a la hora exacta._`
       : `⏰ Recordatorio creado para ti: *${parsed.title}*\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
-  }
-
-  if (cmd.startsWith("crea tarea") || cmd.startsWith("crear tarea")) {
-    const details = cmd.replace(/^crea(r)?\s+tarea\s*/i, "").trim();
-    if (!details) {
-      return "📝 *Nueva Tarea* - Paso 1/5\n¿Qué título le pongo a la tarea?\n\nO escribe todo junto: *crea tarea para Diana revisar cotizaciones mañana 10am*";
-    }
-    return await handleCreateTask(details, user);
-  }
-
-  if (cmd.startsWith("nueva tarea")) {
-    const details = cmd.replace(/^nueva\s+tarea\s*/i, "").trim();
-    if (!details) {
-      return "📝 *Nueva Tarea* - Paso 1/5\n¿Qué título le pongo a la tarea?\n\nO escribe todo junto: *crea tarea para Diana revisar cotizaciones mañana 10am*";
-    }
-    return await handleCreateTask(details, user);
   }
 
   if (cmd === "eventos") {
@@ -1777,6 +1822,8 @@ function isKnownCommand(text: string): boolean {
     "ranking", "no ",
     "inventario", "vehiculos", "vehículos", "cobros", "empleados", "personal",
     "compra", "comprar", "compras", "comprado", "agrega compra", "agregar compra",
+    "asigna", "asignar", "agrega tarea", "agregar tarea", "ponle", "deja",
+    "mandale", "mándale", "manda", "envia", "enviale", "envíale", "mensaje",
   ];
   const lower = text.toLowerCase().trim();
   return knownCommands.some(k => lower.startsWith(k));

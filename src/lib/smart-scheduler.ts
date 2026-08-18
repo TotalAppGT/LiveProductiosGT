@@ -1185,3 +1185,38 @@ export async function fireScheduledAlerts(): Promise<{ sent: number }> {
   return { sent };
 }
 
+// Enviar mensajes programados a números externos (ej. dueño -> esposa, proveedores)
+export async function fireScheduledMessages(): Promise<{ sent: number }> {
+  let sent = 0;
+  try {
+    const now = new Date();
+    const due = await prisma.scheduledMessage.findMany({
+      where: {
+        status: "PENDIENTE",
+        scheduledAt: { lte: now },
+      },
+      take: 50,
+    });
+
+    for (const sm of due) {
+      try {
+        await sendMessage(sm.toNumber, sm.message);
+        await prisma.scheduledMessage.update({
+          where: { id: sm.id },
+          data: { status: "ENVIADO" },
+        });
+        sent++;
+      } catch (e) {
+        console.error(`Error enviando scheduled message ${sm.id}:`, e);
+        await prisma.scheduledMessage.update({
+          where: { id: sm.id },
+          data: { status: "CANCELADO" },
+        });
+      }
+    }
+  } catch (error) {
+    console.error("fireScheduledMessages error:", error);
+  }
+  return { sent };
+}
+
