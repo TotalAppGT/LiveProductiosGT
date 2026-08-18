@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
     });
 
     let created = 0;
+    let duplicates = 0;
     let errors: string[] = [];
 
     function findUser(nameOrEmail: string) {
@@ -101,11 +102,26 @@ export async function POST(request: NextRequest) {
           if (["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"].includes(day)) dayOfWeek = day;
         }
 
+        const targetUserId = assignedToId?.id || auth.payload.userId;
+
+        // Deduplicación: si ya existe una tarea PENDIENTE con el mismo título y asignado, la salta
+        const dupeWhere: any = {
+          assignedToId: targetUserId,
+          title,
+          status: { in: ["PENDIENTE", "EN_PROCESO"] },
+        };
+        if (finalType === "FIJA" && dayOfWeek) dupeWhere.dayOfWeek = dayOfWeek;
+        const existing = await prisma.task.findFirst({ where: dupeWhere });
+        if (existing) {
+          duplicates++;
+          continue;
+        }
+
         await prisma.task.create({
           data: {
             title,
             description: (row.descripcion || row.description || "").toString() || null,
-            assignedToId: assignedToId?.id || auth.payload.userId,
+            assignedToId: targetUserId,
             assignedById: auth.payload.userId,
             dueDate,
             priority: finalPriority as any,
@@ -124,8 +140,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `${created} tareas creadas`,
+      message: `${created} tareas creadas${duplicates ? `, ${duplicates} duplicadas omitidas` : ""}`,
       created,
+      duplicates,
       errors,
     });
   } catch (error) {
