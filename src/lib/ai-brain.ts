@@ -31,6 +31,9 @@ COMANDOS QUE EL USUARIO PUEDE USAR (conocelos y sugerilos cuando sea útil):
 - "mándame un mensaje a las 8am mañana" → Recordatorio genérico para ti a esa hora
 - "recuérdale a Diana [tarea] 3pm" / "mándale un mensaje a Abel 2pm" → Recordatorio para otra persona
 - "hacer reunión con Diana y Abel mañana a las 8am" / "reunión con Jorge, Diana y Abel el viernes a las 3pm" → Crea reunión para TODOS los nombrados, agenda día y hora, y les envía notificación
+- "compra pilas AA para Abel mañana" / "comprar cinta ducto el viernes" → Registrar compra (propia o asignada, notifica al encargado)
+- "compras" → Ver compras pendientes
+- "comprado 2" → Marcar la compra #2 como comprada
 - "ranking" → Ver top de cumplimiento del equipo
 - "resumen" → Mis tareas + eventos + cumplimiento
 - "equipo" → Lista de compañeros

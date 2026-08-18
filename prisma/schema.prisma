@@ -199,6 +199,8 @@ model User {
   vehicleLogs       VehicleLog[]   @relation("VehicleLogDriver")
   createdReports    Report[]       @relation("ReportCreator")
   personalNotes     PersonalNote[] @relation("PersonalNoteOwner")
+  createdPurchases  Purchase[]     @relation("PurchaseCreator")
+  assignedPurchases Purchase[]     @relation("PurchaseAssignee")
 }
 
 model Task {
@@ -562,6 +564,27 @@ model PersonalNote {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+model Purchase {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  amount       Decimal?  @db.Decimal(10, 2)
+  provider     String?
+  status       String    @default("PENDIENTE") // PENDIENTE | COMPRADO | CANCELADO
+  dueDate      DateTime?
+  priority     String    @default("MEDIA") // BAJA | MEDIA | ALTA | URGENTE
+  assignedToId String?
+  assignedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  assignedTo User? @relation("PurchaseAssignee", fields: [assignedToId], references: [id])
+  assignedBy User? @relation("PurchaseCreator", fields: [assignedById], references: [id])
+
+  @@index([status])
+  @@index([assignedToId])
 }
 
 model FileAttachment {

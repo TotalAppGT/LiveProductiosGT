@@ -606,6 +606,128 @@ async function getOrderedTaskDigest(userId: string): Promise<string> {
   return formatTaskDigest(tasks);
 }
 
+// 🛒 COMPRAS
+async function getMyPurchases(userId: string) {
+  return prisma.purchase.findMany({
+    where: { assignedToId: userId, status: "PENDIENTE" },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+    take: 20,
+  });
+}
+
+async function listPurchases(userId: string): Promise<string> {
+  const purchases = await prisma.purchase.findMany({
+    where: { status: "PENDIENTE" },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+    take: 30,
+    include: { assignedTo: { select: { name: true } } },
+  });
+
+  if (purchases.length === 0) return "🛒 No hay compras pendientes. ¡Todo cubierto!";
+
+  const lines = purchases.map((p, i) => {
+    const prio = p.priority === "URGENTE" || p.priority === "ALTA" ? "🔴" : p.priority === "MEDIA" ? "🟡" : "🟢";
+    const due = p.dueDate ? ` → ${new Date(p.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric" })}` : "";
+    const quien = p.assignedTo ? ` (${p.assignedTo.name.split(" ")[0]})` : "";
+    const monto = p.amount ? ` - Q${Number(p.amount).toFixed(2)}` : "";
+    return `${i + 1}. ${prio} 🛒 *${p.title}*${quien}${monto}${due}`;
+  }).join("\n");
+
+  return `🛒 *COMPRAS PENDIENTES*\n\n${lines}\n\n⚡ *Acciones:*\n*comprado 1* → marcar comprado\n*compra [qué] para [quién] [cuándo]* → nueva compra`;
+}
+
+async function createPurchaseFromText(details: string, user: { id: string; name: string; role: string }) {
+  // Usar IA para extraer título, asignado, fecha, monto
+  let parsed: { title: string; assignToName: string | null; dueDate: Date | null; amount: number | null } | null = null;
+  try {
+    const response = await askAI([{
+      role: "user",
+      content: `Extrae de este texto en español los datos de una COMPRA. Devuelve SOLO JSON:
+{
+  "title": "qué se va a comprar (corto)",
+  "assignToName": "nombre de persona encargada de comprar o null",
+  "dueDate": "YYYY-MM-DDTHH:mm:ss en hora LOCAL Guatemala o null",
+  "amount": numero o null
+}
+Texto: "${details}"
+Usuario: ${user.name}
+Fecha/hora actual Guatemala: ${new Date().toLocaleString("es-GT", { timeZone: "America/Guatemala" })}
+- "mañana" = día siguiente, "el viernes" = próximo viernes
+- Si no especifica quién compra, assignToName = null
+- La hora es de Guatemala, no convertir a UTC
+Responde SOLO JSON sin markdown.`
+    }], { responseFormat: "json", temperature: 0.1, maxTokens: 300 });
+    const json = JSON.parse(response.replace(/```json|```/g, "").trim());
+    parsed = {
+      title: json.title || details,
+      assignToName: json.assignToName || null,
+      dueDate: json.dueDate ? normalizeGuatemalaDate(json.dueDate) : null,
+      amount: json.amount ? Number(json.amount) : null,
+    };
+  } catch {
+    parsed = null;
+  }
+
+  // Fallback local
+  if (!parsed) {
+    const time = parseTimeExpression(details);
+    let date = parseRelativeDate(details, new Date());
+    if (!date) {
+      date = new Date();
+      if (time) date.setHours(time.hours, time.minutes, 0, 0);
+      else date.setHours(9, 0, 0, 0);
+    } else if (time) {
+      date.setHours(time.hours, time.minutes, 0, 0);
+    }
+    let title = details.replace(/\b(a\s+las\s+)?\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?/gi, "")
+      .replace(/\b(hoy|mañana|manana|pasado\s+mañana|el\s+(lunes|martes|miercoles|jueves|viernes|sabado|domingo))\b/gi, "")
+      .replace(/\bpara\s+[a-záéíóúñ]+\b/gi, "").replace(/[.,;]+$/, "").replace(/\s{2,}/g, " ").trim();
+    if (!title) title = details;
+    parsed = { title: title.charAt(0).toUpperCase() + title.slice(1), assignToName: null, dueDate: date, amount: null };
+  }
+
+  let assignToId: string | undefined;
+  if (parsed.assignToName) {
+    const target = await prisma.user.findFirst({
+      where: { name: { contains: parsed.assignToName, mode: "insensitive" }, active: true },
+    });
+    assignToId = target?.id;
+  }
+  if (!assignToId) assignToId = user.id;
+
+  const purchase = await prisma.purchase.create({
+    data: {
+      title: parsed.title,
+      description: "",
+      amount: parsed.amount,
+      dueDate: parsed.dueDate,
+      priority: "MEDIA",
+      status: "PENDIENTE",
+      assignedToId: assignToId,
+      assignedById: user.id,
+    },
+    include: { assignedTo: { select: { id: true, name: true, whatsappNumber: true, phone: true } } },
+  });
+
+  const targetName = purchase.assignedTo ? purchase.assignedTo.name : user.name;
+  const dateStr = purchase.dueDate
+    ? `${purchase.dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}${purchase.dueDate.getHours() !== 9 ? ` a las ${purchase.dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}` : ""}`
+    : "Sin fecha";
+
+  // Notificar si es para otra persona
+  if (purchase.assignedTo && purchase.assignedTo.id !== user.id) {
+    const to = purchase.assignedTo.whatsappNumber || purchase.assignedTo.phone;
+    if (to) {
+      await sendMessage(
+        to,
+        `🛒 *Nueva Compra Asignada*\n\n*${purchase.title}*\n👤 Asignada por: ${user.name}\n📅 ${dateStr}${purchase.amount ? `\n💵 Monto: Q${Number(purchase.amount).toFixed(2)}` : ""}\n\nCuando la compres escribe *comprado* para marcarla.`
+      ).catch(() => {});
+    }
+  }
+
+  return `🛒 Compra registrada para *${targetName}*: "${purchase.title}"\n📅 ${dateStr}${purchase.amount ? `\n💵 Q${Number(purchase.amount).toFixed(2)}` : ""}\n🔔 ${purchase.assignedTo && purchase.assignedTo.id !== user.id ? `Notificación enviada a *${targetName}*` : "Todo listo"}`;
+}
+
 async function resolveTaskByNumber(userId: string, num: number) {
   const view = lastViewTasks.get(userId);
   if (view && Date.now() < view.expires && num >= 1 && num <= view.ids.length) {
@@ -1274,6 +1396,26 @@ async function handleCommand(
     return `📊 *Resumen de ${user.name}*\n\n📋 *Tareas:*\n${tasksStr}\n\n🎪 *Eventos:*\n${eventsStr}\n\n📈 *Cumplimiento:*\n${compliance}`;
   }
 
+  // 🛒 COMPRAS
+  if (cmd === "compras" || cmd === "compras pendientes" || cmd === "mis compras") {
+    return await listPurchases(user.id);
+  }
+  if (cmd.startsWith("compra ") || cmd.startsWith("comprar ") || cmd.startsWith("agrega compra ") || cmd.startsWith("agregar compra ")) {
+    const details = cmd.replace(/^(compra|comprar|agrega compra|agregar compra)\s+/i, "").trim();
+    if (!details) return "Formato: *compra [qué comprar] [para quién] [cuándo]*\nEj: *compra pilas AA para Abel mañana* o *compra cinta ducto el viernes*";
+    return await createPurchaseFromText(details, user);
+  }
+  if (cmd.startsWith("comprado ") || cmd.startsWith("compra hecha ")) {
+    const numStr = cmd.replace(/^(comprado|compra hecha)\s+/i, "").trim();
+    const num = parseInt(numStr);
+    if (isNaN(num)) return "¿Cuál compra? Ejemplo: *comprado 2*";
+    const purchases = await getMyPurchases(user.id);
+    if (num < 1 || num > purchases.length) return `Solo tienes ${purchases.length} compras pendientes. Escribe *compras* para verlas.`;
+    const p = purchases[num - 1];
+    await prisma.purchase.update({ where: { id: p.id }, data: { status: "COMPRADO" } });
+    return `🛒 Compra *${p.title}* marcada como *COMPRADO*. ¡Gracias!`;
+  }
+
   if (cmd === "inventario" || cmd.startsWith("inventario ")) {
     const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
     if (!isAdmin) return "El inventario solo está disponible para dueños, administradores y jefes.";
@@ -1634,6 +1776,7 @@ function isKnownCommand(text: string): boolean {
     "que tengo", "que tengo para", "que hay", "tareas para mañana", "tareas del lunes", "tareas de la proxima semana", "tareas de la semana que viene",
     "ranking", "no ",
     "inventario", "vehiculos", "vehículos", "cobros", "empleados", "personal",
+    "compra", "comprar", "compras", "comprado", "agrega compra", "agregar compra",
   ];
   const lower = text.toLowerCase().trim();
   return knownCommands.some(k => lower.startsWith(k));

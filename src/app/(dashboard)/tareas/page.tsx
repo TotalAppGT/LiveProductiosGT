@@ -89,8 +89,25 @@ export default function TareasPage() {
   const [commentModal, setCommentModal] = useState<{ open: boolean; taskId: string; taskTitle: string }>({ open: false, taskId: "", taskTitle: "" });
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [purchases, setPurchases] = useState<any[]>([]);
+  const [quickBuyTitle, setQuickBuyTitle] = useState("");
 
   const isAdminOrJefe = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
+
+  const fetchPurchases = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/purchases?limit=100", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setPurchases(json.data || []);
+      }
+    } catch {
+      // silencioso
+    }
+  }, [token]);
 
   const fetchTasks = useCallback(async () => {
     if (!token) return;
@@ -164,7 +181,8 @@ export default function TareasPage() {
   useEffect(() => {
     fetchTasks();
     fetchUsers();
-  }, [fetchTasks, fetchUsers]);
+    fetchPurchases();
+  }, [fetchTasks, fetchUsers, fetchPurchases]);
 
   async function updateTaskStatus(taskId: string, status: TaskStatus) {
     try {
@@ -240,9 +258,60 @@ export default function TareasPage() {
     }
   }
 
-  async function deleteTask(taskId: string) {
-    if (!confirm("¿Seguro que deseas eliminar esta tarea? Esta acción no se puede deshacer.")) return;
+  async function quickAddPurchase() {
+    const title = quickBuyTitle.trim();
+    if (!title) return;
     try {
+      const res = await fetch("/api/purchases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title, assignedToId: user?.id, status: "PENDIENTE", priority: "MEDIA" }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Compra agregada");
+        setQuickBuyTitle("");
+        fetchPurchases();
+      } else {
+        throw new Error(json.error || "Error");
+      }
+    } catch {
+      toast.error("Error al agregar compra");
+    }
+  }
+
+  async function updatePurchaseStatus(id: string, status: string) {
+    try {
+      const res = await fetch(`/api/purchases/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        toast.success(status === "COMPRADO" ? "Compra marcada como comprada" : "Compra actualizada");
+        fetchPurchases();
+      }
+    } catch {
+      toast.error("Error al actualizar compra");
+    }
+  }
+
+  async function deletePurchase(id: string) {
+    if (!confirm("¿Eliminar esta compra?")) return;
+    try {
+      await fetch(`/api/purchases/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Compra eliminada");
+      fetchPurchases();
+    } catch {
+      toast.error("Error al eliminar compra");
+    }
+  }
+
+  async function deleteTask(taskId: string) {
+    if (!confirm("¿Seguro que deseas eliminar esta tarea? Esta acción no se puede deshacer.")) return;    try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -905,6 +974,83 @@ export default function TareasPage() {
                         ))}
                       </div>
                     ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 🛒 COMPRAS - hoja de cálculo */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 rounded-xl border border-dashed border-amber-300 dark:border-amber-700">
+                  <input
+                    value={quickBuyTitle}
+                    onChange={(e) => setQuickBuyTitle(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && quickBuyTitle.trim()) quickAddPurchase(); }}
+                    placeholder="🛒 Agregar compra y presionar Enter (ej: pilas AA)"
+                    className="flex-1 bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+                  />
+                  <Button variant="primary" size="sm" onClick={quickAddPurchase} disabled={!quickBuyTitle.trim()}>
+                    Agregar
+                  </Button>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="px-2 py-1 text-[11px] font-bold text-white bg-amber-600 flex items-center justify-between">
+                    <span>🛒 Compras</span>
+                    <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{purchases.filter((p) => p.status === "PENDIENTE").length}</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[720px]">
+                      <div className="grid grid-cols-12 gap-1 px-2 py-1.5 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        <div className="col-span-1 text-center">#</div>
+                        <div className="col-span-5">Compra</div>
+                        <div className="col-span-2">Día</div>
+                        <div className="col-span-2">Asignado</div>
+                        <div className="col-span-2 text-right">Acciones</div>
+                      </div>
+                      {purchases.filter((p) => p.status === "PENDIENTE").map((p, idx) => (
+                        <div
+                          key={p.id}
+                          className={`grid grid-cols-12 gap-1 px-2 py-1 text-[13px] items-center border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${idx % 2 === 1 ? "bg-gray-50/60 dark:bg-gray-800/30" : ""}`}
+                        >
+                          <div className="col-span-1 text-center text-[11px] text-gray-400 font-mono">{idx + 1}</div>
+                          <div className="col-span-5 flex items-center gap-1.5 min-w-0">
+                            <button
+                              onClick={() => updatePurchaseStatus(p.id, "COMPRADO")}
+                              className="w-4 h-4 rounded border-2 border-gray-300 hover:border-amber-400 hover:bg-amber-50 flex items-center justify-center shrink-0"
+                              title="Marcar comprado"
+                            >
+                              <CheckCircle2 className="w-2.5 h-2.5 text-transparent" />
+                            </button>
+                            <span className="truncate text-gray-900 dark:text-white">{p.title}</span>
+                            {p.amount && <span className="shrink-0 text-[10px] text-amber-600">Q{Number(p.amount).toFixed(2)}</span>}
+                          </div>
+                          <div className="col-span-2 text-[11px] text-gray-600 dark:text-gray-300 truncate">
+                            {p.dueDate ? new Date(p.dueDate).toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" }) : "—"}
+                          </div>
+                          <div className="col-span-2 text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                            {p.assignedTo?.name?.split(" ")[0] || "—"}
+                          </div>
+                          <div className="col-span-2 flex items-center justify-end gap-0.5">
+                            <button
+                              onClick={() => updatePurchaseStatus(p.id, "COMPRADO")}
+                              className="p-0.5 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-600"
+                              title="Marcar comprado"
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => deletePurchase(p.id)}
+                              className="p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-red-400"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {purchases.filter((p) => p.status === "PENDIENTE").length === 0 && (
+                        <div className="px-3 py-3 text-xs text-gray-400 text-center">No hay compras pendientes 🎉</div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
