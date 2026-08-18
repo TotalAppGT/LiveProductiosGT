@@ -654,6 +654,26 @@ export default function TareasPage() {
             {chip.label}
           </button>
         ))}
+
+        <span className="mx-1 w-px bg-gray-300 dark:bg-gray-700 self-stretch" />
+
+        {[
+          { value: "", label: "Todo tipo" },
+          { value: "FIJA", label: "🔁 Fijas", color: "border-indigo-300 text-indigo-700 bg-indigo-50" },
+          { value: "DINAMICA", label: "⚡ Variables", color: "border-orange-300 text-orange-700 bg-orange-50" },
+        ].map((chip) => (
+          <button
+            key={`tipo-${chip.value}`}
+            onClick={() => setTypeFilter(chip.value)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              typeFilter === chip.value
+                ? chip.color || "border-blue-500 text-blue-700 bg-blue-50"
+                : "border-gray-200 text-gray-600 hover:border-gray-300"
+            }`}
+          >
+            {chip.label}
+          </button>
+        ))}
       </div>
 
       {showFilters && (
