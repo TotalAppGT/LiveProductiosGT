@@ -124,6 +124,7 @@ export default function TareasPage() {
       if (assignedFilter && activeTab !== "MIS_TAREAS") params.set("assignedToId", assignedFilter);
       if (typeFilter) params.set("type", typeFilter);
       if (search) params.set("search", search);
+      params.set("limit", "500");
       if (activeTab === "HOY") {
         const today = new Date().toISOString().split("T")[0];
         params.set("dueDate", today);

@@ -278,7 +278,7 @@ async function formatTasksForUser(userId: string, period?: string) {
   const allTasks = await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
-    take: 30,
+    take: 200,
   });
 
   const todayTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= today && new Date(t.dueDate) <= endOfToday);
