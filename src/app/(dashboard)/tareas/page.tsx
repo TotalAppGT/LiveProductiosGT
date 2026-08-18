@@ -20,6 +20,7 @@ import {
   Paperclip,
   AlertTriangle,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -92,6 +93,8 @@ export default function TareasPage() {
   const [purchases, setPurchases] = useState<any[]>([]);
   const [quickBuyTitle, setQuickBuyTitle] = useState("");
   const [reminders, setReminders] = useState<any[]>([]);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [groupMode, setGroupMode] = useState<"fase" | "dia">("fase");
 
   const isAdminOrJefe = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
 
@@ -392,7 +395,6 @@ export default function TareasPage() {
       toast.error("Error al mover tarea");
     }
   }
-
   async function submitComment() {
     if (!commentText.trim()) return;
     setSubmittingComment(true);
@@ -494,15 +496,48 @@ export default function TareasPage() {
   const visibleTasks = activeTab === "COMPLETADA"
     ? filteredTasks.filter((t) => t.status === "COMPLETADA")
     : filteredTasks.filter((t) => t.status !== "COMPLETADA" && t.status !== "CANCELADA");
-  const sheetGroups = sheetOrder.flatMap((g) => {
-    const phaseTasks = visibleTasks.filter((t) => g.key === "OTRO" ? !["PRE_EVENTO", "EVENTO", "POST_EVENTO"].includes(t.category) : t.category === g.key);
-    const fijas = phaseTasks.filter((t) => t.type === "FIJA").sort(sortByDayHour);
-    const variables = phaseTasks.filter((t) => t.type !== "FIJA").sort(sortByDayHour);
-    const groups: { key: string; label: string; bg: string; tasks: Task[] }[] = [];
-    if (fijas.length > 0) groups.push({ ...g, label: `${g.label} · 🔁 Fijas`, tasks: fijas });
-    if (variables.length > 0) groups.push({ ...g, label: `${g.label} · Variables`, tasks: variables });
-    return groups;
-  });
+
+  // Agrupación por DÍA (Lunes, Martes...) como en el chat
+  const dayGroupOrder = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+  function buildDayGroups(): { key: string; label: string; bg: string; tasks: Task[] }[] {
+    const byDay = new Map<string, Task[]>();
+    visibleTasks.forEach((t) => {
+      let dayLabel = "Sin fecha";
+      if (t.dueDate) {
+        dayLabel = new Date(t.dueDate).toLocaleDateString("es-GT", { weekday: "long" });
+        dayLabel = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1);
+      }
+      if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
+      byDay.get(dayLabel)!.push(t);
+    });
+    const bgMap: Record<string, string> = {
+      Lunes: "bg-blue-600", Martes: "bg-indigo-600", "Miércoles": "bg-violet-600",
+      Jueves: "bg-purple-600", Viernes: "bg-fuchsia-600", "Sábado": "bg-pink-600",
+      Domingo: "bg-rose-600", "Sin fecha": "bg-gray-600",
+    };
+    const orderedKeys = [...dayGroupOrder, "Sin fecha"].filter((d) => byDay.has(d));
+    return orderedKeys.map((d) => ({
+      key: `dia-${d}`,
+      label: d,
+      bg: bgMap[d] || "bg-gray-600",
+      tasks: byDay.get(d)!.sort(sortByDayHour),
+    }));
+  }
+
+  // Agrupación por FASE (Pre/Evento/Post/Otras) con Fijas/Variables
+  function buildPhaseGroups(): { key: string; label: string; bg: string; tasks: Task[] }[] {
+    return sheetOrder.flatMap((g) => {
+      const phaseTasks = visibleTasks.filter((t) => g.key === "OTRO" ? !["PRE_EVENTO", "EVENTO", "POST_EVENTO"].includes(t.category) : t.category === g.key);
+      const fijas = phaseTasks.filter((t) => t.type === "FIJA").sort(sortByDayHour);
+      const variables = phaseTasks.filter((t) => t.type !== "FIJA").sort(sortByDayHour);
+      const groups: { key: string; label: string; bg: string; tasks: Task[] }[] = [];
+      if (fijas.length > 0) groups.push({ ...g, label: `${g.label} · 🔁 Fijas`, tasks: fijas });
+      if (variables.length > 0) groups.push({ ...g, label: `${g.label} · Variables`, tasks: variables });
+      return groups;
+    });
+  }
+
+  const sheetGroups = groupMode === "dia" ? buildDayGroups() : buildPhaseGroups();
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -645,6 +680,16 @@ export default function TareasPage() {
           >
             Filtros
           </Button>
+          {viewMode === "sheet" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<Columns3 className="h-4 w-4" />}
+              onClick={() => setGroupMode(groupMode === "fase" ? "dia" : "fase")}
+            >
+              {groupMode === "fase" ? "Por Día" : "Por Fase"}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -1061,6 +1106,13 @@ export default function TareasPage() {
                                 </button>
                               )}
                               <button
+                                onClick={() => setEditingTask(task)}
+                                className="p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
+                                title="Editar"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button
                                 onClick={() => { setCommentModal({ open: true, taskId: task.id, taskTitle: task.title }); setCommentText(""); }}
                                 className="p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
                                 title="Comentar"
@@ -1445,6 +1497,14 @@ export default function TareasPage() {
         users={users}
         onCreated={fetchTasks}
       />
+
+      <EditTaskModal
+        task={editingTask}
+        onClose={() => setEditingTask(null)}
+        token={token || ""}
+        users={users}
+        onSaved={fetchTasks}
+      />
     </div>
   );
 }
@@ -1665,6 +1725,213 @@ function CreateTaskModal({
           <Button variant="primary" type="submit" isLoading={saving}>
             Crear Tarea
           </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function EditTaskModal({
+  task,
+  onClose,
+  token,
+  users,
+  onSaved,
+}: {
+  task: Task | null;
+  onClose: () => void;
+  token: string;
+  users: User[];
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("MEDIA");
+  const [category, setCategory] = useState("PRE_EVENTO");
+  const [type, setType] = useState("DINAMICA");
+  const [assignedToId, setAssignedToId] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [dueTime, setDueTime] = useState("");
+  const [frequency, setFrequency] = useState("DIARIA");
+  const [dayOfWeek, setDayOfWeek] = useState("LUNES");
+  const [status, setStatus] = useState("PENDIENTE");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (task) {
+      setTitle(task.title || "");
+      setDescription(task.description || "");
+      setPriority(task.priority || "MEDIA");
+      setCategory(task.category || "PRE_EVENTO");
+      setType(task.type || "DINAMICA");
+      setAssignedToId(task.assignedToId || "");
+      setFrequency(task.frequency || "DIARIA");
+      setDayOfWeek(task.dayOfWeek || "LUNES");
+      setStatus(task.status || "PENDIENTE");
+      if (task.dueDate) {
+        const d = new Date(task.dueDate);
+        setDueDate(d.toISOString().split("T")[0]);
+        const hours = d.getHours();
+        const minutes = d.getMinutes();
+        if (hours === 0 && minutes === 0) {
+          setDueTime("");
+        } else {
+          setDueTime(`${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`);
+        }
+      } else {
+        setDueDate("");
+        setDueTime("");
+      }
+    }
+  }, [task]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!task || !title.trim()) return;
+    setSaving(true);
+    try {
+      let finalDueDate: string | null = null;
+      if (dueDate) {
+        const d = new Date(`${dueDate}T${dueTime || "00:00"}`);
+        finalDueDate = d.toISOString();
+      }
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim() || null,
+          priority,
+          category,
+          type,
+          assignedToId: assignedToId || null,
+          dueDate: finalDueDate,
+          status,
+          frequency: type === "FIJA" ? frequency : null,
+          dayOfWeek: type === "FIJA" && frequency === "SEMANAL" ? dayOfWeek : null,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Tarea actualizada");
+        onSaved();
+        onClose();
+      } else {
+        throw new Error(json.error || "Error");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al actualizar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={!!task} onClose={onClose} title="Editar Tarea" size="lg">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Título"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
+        />
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          maxLength={100}
+          placeholder="Descripción (opcional)"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+          rows={2}
+        />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoría</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="PRE_EVENTO">🎪 Pre Evento</option>
+              <option value="EVENTO">🚀 Evento</option>
+              <option value="POST_EVENTO">🏁 Post Evento</option>
+              <option value="COTIZACION">Cotización</option>
+              <option value="COBRO">Cobro</option>
+              <option value="INVENTARIO">Inventario</option>
+              <option value="VEHICULO">Vehículo</option>
+              <option value="PERSONAL">Personal</option>
+              <option value="BODEGA">Bodega</option>
+              <option value="MANTENIMIENTO">Mantenimiento</option>
+              <option value="ADMINISTRACION">Administración</option>
+              <option value="OTRO">Otro</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="PENDIENTE">Pendiente</option>
+              <option value="EN_PROCESO">En Proceso</option>
+              <option value="COMPLETADA">Completada</option>
+              <option value="REPROGRAMADA">Reprogramada</option>
+              <option value="CANCELADA">Cancelada</option>
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Prioridad</label>
+            <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="BAJA">Baja</option>
+              <option value="MEDIA">Media</option>
+              <option value="ALTA">Alta</option>
+              <option value="URGENTE">Urgente</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo</label>
+            <select value={type} onChange={(e) => setType(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="DINAMICA">Dinámica (Variable)</option>
+              <option value="FIJA">Fija (recurrente)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asignar a</label>
+          <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <option value="">Sin asignar</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Input label="Fecha" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          <Input label="Hora" type="time" step="300" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
+        </div>
+        {type === "FIJA" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frecuencia</label>
+              <select value={frequency} onChange={(e) => setFrequency(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <option value="DIARIA">Diaria</option>
+                <option value="SEMANAL">Semanal</option>
+                <option value="MENSUAL">Mensual</option>
+              </select>
+            </div>
+            {frequency === "SEMANAL" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Día de la semana</label>
+                <select value={dayOfWeek} onChange={(e) => setDayOfWeek(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                  <option value="LUNES">Lunes</option>
+                  <option value="MARTES">Martes</option>
+                  <option value="MIERCOLES">Miércoles</option>
+                  <option value="JUEVES">Jueves</option>
+                  <option value="VIERNES">Viernes</option>
+                  <option value="SABADO">Sábado</option>
+                  <option value="DOMINGO">Domingo</option>
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="ghost" onClick={onClose} type="button">Cancelar</Button>
+          <Button variant="primary" type="submit" isLoading={saving}>Guardar Cambios</Button>
         </div>
       </form>
     </Modal>
