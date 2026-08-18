@@ -224,6 +224,7 @@ model Task {
   tenantId             String?
   postponeReason       String?
   postponeCount        Int            @default(0)
+  sortOrder            Int            @default(0)
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
 

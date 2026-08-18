@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
         where,
         skip,
         take: limit,
-        orderBy: [{ priority: "desc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+        orderBy: [{ sortOrder: "asc" }, { priority: "desc" }, { dueDate: "asc" }, { createdAt: "desc" }],
         include: {
           assignedTo: {
             select: { id: true, name: true, email: true, avatar: true },

@@ -130,6 +130,9 @@ export interface Task {
   assignedById?: string | null;
   eventId?: string | null;
   tenantId?: string | null;
+  postponeReason?: string | null;
+  postponeCount?: number;
+  sortOrder?: number;
   createdAt: string;
   updatedAt: string;
   assignedTo?: User | null;

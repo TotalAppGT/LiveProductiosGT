@@ -363,8 +363,7 @@ export default function TareasPage() {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
-      });
-      const json: ApiResponse<Task> = await res.json();
+      });      const json: ApiResponse<Task> = await res.json();
       if (json.success) {
         toast.success("Tarea eliminada");
         fetchTasks();
@@ -373,6 +372,24 @@ export default function TareasPage() {
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al eliminar");
+    }
+  }
+
+  async function moveTask(taskId: string, direction: "up" | "down") {
+    try {
+      const res = await fetch("/api/tasks/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: taskId, direction }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchTasks();
+      } else {
+        toast.error(json.error || "No se pudo mover");
+      }
+    } catch {
+      toast.error("Error al mover tarea");
     }
   }
 
@@ -463,6 +480,10 @@ export default function TareasPage() {
     { key: "OTRO", label: "Otras tareas", bg: "bg-gray-600" },
   ];
   const sortByDayHour = (a: Task, b: Task) => {
+    // Si alguna tarea tiene sortOrder manual (>0), priorizarlo para respetar el reordenamiento
+    if ((a.sortOrder || b.sortOrder) && a.sortOrder !== b.sortOrder) {
+      return (a.sortOrder || 0) - (b.sortOrder || 0);
+    }
     const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
     const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
     if (da !== db) return da - db;
@@ -1003,6 +1024,24 @@ export default function TareasPage() {
                               {task.status === "EN_PROCESO" && <span className="text-[9px]" title="En proceso">🔄</span>}
                             </div>
                             <div className="col-span-2 flex items-center justify-end gap-0.5">
+                              {task.status !== "COMPLETADA" && (
+                                <button
+                                  onClick={() => moveTask(task.id, "up")}
+                                  className="p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
+                                  title="Subir"
+                                >
+                                  <ChevronUp className="w-3 h-3" />
+                                </button>
+                              )}
+                              {task.status !== "COMPLETADA" && (
+                                <button
+                                  onClick={() => moveTask(task.id, "down")}
+                                  className="p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
+                                  title="Bajar"
+                                >
+                                  <ChevronDown className="w-3 h-3" />
+                                </button>
+                              )}
                               {task.status !== "COMPLETADA" && (
                                 <button
                                   onClick={() => updateTaskStatus(task.id, "EN_PROCESO")}
