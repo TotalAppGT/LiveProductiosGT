@@ -386,7 +386,7 @@ function parseReminderLocal(text: string, user: { id: string; name: string }) {
   // Detectar a quién va asignado
   let assignToName: string | null = null;
   const assignMatch = t.match(/(?:recu[ée]rdale|recu[ée]rdale\s*a|m[aá]ndale|m[aá]ndale\s*un\s*mensaje\s*a|para|a)\s+([a-záéíóúñ]+)\b/i);
-  const toMe = /(recu[ée]rdame|m[aá]ndame|av[íi]same|notif[íi]came|env[íi]ame)/i.test(t);
+  const toMe = /(recu[ée]rdame|m[aá]ndame|av[íi]same|notif[íi]came|env[íi]ame|hazme|h[aá]zme|hacerme|ag[ée]ndame|creame|cr[ée]ame)/i.test(t);
   if (assignMatch && !toMe) {
     const candidate = assignMatch[1].replace(/^a\s+|^para\s+/i, "");
     if (!/mensaje|recordatorio|nota|alerta|aviso/i.test(candidate)) {
@@ -414,10 +414,12 @@ function parseReminderLocal(text: string, user: { id: string; name: string }) {
 
   // Título: quitar prefijos de comando y asignación
   let title = text
-    .replace(/(recu[ée]rdame|recu[ée]rdale|m[aá]ndame\s+un\s+mensaje|m[aá]ndame|m[aá]ndale\s+un\s+mensaje|m[aá]ndale|av[íi]same|notif[íi]came|por\s+fa\s+)/gi, "")
+    .replace(/(recu[ée]rdame|recu[ée]rdale|m[aá]ndame\s+un\s+mensaje|m[aá]ndame|m[aá]ndale\s+un\s+mensaje|m[aá]ndale|av[íi]same|notif[íi]came|env[íi]ame|hazme\s*(un\s+)?|h[aá]zme\s*(un\s+)?|hacerme\s*(un\s+)?|ag[ée]ndame\s*(un\s+)?|creame\s*(un\s+)?|por\s+fa\s+)/gi, "")
+    .replace(/\b(recordatorio|recordar|recu[ée]rdame|recordarme)\b/gi, "")
     .replace(/\b(para|a)\s+[a-záéíóúñ]+\b/gi, "")
     .replace(/\b(a\s+las\s+\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?|a\s+las|hoy|mañana|manana|pasado\s+mañana|en\s+la\s+mañana|en\s+la\s+tarde|en\s+la\s+noche|al\s+mediod[ií]a)\b/gi, "")
     .replace(/\b(a\s+las\s+)?\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?/gi, "")
+    .replace(/\botro\s+d[ií]a\b/gi, "")
     .replace(/[.,;]+$/, "")
     .replace(/\s{2,}/g, " ")
     .trim();
@@ -1141,11 +1143,14 @@ async function handleCommand(
     return await handleMeetingCommand(cmd, user);
   }
 
-  if (cmd.startsWith("recuerda") || cmd.startsWith("recordar") || cmd.startsWith("recordatorio") ||
+  if ((cmd.startsWith("recuerda") || cmd.startsWith("recordar") || cmd.startsWith("recordatorio") ||
+      /recordator|recu[ée]rdame|recuerdeme|recordarme/.test(cmd) ||
+      /\b(hazme|haz|hacer|hacerme|agendame|ag[ée]ndame|creame|crea|programame|programar|ponme|pon)\s*(un\s+|una\s+|el\s+|la\s+)?(recordatorio|recordar|recordarme)\b/i.test(cmd) ||
       /\b(crea|creame|crear|agenda|programa|programar|pon|ponme|agendar|poner)\s+(un\s+|unos\s+|el\s+|una\s+|las\s+|los\s+)?recordatorio/i.test(cmd) ||
       /mand(a|ame|enme|ele)?\s+(un\s+)?(mensaje|alerta|aviso)/i.test(cmd) ||
-      /(avisame|avisame|notifícame|notificame|avísame|avísame)\b/i.test(cmd) ||
-      /\b(ponme|pon|manda|mandame)\s+(una|un)\s+(alerta|aviso|recordatorio)\b/i.test(cmd)) {
+      /(avisame|avisame|notifícame|notificame|avísame|avísame|av[íi]same)\b/i.test(cmd) ||
+      /\b(ponme|pon|manda|mandame|env[íi]a|env[íi]ame)\s+(una|un)\s+(alerta|aviso|recordatorio|mensaje)\b/i.test(cmd)) &&
+      !/\b(masivo|a los que no han completado|a todos)\b/.test(cmd)) {
     const parsed = await parseReminderFromText(cmd, user);
     if (!parsed) return "No pude entender la fecha/hora. Ejemplo: *recuérdame llamar a Juan mañana a las 3pm*";
 
@@ -1622,7 +1627,8 @@ function isKnownCommand(text: string): boolean {
     "tareas", "hoy", "semana", "completar", "hecho", "completado", "proceso", "iniciar", "en proceso", "posponer", "comentar",
     "deshacer", "revertir", "transferir", "crea tarea", "crear tarea", "nueva tarea",
     "reunion", "reunión", "junta", "meeting", "hacer reunion", "hacer reunión",
-    "recuerda", "recordar", "recordatorio", "evento", "eventos",
+    "recuerda", "recordar", "recordatorio", "recordarme", "evento", "eventos",
+    "hazme", "haz", "hacer", "hacerme", "agendame", "agéndame", "creame",
     "mandame", "mandame un mensaje", "mándame", "avisame", "avisame", "notificame", "notifícame", "enviame un mensaje", "envíame",
     "equipo", "pendientes", "resumen", "ayuda", "fijas", "mis tareas",
     "que tengo", "que tengo para", "que hay", "tareas para mañana", "tareas del lunes", "tareas de la proxima semana", "tareas de la semana que viene",
