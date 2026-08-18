@@ -95,6 +95,7 @@ export default function TareasPage() {
   const [reminders, setReminders] = useState<any[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [groupMode, setGroupMode] = useState<"fase" | "dia">("fase");
+  const [createPrefill, setCreatePrefill] = useState<{ category?: string; type?: string; dayOfWeek?: string }>({});
 
   const isAdminOrJefe = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
 
@@ -497,47 +498,93 @@ export default function TareasPage() {
     ? filteredTasks.filter((t) => t.status === "COMPLETADA")
     : filteredTasks.filter((t) => t.status !== "COMPLETADA" && t.status !== "CANCELADA");
 
-  // Agrupación por DÍA (Lunes, Martes...) como en el chat
   const dayGroupOrder = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-  function buildDayGroups(): { key: string; label: string; bg: string; tasks: Task[] }[] {
+  const dayBgMap: Record<string, string> = {
+    Lunes: "bg-blue-600", Martes: "bg-indigo-600", "Miércoles": "bg-violet-600",
+    Jueves: "bg-purple-600", Viernes: "bg-fuchsia-600", "Sábado": "bg-pink-600",
+    Domingo: "bg-rose-600", "Sin fecha": "bg-gray-600",
+  };
+  const dayToDayOfWeek: Record<string, string> = {
+    Lunes: "LUNES", Martes: "MARTES", "Miércoles": "MIERCOLES", Jueves: "JUEVES",
+    Viernes: "VIERNES", "Sábado": "SABADO", Domingo: "DOMINGO",
+  };
+
+  function taskDayLabel(t: Task): string {
+    if (t.dueDate) {
+      const d = new Date(t.dueDate).toLocaleDateString("es-GT", { weekday: "long" });
+      return d.charAt(0).toUpperCase() + d.slice(1);
+    }
+    if (t.dayOfWeek) {
+      const cap = t.dayOfWeek.toLowerCase();
+      return cap.charAt(0).toUpperCase() + cap.slice(1);
+    }
+    return "Sin fecha";
+  }
+
+  // Agrupación por DÍA (Lunes, Martes...) como en el chat
+  function buildDayGroups(): SheetSection[] {
     const byDay = new Map<string, Task[]>();
     visibleTasks.forEach((t) => {
-      let dayLabel = "Sin fecha";
-      if (t.dueDate) {
-        dayLabel = new Date(t.dueDate).toLocaleDateString("es-GT", { weekday: "long" });
-        dayLabel = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1);
-      }
+      const dayLabel = taskDayLabel(t);
       if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
       byDay.get(dayLabel)!.push(t);
     });
-    const bgMap: Record<string, string> = {
-      Lunes: "bg-blue-600", Martes: "bg-indigo-600", "Miércoles": "bg-violet-600",
-      Jueves: "bg-purple-600", Viernes: "bg-fuchsia-600", "Sábado": "bg-pink-600",
-      Domingo: "bg-rose-600", "Sin fecha": "bg-gray-600",
-    };
     const orderedKeys = [...dayGroupOrder, "Sin fecha"].filter((d) => byDay.has(d));
     return orderedKeys.map((d) => ({
       key: `dia-${d}`,
       label: d,
-      bg: bgMap[d] || "bg-gray-600",
+      bg: dayBgMap[d] || "bg-gray-600",
+      level: 1,
       tasks: byDay.get(d)!.sort(sortByDayHour),
     }));
   }
 
-  // Agrupación por FASE (Pre/Evento/Post/Otras) con Fijas/Variables
-  function buildPhaseGroups(): { key: string; label: string; bg: string; tasks: Task[] }[] {
-    return sheetOrder.flatMap((g) => {
-      const phaseTasks = visibleTasks.filter((t) => g.key === "OTRO" ? !["PRE_EVENTO", "EVENTO", "POST_EVENTO"].includes(t.category) : t.category === g.key);
-      const fijas = phaseTasks.filter((t) => t.type === "FIJA").sort(sortByDayHour);
-      const variables = phaseTasks.filter((t) => t.type !== "FIJA").sort(sortByDayHour);
-      const groups: { key: string; label: string; bg: string; tasks: Task[] }[] = [];
-      if (fijas.length > 0) groups.push({ ...g, label: `${g.label} · 🔁 Fijas`, tasks: fijas });
-      if (variables.length > 0) groups.push({ ...g, label: `${g.label} · Variables`, tasks: variables });
-      return groups;
-    });
+  // Agrupación jerárquica: FASE → DÍA → FIJAS/VARIABLES
+  interface SheetSection {
+    key: string;
+    label: string;
+    bg: string;
+    level: number; // 0=fase, 1=día, 2=tipo
+    tasks: Task[];
+    insertCategory?: string;
+    insertType?: string;
+    insertDayOfWeek?: string;
+  }
+  function buildHierarchicalGroups(): SheetSection[] {
+    const sections: SheetSection[] = [];
+    for (const phase of sheetOrder) {
+      const phaseTasks = visibleTasks.filter((t) =>
+        phase.key === "OTRO" ? !["PRE_EVENTO", "EVENTO", "POST_EVENTO"].includes(t.category) : t.category === phase.key
+      );
+      if (phaseTasks.length === 0) continue;
+      sections.push({ key: phase.key, label: phase.label, bg: phase.bg, level: 0, tasks: [] });
+
+      const byDay = new Map<string, Task[]>();
+      phaseTasks.forEach((t) => {
+        const day = taskDayLabel(t);
+        if (!byDay.has(day)) byDay.set(day, []);
+        byDay.get(day)!.push(t);
+      });
+      const orderedDays = [...dayGroupOrder, "Sin fecha"].filter((d) => byDay.has(d));
+      for (const day of orderedDays) {
+        sections.push({ key: `${phase.key}-${day}`, label: day, bg: dayBgMap[day] || "bg-gray-500", level: 1, tasks: [] });
+        const dayTasks = byDay.get(day)!;
+        const fijas = dayTasks.filter((t) => t.type === "FIJA").sort(sortByDayHour);
+        const variables = dayTasks.filter((t) => t.type !== "FIJA").sort(sortByDayHour);
+        const cat = phase.key === "OTRO" ? "OTRO" : phase.key;
+        const dow = dayToDayOfWeek[day];
+        if (fijas.length > 0) {
+          sections.push({ key: `${phase.key}-${day}-fijas`, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: fijas, insertCategory: cat, insertType: "FIJA", insertDayOfWeek: dow });
+        }
+        if (variables.length > 0) {
+          sections.push({ key: `${phase.key}-${day}-var`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: variables, insertCategory: cat, insertType: "DINAMICA", insertDayOfWeek: dow });
+        }
+      }
+    }
+    return sections;
   }
 
-  const sheetGroups = groupMode === "dia" ? buildDayGroups() : buildPhaseGroups();
+  const sheetGroups = groupMode === "dia" ? buildDayGroups() : buildHierarchicalGroups();
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -1016,10 +1063,25 @@ export default function TareasPage() {
                   <div className="min-w-[720px]">
                     {sheetGroups.map((group, gi) => (
                       <div key={group.key + gi}>
-                        {/* Fila de fase: Pre / Evento / Post */}
-                        <div className={`px-2 py-1 text-[11px] font-bold text-white ${group.bg} flex items-center justify-between sticky left-0`}>
-                          <span>{group.label}</span>
-                          <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{group.tasks.length}</span>
+                        {/* Fila de encabezado: fase / día / tipo */}
+                        <div className={`${group.bg} flex items-center justify-between ${group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white" : group.level === 1 ? "px-3 py-1 text-[11px] font-semibold text-white" : "px-4 py-0.5 text-[10px] font-semibold text-gray-700 dark:text-gray-200"}`}>
+                          <span>{group.level === 1 ? "📅 " : ""}{group.label}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{group.tasks.length}</span>
+                            {(group.level === 0 || group.level === 2) && (
+                              <button
+                                onClick={() => {
+                                  const cat = group.level === 0 ? (group.key === "OTRO" ? "OTRO" : group.key) : (group as any).insertCategory;
+                                  setCreatePrefill({ category: cat, type: (group as any).insertType, dayOfWeek: (group as any).insertDayOfWeek });
+                                  setShowCreateModal(true);
+                                }}
+                                className="ml-1 px-1.5 py-0.5 rounded bg-white/25 hover:bg-white/40 text-white text-[11px] font-bold leading-none"
+                                title="Agregar tarea aquí"
+                              >
+                                +
+                              </button>
+                            )}
+                          </div>
                         </div>
                         {group.tasks.map((task, idx) => (
                           <div
@@ -1492,10 +1554,11 @@ export default function TareasPage() {
 
       <CreateTaskModal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={() => { setShowCreateModal(false); setCreatePrefill({}); }}
         token={token || ""}
         users={users}
         onCreated={fetchTasks}
+        prefill={createPrefill}
       />
 
       <EditTaskModal
@@ -1515,12 +1578,14 @@ function CreateTaskModal({
   token,
   users,
   onCreated,
+  prefill,
 }: {
   isOpen: boolean;
   onClose: () => void;
   token: string;
   users: User[];
   onCreated: () => void;
+  prefill?: { category?: string; type?: string; dayOfWeek?: string };
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -1533,6 +1598,15 @@ function CreateTaskModal({
   const [frequency, setFrequency] = useState("DIARIA");
   const [dayOfWeek, setDayOfWeek] = useState("LUNES");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && prefill) {
+      if (prefill.category) setCategory(prefill.category);
+      if (prefill.type) setType(prefill.type);
+      if (prefill.dayOfWeek) setDayOfWeek(prefill.dayOfWeek);
+      if (prefill.type === "FIJA") setFrequency("SEMANAL");
+    }
+  }, [isOpen, prefill]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1592,9 +1666,18 @@ function CreateTaskModal({
             onChange={(e) => setCategory(e.target.value)}
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
-            <option value="PRE_EVENTO">Pre Evento</option>
-            <option value="EVENTO">Evento</option>
-            <option value="POST_EVENTO">Post Evento</option>
+            <option value="PRE_EVENTO">🎪 Pre Evento</option>
+            <option value="EVENTO">🚀 Evento</option>
+            <option value="POST_EVENTO">🏁 Post Evento</option>
+            <option value="COTIZACION">Cotización</option>
+            <option value="COBRO">Cobro</option>
+            <option value="INVENTARIO">Inventario</option>
+            <option value="VEHICULO">Vehículo</option>
+            <option value="PERSONAL">Personal</option>
+            <option value="BODEGA">Bodega</option>
+            <option value="MANTENIMIENTO">Mantenimiento</option>
+            <option value="ADMINISTRACION">Administración</option>
+            <option value="OTRO">Otro</option>
           </select>
         </div>
         <Input
