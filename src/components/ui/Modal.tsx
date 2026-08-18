@@ -52,20 +52,20 @@ function Modal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto p-0 sm:p-4">
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
       />
       <div
         className={cn(
-          "relative w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl animate-in zoom-in-95 fade-in duration-200",
+          "relative w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl animate-in zoom-in-95 fade-in duration-200 my-0 sm:my-6",
           sizeStyles[size],
           className
         )}
       >
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10 rounded-t-xl">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               {title}
             </h2>
@@ -77,9 +77,9 @@ function Modal({
             </button>
           </div>
         )}
-        <div className="px-6 py-4">{children}</div>
+        <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">{children}</div>
         {footer && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3 rounded-b-xl">
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3 rounded-b-xl sticky bottom-0">
             {footer}
           </div>
         )}
