@@ -37,6 +37,11 @@ COMANDOS QUE EL USUARIO PUEDE USAR (conocelos y sugerilos cuando sea útil):
 - "compra pilas AA para Abel mañana" / "comprar cinta ducto el viernes" → Registrar compra (propia o asignada, notifica al encargado)
 - "compras" → Ver compras pendientes
 - "comprado 2" → Marcar la compra #2 como comprada
+- "recordatorios" / "recordatorios hoy" / "recordatorios semana" → Ver recordatorios numerados (por defecto muestra solo los de HOY)
+- "eliminar recordatorio 2" / "eliminar recordatorios 1 2 3" → Eliminar recordatorios
+- "eliminar 3" / "borrar 1 2 3" → Eliminar tareas por su número
+- "eliminar todo" / "limpiar mis tareas" → Eliminar todas mis tareas pendientes
+- "limpiar tareas de Diana" → (admin/jefe) Eliminar todas las tareas de un usuario
 - "ranking" → Ver top de cumplimiento del equipo
 - "resumen" → Mis tareas + eventos + cumplimiento
 - "equipo" → Lista de compañeros

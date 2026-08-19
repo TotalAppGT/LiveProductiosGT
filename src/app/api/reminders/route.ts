@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const reminders = await prisma.reminder.findMany({
       where,
-      orderBy: { remindAt: "asc" },
+      orderBy: [{ sortOrder: "asc" }, { remindAt: "asc" }],
       take: limit,
       include: {
         assignedTo: { select: { id: true, name: true } },

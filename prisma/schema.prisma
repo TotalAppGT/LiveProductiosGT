@@ -632,6 +632,7 @@ model Reminder {
   assignedTo      User      @relation("ReminderAssignee", fields: [assignedToId], references: [id])
   notified        Boolean   @default(false)
   advanceNotified Boolean   @default(false)
+  sortOrder       Int       @default(0)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }

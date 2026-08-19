@@ -967,6 +967,46 @@ async function handleCommand(
     return `↩️ Tarea *${task.title}* deshecha: vuelve a estar pendiente.`;
   }
 
+  // 🗑️ ELIMINAR tareas por número (una o varias)
+  if (cmd.startsWith("eliminar ") || cmd.startsWith("borrar ") || cmd.startsWith("elimina ") || cmd.startsWith("borra ")) {
+    const numStr = cmd.replace(/^(eliminar|borrar|elimina|borra)\s+/i, "").trim();
+    const nums = extractNumbers(numStr);
+    if (nums.length > 0) {
+      const deleted: string[] = [];
+      const failed: string[] = [];
+      for (const num of nums) {
+        const task = await resolveTaskByNumber(user.id, num);
+        if (!task) { failed.push(String(num)); continue; }
+        await prisma.task.delete({ where: { id: task.id } });
+        deleted.push(task.title);
+      }
+      if (deleted.length === 0) return `⚠️ No pude eliminar: ${failed.join(", ")}. Escribí *tareas* para ver la lista.`;
+      let reply = `🗑️ *${deleted.length} tarea${deleted.length > 1 ? "s" : ""} eliminada${deleted.length > 1 ? "s" : ""}:*\n${deleted.map((t) => `• ${t}`).join("\n")}`;
+      if (failed.length > 0) reply += `\n\n⚠️ No se pudo: ${failed.join(", ")}`;
+      return reply;
+    }
+    // "eliminar todo" / "borrar todo"
+    if (/todo|todas|todos|masivo/i.test(numStr)) {
+      const res = await prisma.task.deleteMany({
+        where: { assignedToId: user.id, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
+      });
+      return `🗑️ Eliminaste ${res.count} tareas pendientes. Empezás de cero.`;
+    }
+    return "Formato: *eliminar 3* o *eliminar 1 2 3* o *eliminar todo*";
+  }
+
+  // 🧹 LIMPIAR tareas de un usuario (admin/jefe)
+  if (cmd.startsWith("limpiar tareas de ") || cmd.startsWith("limpiar las tareas de ") || cmd.startsWith("borrar tareas de ")) {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "Solo dueños, administradores o jefes pueden limpiar tareas de otros.";
+    const name = cmd.replace(/^(limpiar tareas de |limpiar las tareas de |borrar tareas de )/i, "").trim();
+    if (!name) return "¿De quién? Ejemplo: *limpiar tareas de Diana*";
+    const target = await prisma.user.findFirst({ where: { name: { contains: name, mode: "insensitive" }, active: true } });
+    if (!target) return `No encontré a "${name}". Usa *equipo* para ver los nombres.`;
+    const res = await prisma.task.deleteMany({ where: { assignedToId: target.id } });
+    return `🧹 Se eliminaron ${res.count} tareas de *${target.name}*.`;
+  }
+
   if (cmd.startsWith("proceso ") || cmd.startsWith("iniciar ") || cmd.startsWith("en proceso ")) {
     const numStr = cmd.replace(/^(proceso|iniciar|en proceso)\s+/i, "").trim();
     const nums = extractNumbers(numStr);
@@ -1491,6 +1531,77 @@ async function handleCommand(
     return `🛒 Compra *${p.title}* marcada como *COMPRADO*. ¡Gracias!`;
   }
 
+  // ⏰ RECORDATORIOS: ver y eliminar (por defecto muestra solo los de HOY)
+  if (cmd === "recordatorios" || cmd === "mis recordatorios" || cmd === "ver recordatorios" || cmd.startsWith("recordatorios ")) {
+    const period = cmd.replace(/^recordatorios\s*/i, "").trim();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(today); endOfToday.setHours(23, 59, 59, 999);
+    const endOfWeek = new Date(today); endOfWeek.setDate(endOfWeek.getDate() + 6); endOfWeek.setHours(23, 59, 59, 999);
+
+    let where: any = { assignedToId: user.id, isCompleted: false };
+    let title = "RECORDATORIOS DE HOY";
+    if (period === "hoy") {
+      where.remindAt = { gte: today, lte: endOfToday };
+      title = "RECORDATORIOS DE HOY";
+    } else if (period === "semana" || period === "esta semana") {
+      where.remindAt = { gte: today, lte: endOfWeek };
+      title = "RECORDATORIOS DE ESTA SEMANA";
+    } else if (period === "todos" || period === "todas") {
+      title = "TODOS TUS RECORDATORIOS";
+    } else if (period) {
+      // Si pide un día específico (ej. "recordatorios mañana"), intenta parsear
+      const d = parseRelativeDate(period, new Date());
+      if (d) {
+        const start = new Date(d); start.setHours(0, 0, 0, 0);
+        const end = new Date(d); end.setHours(23, 59, 59, 999);
+        where.remindAt = { gte: start, lte: end };
+        title = `RECORDATORIOS ${d.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}`;
+      }
+    } else {
+      // Por defecto: solo hoy
+      where.remindAt = { gte: today, lte: endOfToday };
+    }
+
+    const reminders = await prisma.reminder.findMany({
+      where,
+      orderBy: { remindAt: "asc" },
+      take: 30,
+    });
+    if (reminders.length === 0) return period ? `No tienes recordatorios para "${period}".` : "No tienes recordatorios para hoy.";
+
+    const lines = reminders.map((r, i) => {
+      const d = r.remindAt;
+      const day = d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" });
+      const time = d.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" });
+      return `${i + 1}. ⏰ *${r.title}* → ${day} ${time}`;
+    }).join("\n");
+
+    return `⏰ *${title}*\n\n${lines}\n\n⚡ Para eliminar: *eliminar recordatorio 2* o *eliminar recordatorios 1 2 3*\n📅 Ver más: *recordatorios semana* | *recordatorios todos*`;
+  }
+
+  if (cmd.startsWith("eliminar recordatorio") || cmd.startsWith("borrar recordatorio") || cmd.startsWith("eliminar recordatorios") || cmd.startsWith("borrar recordatorios")) {
+    const numStr = cmd.replace(/^(eliminar|borrar)\s+recordatorios?\s*/i, "").trim();
+    const nums = extractNumbers(numStr);
+    if (nums.length === 0) return "¿Cuál recordatorio? Ejemplo: *eliminar recordatorio 2* o *eliminar recordatorios 1 2 3*";
+    const reminders = await prisma.reminder.findMany({
+      where: { assignedToId: user.id, isCompleted: false },
+      orderBy: { remindAt: "asc" },
+      take: 30,
+    });
+    const deleted: string[] = [];
+    const failed: string[] = [];
+    for (const num of nums) {
+      const r = reminders[num - 1];
+      if (!r) { failed.push(String(num)); continue; }
+      await prisma.reminder.delete({ where: { id: r.id } });
+      deleted.push(r.title);
+    }
+    if (deleted.length === 0) return `⚠️ No pude eliminar: ${failed.join(", ")}. Escribí *recordatorios* para verlos.`;
+    let reply = `🗑️ *${deleted.length} recordatorio${deleted.length > 1 ? "s" : ""} eliminado${deleted.length > 1 ? "s" : ""}:*\n${deleted.map((t) => `• ${t}`).join("\n")}`;
+    if (failed.length > 0) reply += `\n\n⚠️ No se pudo: ${failed.join(", ")}`;
+    return reply;
+  }
+
   if (cmd === "inventario" || cmd.startsWith("inventario ")) {
     const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
     if (!isAdmin) return "El inventario solo está disponible para dueños, administradores y jefes.";
@@ -1855,6 +1966,7 @@ function isKnownCommand(text: string): boolean {
     "compra", "comprar", "compras", "comprado", "agrega compra", "agregar compra",
     "asigna", "asignar", "agrega tarea", "agregar tarea", "ponle", "deja",
     "mandale", "mándale", "manda", "envia", "enviale", "envíale", "mensaje",
+    "eliminar", "borrar", "elimina", "borra", "limpiar", "recordatorios",
   ];
   const lower = text.toLowerCase().trim();
   return knownCommands.some(k => lower.startsWith(k));

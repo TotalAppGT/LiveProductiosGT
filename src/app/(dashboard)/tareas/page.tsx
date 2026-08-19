@@ -241,6 +241,23 @@ export default function TareasPage() {
     }
   }
 
+  async function batchDeleteTasks() {
+    if (selectedTasks.size === 0) return;
+    if (!confirm(`¿Eliminar ${selectedTasks.size} tareas seleccionadas?`)) return;
+    try {
+      await Promise.all(
+        Array.from(selectedTasks).map((id) =>
+          fetch(`/api/tasks/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
+        )
+      );
+      setSelectedTasks(new Set());
+      toast.success(`${selectedTasks.size} tareas eliminadas`);
+      fetchTasks();
+    } catch {
+      toast.error("Error al eliminar masivamente");
+    }
+  }
+
   async function quickAddTask() {
     const title = quickTitle.trim();
     if (!title) return;
@@ -359,6 +376,37 @@ export default function TareasPage() {
       fetchReminders();
     } catch {
       toast.error("Error al eliminar recordatorio");
+    }
+  }
+
+  async function deleteAllReminders() {
+    if (!confirm("¿Eliminar TODOS los recordatorios pendientes?")) return;
+    try {
+      const res = await fetch("/api/reminders", { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) {
+        const ids = (json.data || []).map((r: any) => r.id);
+        await Promise.all(ids.map((id: string) => fetch(`/api/reminders/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })));
+        toast.success(`${ids.length} recordatorios eliminados`);
+        fetchReminders();
+      }
+    } catch {
+      toast.error("Error al eliminar recordatorios");
+    }
+  }
+
+  async function moveReminder(id: string, direction: "up" | "down") {
+    try {
+      const res = await fetch("/api/reminders/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id, direction }),
+      });
+      const json = await res.json();
+      if (json.success) fetchReminders();
+      else toast.error(json.error || "No se pudo mover");
+    } catch {
+      toast.error("Error al mover recordatorio");
     }
   }
 
@@ -544,41 +592,59 @@ export default function TareasPage() {
     key: string;
     label: string;
     bg: string;
-    level: number; // 0=fase, 1=día, 2=tipo
+    level: number; // 0=día, 1=tipo (fijas/variables)
     tasks: Task[];
     insertCategory?: string;
     insertType?: string;
     insertDayOfWeek?: string;
   }
+  // Orden de fase dentro de cada tipo
+  const phasePriority = (t: Task) => {
+    if (t.category === "PRE_EVENTO") return 0;
+    if (t.category === "EVENTO") return 1;
+    if (t.category === "POST_EVENTO") return 2;
+    return 3;
+  };
+  // Estructura: DÍA (Lunes..Sábado) → FIJAS/VARIABLES → (orden por fase Pre/Evento/Post)
   function buildHierarchicalGroups(): SheetSection[] {
     const sections: SheetSection[] = [];
-    for (const phase of sheetOrder) {
-      const phaseTasks = visibleTasks.filter((t) =>
-        phase.key === "OTRO" ? !["PRE_EVENTO", "EVENTO", "POST_EVENTO"].includes(t.category) : t.category === phase.key
-      );
-      if (phaseTasks.length === 0) continue;
-      sections.push({ key: phase.key, label: phase.label, bg: phase.bg, level: 0, tasks: [] });
+    const byDay = new Map<string, Task[]>();
+    visibleTasks.forEach((t) => {
+      const day = taskDayLabel(t);
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day)!.push(t);
+    });
+    const orderedDays = [...dayGroupOrder, "Sin fecha"].filter((d) => byDay.has(d));
+    for (const day of orderedDays) {
+      const dayTasks = byDay.get(day)!;
+      const dow = dayToDayOfWeek[day];
+      // Fase badge para el día (según qué fases haya)
+      const hasPre = dayTasks.some((t) => t.category === "PRE_EVENTO");
+      const hasPost = dayTasks.some((t) => t.category === "POST_EVENTO");
+      let dayLabel = day;
+      if (hasPre && hasPost) dayLabel = `${day} · 🎪Pre 🏁Post`;
+      else if (hasPre) dayLabel = `${day} · 🎪Pre`;
+      else if (hasPost) dayLabel = `${day} · 🏁Post`;
+      sections.push({ key: `day-${day}`, label: dayLabel, bg: dayBgMap[day] || "bg-gray-600", level: 0, tasks: [], insertDayOfWeek: dow });
 
-      const byDay = new Map<string, Task[]>();
-      phaseTasks.forEach((t) => {
-        const day = taskDayLabel(t);
-        if (!byDay.has(day)) byDay.set(day, []);
-        byDay.get(day)!.push(t);
-      });
-      const orderedDays = [...dayGroupOrder, "Sin fecha"].filter((d) => byDay.has(d));
-      for (const day of orderedDays) {
-        sections.push({ key: `${phase.key}-${day}`, label: day, bg: dayBgMap[day] || "bg-gray-500", level: 1, tasks: [] });
-        const dayTasks = byDay.get(day)!;
-        const fijas = dayTasks.filter((t) => t.type === "FIJA").sort(sortByDayHour);
-        const variables = dayTasks.filter((t) => t.type !== "FIJA").sort(sortByDayHour);
-        const cat = phase.key === "OTRO" ? "OTRO" : phase.key;
-        const dow = dayToDayOfWeek[day];
-        if (fijas.length > 0) {
-          sections.push({ key: `${phase.key}-${day}-fijas`, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: fijas, insertCategory: cat, insertType: "FIJA", insertDayOfWeek: dow });
+      const sortByPhaseThenHour = (a: Task, b: Task) => {
+        if ((a.sortOrder || b.sortOrder) && a.sortOrder !== b.sortOrder) {
+          return (a.sortOrder || 0) - (b.sortOrder || 0);
         }
-        if (variables.length > 0) {
-          sections.push({ key: `${phase.key}-${day}-var`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: variables, insertCategory: cat, insertType: "DINAMICA", insertDayOfWeek: dow });
-        }
+        const pd = phasePriority(a) - phasePriority(b);
+        if (pd !== 0) return pd;
+        const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+        const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+        return da - db;
+      };
+
+      const fijas = dayTasks.filter((t) => t.type === "FIJA").sort(sortByPhaseThenHour);
+      const variables = dayTasks.filter((t) => t.type !== "FIJA").sort(sortByPhaseThenHour);
+      if (fijas.length > 0) {
+        sections.push({ key: `${day}-fijas`, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 1, tasks: fijas, insertType: "FIJA", insertDayOfWeek: dow });
+      }
+      if (variables.length > 0) {
+        sections.push({ key: `${day}-var`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 1, tasks: variables, insertType: "DINAMICA", insertDayOfWeek: dow });
       }
     }
     return sections;
@@ -686,6 +752,9 @@ export default function TareasPage() {
             </Button>
             <Button variant="outline" size="sm" onClick={() => batchUpdateStatus("PENDIENTE")}>
               Pendiente
+            </Button>
+            <Button variant="outline" size="sm" onClick={batchDeleteTasks} className="text-red-600">
+              Eliminar
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setSelectedTasks(new Set())}>
               <X className="h-4 w-4" />
@@ -1063,24 +1132,21 @@ export default function TareasPage() {
                   <div className="min-w-[720px]">
                     {sheetGroups.map((group, gi) => (
                       <div key={group.key + gi}>
-                        {/* Fila de encabezado: fase / día / tipo */}
-                        <div className={`${group.bg} flex items-center justify-between ${group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white" : group.level === 1 ? "px-3 py-1 text-[11px] font-semibold text-white" : "px-4 py-0.5 text-[10px] font-semibold text-gray-700 dark:text-gray-200"}`}>
-                          <span>{group.level === 1 ? "📅 " : ""}{group.label}</span>
+                        {/* Fila de encabezado: día / tipo */}
+                        <div className={`${group.bg} flex items-center justify-between ${group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white" : "px-3 py-1 text-[11px] font-semibold text-gray-700 dark:text-gray-200"}`}>
+                          <span>{group.label}</span>
                           <div className="flex items-center gap-1">
                             <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{group.tasks.length}</span>
-                            {(group.level === 0 || group.level === 2) && (
-                              <button
-                                onClick={() => {
-                                  const cat = group.level === 0 ? (group.key === "OTRO" ? "OTRO" : group.key) : (group as any).insertCategory;
-                                  setCreatePrefill({ category: cat, type: (group as any).insertType, dayOfWeek: (group as any).insertDayOfWeek });
-                                  setShowCreateModal(true);
-                                }}
-                                className="ml-1 px-1.5 py-0.5 rounded bg-white/25 hover:bg-white/40 text-white text-[11px] font-bold leading-none"
-                                title="Agregar tarea aquí"
-                              >
-                                +
-                              </button>
-                            )}
+                            <button
+                              onClick={() => {
+                                setCreatePrefill({ category: undefined, type: (group as any).insertType, dayOfWeek: (group as any).insertDayOfWeek });
+                                setShowCreateModal(true);
+                              }}
+                              className="ml-1 px-1.5 py-0.5 rounded bg-white/25 hover:bg-white/40 text-white text-[11px] font-bold leading-none"
+                              title="Agregar tarea aquí"
+                            >
+                              +
+                            </button>
                           </div>
                         </div>
                         {group.tasks.map((task, idx) => (
@@ -1106,6 +1172,9 @@ export default function TareasPage() {
                               <span className={`truncate ${task.status === "COMPLETADA" ? "line-through text-gray-400" : "text-gray-900 dark:text-white"}`}>
                                 {task.title}
                               </span>
+                              {task.category === "PRE_EVENTO" && <span className="shrink-0 text-[9px]" title="Pre Evento">🎪</span>}
+                              {task.category === "EVENTO" && <span className="shrink-0 text-[9px]" title="Evento">🚀</span>}
+                              {task.category === "POST_EVENTO" && <span className="shrink-0 text-[9px]" title="Post Evento">🏁</span>}
                               {task.type === "FIJA" && (
                                 <span className="shrink-0 text-[9px] px-1 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 font-semibold">🔁</span>
                               )}
@@ -1203,7 +1272,18 @@ export default function TareasPage() {
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div className="px-2 py-1 text-[11px] font-bold text-white bg-sky-600 flex items-center justify-between">
                   <span>⏰ Recordatorios</span>
-                  <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{reminders.length}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{reminders.length}</span>
+                    {reminders.length > 0 && (
+                      <button
+                        onClick={deleteAllReminders}
+                        className="px-1.5 py-0.5 rounded bg-red-500/70 hover:bg-red-600 text-white text-[10px] font-bold leading-none"
+                        title="Eliminar todos los recordatorios"
+                      >
+                        Eliminar todos
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <div className="min-w-[720px]">
@@ -1237,6 +1317,20 @@ export default function TareasPage() {
                           {r.assignedTo?.name?.split(" ")[0] || "—"}
                         </div>
                         <div className="col-span-2 flex items-center justify-end gap-0.5">
+                          <button
+                            onClick={() => moveReminder(r.id, "up")}
+                            className="p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
+                            title="Subir"
+                          >
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => moveReminder(r.id, "down")}
+                            className="p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
+                            title="Bajar"
+                          >
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
                           <button
                             onClick={() => completeReminder(r.id)}
                             className="p-0.5 rounded hover:bg-sky-50 dark:hover:bg-sky-900/30 text-sky-600"
