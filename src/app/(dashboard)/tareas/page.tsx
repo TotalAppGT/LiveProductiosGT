@@ -396,17 +396,36 @@ export default function TareasPage() {
   }
 
   async function moveReminder(id: string, direction: "up" | "down") {
+    const list = reminders;
+    const idx = list.findIndex((r) => r.id === id);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= list.length) return;
+
+    const newOrder = [...list];
+    [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
+
+    setReminders((prev) => {
+      const ids = newOrder.map((r) => r.id);
+      const map = new Map<string, number>();
+      ids.forEach((rid, i) => map.set(rid, i));
+      return prev.map((r) => (map.has(r.id) ? { ...r, sortOrder: map.get(r.id)! } : r));
+    });
+
     try {
       const res = await fetch("/api/reminders/reorder", {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id, direction }),
+        body: JSON.stringify({ orderedIds: newOrder.map((r) => r.id) }),
       });
       const json = await res.json();
-      if (json.success) fetchReminders();
-      else toast.error(json.error || "No se pudo mover");
+      if (!json.success) {
+        toast.error(json.error || "No se pudo mover");
+        fetchReminders();
+      }
     } catch {
       toast.error("Error al mover recordatorio");
+      fetchReminders();
     }
   }
 
@@ -428,20 +447,40 @@ export default function TareasPage() {
   }
 
   async function moveTask(taskId: string, direction: "up" | "down") {
+    // Reordenar dentro del segmento visible: tomamos el grupo actual al que pertenece la tarea
+    const group = sheetGroups.find((g) => g.tasks.some((t) => t.id === taskId));
+    if (!group) return;
+    const list = group.tasks;
+    const idx = list.findIndex((t) => t.id === taskId);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= list.length) return;
+
+    const newOrder = [...list];
+    [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
+
+    // Actualizar localmente para feedback inmediato
+    setTasks((prev) => {
+      const ids = newOrder.map((t) => t.id);
+      const map = new Map<string, number>();
+      ids.forEach((id, i) => map.set(id, i));
+      return prev.map((t) => (map.has(t.id) ? { ...t, sortOrder: map.get(t.id)! } : t));
+    });
+
     try {
       const res = await fetch("/api/tasks/reorder", {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id: taskId, direction }),
+        body: JSON.stringify({ orderedIds: newOrder.map((t) => t.id) }),
       });
       const json = await res.json();
-      if (json.success) {
-        fetchTasks();
-      } else {
+      if (!json.success) {
         toast.error(json.error || "No se pudo mover");
+        fetchTasks();
       }
     } catch {
       toast.error("Error al mover tarea");
+      fetchTasks();
     }
   }
   async function submitComment() {
@@ -531,8 +570,9 @@ export default function TareasPage() {
     { key: "OTRO", label: "Otras tareas", bg: "bg-gray-600" },
   ];
   const sortByDayHour = (a: Task, b: Task) => {
-    // Si alguna tarea tiene sortOrder manual (>0), priorizarlo para respetar el reordenamiento
-    if ((a.sortOrder || b.sortOrder) && a.sortOrder !== b.sortOrder) {
+    // Si alguna tarea tiene orden manual (>0), priorizarlo para respetar el reordenamiento
+    const hasManual = (a.sortOrder || 0) > 0 || (b.sortOrder || 0) > 0;
+    if (hasManual && a.sortOrder !== b.sortOrder) {
       return (a.sortOrder || 0) - (b.sortOrder || 0);
     }
     const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
@@ -626,7 +666,8 @@ export default function TareasPage() {
       sections.push({ key: `day-${day}`, label: day, bg: dayBgMap[day] || "bg-gray-600", level: 0, tasks: [], insertDayOfWeek: dow });
 
       const sortByHour = (a: Task, b: Task) => {
-        if ((a.sortOrder || b.sortOrder) && a.sortOrder !== b.sortOrder) {
+        const hasManual = (a.sortOrder || 0) > 0 || (b.sortOrder || 0) > 0;
+        if (hasManual && a.sortOrder !== b.sortOrder) {
           return (a.sortOrder || 0) - (b.sortOrder || 0);
         }
         const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;

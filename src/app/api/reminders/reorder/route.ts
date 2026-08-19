@@ -2,6 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 
+// Reordenar recordatorios: recibe lista ordenada de ids y asigna sortOrder secuencialmente
+export async function POST(request: NextRequest) {
+  try {
+    const auth = authenticateRequest(request);
+    if ("error" in auth) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+    }
+
+    const body = await request.json();
+    const { orderedIds } = body;
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      return NextResponse.json({ success: false, error: "Lista de ids requerida" }, { status: 400 });
+    }
+
+    await prisma.$transaction(
+      orderedIds.map((id: string, index: number) =>
+        prisma.reminder.update({ where: { id }, data: { sortOrder: index } })
+      )
+    );
+
+    return NextResponse.json({ success: true, message: "Orden actualizado" }, { status: 200 });
+  } catch (error) {
+    console.error("Error reordenando recordatorios:", error);
+    return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });
+  }
+}
+
 // Mover un recordatorio arriba o abajo
 export async function PUT(request: NextRequest) {
   try {
