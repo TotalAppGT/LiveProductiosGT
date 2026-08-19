@@ -72,25 +72,27 @@ async function getAdminUsers() {
 async function morningBriefing() {
   console.log("[Cron] Ejecutando morning briefing (7:00 AM)");
 
-  try {
-    const carried = await carryOverUncompletedTasks();
-    console.log(`[Cron] Tareas arrastradas del día anterior: ${carried}`);
-  } catch (err) {
-    console.error("[Cron] Error cargando tareas de ayer:", err);
-  }
-
   const users = await getActiveUsersWithWhatsApp();
 
   for (const user of users) {
     try {
       const now = getGuatemalaTime();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfToday = new Date(startOfToday); endOfToday.setHours(23, 59, 59, 999);
+
+      // Semana laboral: LUNES a SÁBADO
+      const dayOfWeek = now.getDay(); // 0=domingo
+      const monday = new Date(startOfToday);
+      monday.setDate(startOfToday.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+      const saturday = new Date(monday); saturday.setDate(monday.getDate() + 5); saturday.setHours(23, 59, 59, 999);
+
       const tasks = await prisma.task.findMany({
         where: {
           assignedToId: user.id,
           status: { in: ["PENDIENTE", "EN_PROCESO"] },
         },
         orderBy: [{ dueDate: "asc" }],
-        take: 10,
+        take: 100,
       });
 
       const events = await prisma.event.findMany({
@@ -106,7 +108,29 @@ async function morningBriefing() {
       const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
       const dayName = dayNames[now.getDay()];
 
-      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un saludo de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Tiene ${tasks.length} tareas pendientes, ${events.length} eventos próximos. Sé profesional, cálida y motivadora. Mencioná sus prioridades. Máximo 3 oraciones. Español de Guatemala. Presentate como LUNA.`;
+      const { orderTasksByDayHour, groupTasksByDayText } = await import("@/lib/task-view");
+
+      // Organizar por semana (desde el lunes):
+      // 1) Vencidas: tareas anteriores al lunes de esta semana (no completadas)
+      // 2) Esta semana: lunes → sábado (incluye hoy), ordenadas por día y hora
+      // 3) Próximas: después del sábado
+      const overdue = tasks.filter((t) => t.dueDate && new Date(t.dueDate) < monday);
+      const thisWeek = tasks.filter((t) => t.dueDate && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= saturday);
+      const upcoming = tasks.filter((t) => t.dueDate && new Date(t.dueDate) > saturday);
+
+      let taskLines = "";
+      if (overdue.length > 0) {
+        taskLines += `⚠️ *Vencidas / No completadas (${overdue.length})*\n${groupTasksByDayText(orderTasksByDayHour(overdue))}\n\n`;
+      }
+      if (thisWeek.length > 0) {
+        taskLines += `📅 *Esta Semana — lunes ${monday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} a sábado ${saturday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} (${thisWeek.length})*\n${groupTasksByDayText(orderTasksByDayHour(thisWeek))}\n\n`;
+      }
+      if (upcoming.length > 0) {
+        taskLines += `📅 *Próximas semanas (${upcoming.length})*\n${groupTasksByDayText(orderTasksByDayHour(upcoming))}\n\n`;
+      }
+      taskLines = taskLines.trim();
+
+      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un saludo de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Tiene ${tasks.length} tareas pendientes (${overdue.length} vencidas, ${thisWeek.length} esta semana, ${upcoming.length} próximas), ${events.length} eventos próximos. Sé profesional, cálida y motivadora. Mencioná sus prioridades. Máximo 3 oraciones. Español de Guatemala. Presentate como LUNA.`;
 
       let aiMessage = "";
       try {
@@ -115,12 +139,8 @@ async function morningBriefing() {
           { temperature: 0.7, maxTokens: 250 }
         );
       } catch {
-        aiMessage = `¡Buenos días ${user.name}! Soy LUNA. Hoy tienes ${tasks.length} tareas pendientes. ¡A darle con todo! 💪`;
+        aiMessage = `¡Buenos días ${user.name}! Soy LUNA. Esta semana tienes ${thisWeek.length} tareas${overdue.length ? ` y ${overdue.length} vencidas que debes atender` : ""}. ¡A darle con todo! 💪`;
       }
-
-      const { orderTasksByDayHour, groupTasksByDayText } = await import("@/lib/task-view");
-      const orderedTasks = orderTasksByDayHour(tasks);
-      const taskLines = orderedTasks.length > 0 ? groupTasksByDayText(orderedTasks) : "";
 
       const eventLines = events
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -128,7 +148,7 @@ async function morningBriefing() {
         .join("\n");
 
       let fullMessage = `☀️ *Buenos días, ${user.name}*\n${dayName}\n\n${aiMessage}`;
-      if (taskLines) fullMessage += `\n\n📋 *Tareas (${tasks.length})*\n${taskLines}`;
+      if (taskLines) fullMessage += `\n\n${taskLines}`;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
 
       const to = user.whatsappNumber || user.phone;
@@ -139,6 +159,14 @@ async function morningBriefing() {
     } catch (error) {
       console.error(`[Cron] Error morning briefing for ${user.name}:`, error);
     }
+  }
+
+  // Después de informar, arrastrar las tareas vencidas no completadas a hoy
+  try {
+    const carried = await carryOverUncompletedTasks();
+    if (carried > 0) console.log(`[Cron] Tareas vencidas arrastradas a hoy: ${carried}`);
+  } catch (err) {
+    console.error("[Cron] Error cargando tareas vencidas:", err);
   }
 }
 
