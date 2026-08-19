@@ -587,25 +587,30 @@ export default function TareasPage() {
     }));
   }
 
-  // Agrupación jerárquica: FASE → DÍA → FIJAS/VARIABLES
+  // Agrupación jerárquica: DÍA → FASE (Pre/Evento/Post) → FIJAS/VARIABLES
   interface SheetSection {
     key: string;
     label: string;
     bg: string;
-    level: number; // 0=día, 1=tipo (fijas/variables)
+    level: number; // 0=día, 1=fase, 2=tipo
     tasks: Task[];
     insertCategory?: string;
     insertType?: string;
     insertDayOfWeek?: string;
   }
-  // Orden de fase dentro de cada tipo
+  // Orden de fase
   const phasePriority = (t: Task) => {
     if (t.category === "PRE_EVENTO") return 0;
     if (t.category === "EVENTO") return 1;
     if (t.category === "POST_EVENTO") return 2;
     return 3;
   };
-  // Estructura: DÍA (Lunes..Sábado) → FIJAS/VARIABLES → (orden por fase Pre/Evento/Post)
+  const phaseDefs = [
+    { key: "PRE_EVENTO", label: "🎪 Pre Evento", bg: "bg-blue-500" },
+    { key: "EVENTO", label: "🚀 Evento", bg: "bg-purple-500" },
+    { key: "POST_EVENTO", label: "🏁 Post Evento", bg: "bg-emerald-500" },
+    { key: "OTRO", label: "Otras tareas", bg: "bg-gray-500" },
+  ];
   function buildHierarchicalGroups(): SheetSection[] {
     const sections: SheetSection[] = [];
     const byDay = new Map<string, Task[]>();
@@ -618,33 +623,33 @@ export default function TareasPage() {
     for (const day of orderedDays) {
       const dayTasks = byDay.get(day)!;
       const dow = dayToDayOfWeek[day];
-      // Fase badge para el día (según qué fases haya)
-      const hasPre = dayTasks.some((t) => t.category === "PRE_EVENTO");
-      const hasPost = dayTasks.some((t) => t.category === "POST_EVENTO");
-      let dayLabel = day;
-      if (hasPre && hasPost) dayLabel = `${day} · 🎪Pre 🏁Post`;
-      else if (hasPre) dayLabel = `${day} · 🎪Pre`;
-      else if (hasPost) dayLabel = `${day} · 🏁Post`;
-      sections.push({ key: `day-${day}`, label: dayLabel, bg: dayBgMap[day] || "bg-gray-600", level: 0, tasks: [], insertDayOfWeek: dow });
+      sections.push({ key: `day-${day}`, label: day, bg: dayBgMap[day] || "bg-gray-600", level: 0, tasks: [], insertDayOfWeek: dow });
 
-      const sortByPhaseThenHour = (a: Task, b: Task) => {
+      const sortByHour = (a: Task, b: Task) => {
         if ((a.sortOrder || b.sortOrder) && a.sortOrder !== b.sortOrder) {
           return (a.sortOrder || 0) - (b.sortOrder || 0);
         }
-        const pd = phasePriority(a) - phasePriority(b);
-        if (pd !== 0) return pd;
         const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
         const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
         return da - db;
       };
 
-      const fijas = dayTasks.filter((t) => t.type === "FIJA").sort(sortByPhaseThenHour);
-      const variables = dayTasks.filter((t) => t.type !== "FIJA").sort(sortByPhaseThenHour);
-      if (fijas.length > 0) {
-        sections.push({ key: `${day}-fijas`, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 1, tasks: fijas, insertType: "FIJA", insertDayOfWeek: dow });
-      }
-      if (variables.length > 0) {
-        sections.push({ key: `${day}-var`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 1, tasks: variables, insertType: "DINAMICA", insertDayOfWeek: dow });
+      // Para cada fase (Pre, Evento, Post, Otras) en este día
+      for (const phase of phaseDefs) {
+        const phaseTasks = dayTasks.filter((t) =>
+          phase.key === "OTRO" ? !["PRE_EVENTO", "EVENTO", "POST_EVENTO"].includes(t.category) : t.category === phase.key
+        );
+        if (phaseTasks.length === 0) continue;
+        sections.push({ key: `${day}-${phase.key}`, label: phase.label, bg: phase.bg, level: 1, tasks: [], insertCategory: phase.key === "OTRO" ? "OTRO" : phase.key, insertDayOfWeek: dow });
+
+        const fijas = phaseTasks.filter((t) => t.type === "FIJA").sort(sortByHour);
+        const variables = phaseTasks.filter((t) => t.type !== "FIJA").sort(sortByHour);
+        if (fijas.length > 0) {
+          sections.push({ key: `${day}-${phase.key}-fijas`, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: fijas, insertCategory: phase.key === "OTRO" ? "OTRO" : phase.key, insertType: "FIJA", insertDayOfWeek: dow });
+        }
+        if (variables.length > 0) {
+          sections.push({ key: `${day}-${phase.key}-var`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: variables, insertCategory: phase.key === "OTRO" ? "OTRO" : phase.key, insertType: "DINAMICA", insertDayOfWeek: dow });
+        }
       }
     }
     return sections;
@@ -1132,14 +1137,18 @@ export default function TareasPage() {
                   <div className="min-w-[720px]">
                     {sheetGroups.map((group, gi) => (
                       <div key={group.key + gi}>
-                        {/* Fila de encabezado: día / tipo */}
-                        <div className={`${group.bg} flex items-center justify-between ${group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white" : "px-3 py-1 text-[11px] font-semibold text-gray-700 dark:text-gray-200"}`}>
+                        {/* Fila de encabezado: día / fase / tipo */}
+                        <div className={`${group.bg} flex items-center justify-between ${
+                          group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white"
+                          : group.level === 1 ? "px-3 py-1 text-[11px] font-semibold text-white"
+                          : "px-4 py-0.5 text-[10px] font-semibold text-gray-700 dark:text-gray-200"
+                        }`}>
                           <span>{group.label}</span>
                           <div className="flex items-center gap-1">
                             <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{group.tasks.length}</span>
                             <button
                               onClick={() => {
-                                setCreatePrefill({ category: undefined, type: (group as any).insertType, dayOfWeek: (group as any).insertDayOfWeek });
+                                setCreatePrefill({ category: (group as any).insertCategory, type: (group as any).insertType, dayOfWeek: (group as any).insertDayOfWeek });
                                 setShowCreateModal(true);
                               }}
                               className="ml-1 px-1.5 py-0.5 rounded bg-white/25 hover:bg-white/40 text-white text-[11px] font-bold leading-none"
