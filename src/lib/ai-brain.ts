@@ -129,6 +129,7 @@ REGLAS ESTRICTAS:
 5. Mantenés registro mental de lo que cada usuario te ha preguntado en la conversación actual.
 6. Cuando un usuario complete una tarea, felicitalo brevemente.
 7. Cuando un usuario reporte una tarea no realizada, mostrá empatía y recordale que puede posponerla.
+8. SI ALGO ES AMBIGUO, PREGUNTÁ: si no está clara la fecha, la hora, la persona o la acción, hacé UNA pregunta corta y concreta para confirmar antes de actuar (ej: "¿mañana a las 9am o 3pm?"). Nunca adivines fechas, horas ni asignaciones.
 
 CAPACIDADES ANALÍTICAS Y PROACTIVIDAD:
 - Analizás el contexto de cada conversación para detectar necesidades no dichas.
@@ -140,7 +141,12 @@ CAPACIDADES ANALÍTICAS Y PROACTIVIDAD:
 - Cuando un usuario completa varias tareas seguidas, reconocés su productividad y lo motivás.
 - Si alguien pregunta algo fuera de tus capacidades, respondés con honestidad y ofrecés una alternativa útil.
 - Recordás que cada persona tiene su estilo: Jorge es directo, Diana es detallista, Daniel es técnico, Abel es práctico.
-- Siempre cerrás tus interacciones con una nota positiva o accionable, nunca dejás una conversación en el aire.`;
+- Siempre cerrás tus interacciones con una nota positiva o accionable, nunca dejás una conversación en el aire.
+- REVISÁS CONSTANTEMENTE: revisás el contexto que te dan (tareas, eventos, cobros, accesos) y mencionás lo que requiere atención sin que te lo pidan.
+- RECORDÁS: si hay una tarea urgente, una tarea vencida, un evento o un cobro importante próximo, lo recordás activamente en la conversación y ofrecés avanzar.
+- TOMÁS NOTA: si el usuario menciona algo que hay que hacer (una llamada, un pendiente, una idea, una compra), ofrecés convertirlo en tarea o recordatorio con el formato correcto (ej: "¿Quieres que lo agende para mañana?").
+- VES PATRONES: notás repeticiones (tareas pospuestas varias veces, incumplimiento recurrente, accesos bajos, gastos o compras repetidas) y las señalás con tacto, sugiriendo una solución concreta.
+- USÁS LAS SUGERENCIAS PROACTIVAS: el contexto incluye una sección "SUGERENCIAS PROACTIVAS" — usalas para anticiparte y ofrecer la siguiente acción.`;
 
 export interface AIMessage {
   role: "system" | "user" | "assistant";
@@ -836,6 +842,16 @@ export async function handleWhatsAppMessage(
     }
 
     const contextText = await getAIAssistantContext(user.id);
+    let proactiveText = "";
+    try {
+      const suggestions = await getProactiveSuggestions(user.id);
+      if (suggestions.length > 0) {
+        proactiveText = `\n\n--- SUGERENCIAS PROACTIVAS ---\n${suggestions.map((s) => `• ${s}`).join("\n")}`;
+      }
+    } catch {
+      // silencioso
+    }
+    const fullContext = contextText + proactiveText;
 
     const lowerMsg = message.toLowerCase();
     const isAdminQuery =
@@ -962,7 +978,7 @@ export async function handleWhatsAppMessage(
         { role: "system", content: LUNA_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `El usuario ${user.name} (${user.role}) de Live Productions GT te ha enviado este mensaje por WhatsApp: "${message}"\n\nContexto actual del usuario:\n${contextText}\n\nResponde como LUNA: profesional, cálida y útil. Mencioná números de tarea si aplica. Si el usuario necesita hacer una acción (completar, posponer, crear tarea), recordale el comando. Máximo 3-4 oraciones. Español de Guatemala.`,
+          content: `El usuario ${user.name} (${user.role}) de Live Productions GT te ha enviado este mensaje por WhatsApp: "${message}"\n\nContexto actual del usuario:\n${fullContext}\n\nResponde como LUNA: profesional, cálida y útil. Mencioná números de tarea si aplica. Si el usuario necesita hacer una acción (completar, posponer, crear tarea), recordale el comando. Usá las sugerencias proactivas para anticiparte. Si algo del mensaje es ambiguo, hacé UNA pregunta corta para confirmar. Máximo 3-4 oraciones. Español de Guatemala.`,
         },
       ],
       { temperature: 0.7, maxTokens: 600 }
