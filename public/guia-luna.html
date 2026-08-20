@@ -6,177 +6,254 @@
 <title>Guía de LUNA - Live Productions</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; line-height: 1.5; padding: 24px; max-width: 720px; margin: auto; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; line-height: 1.5; padding: 24px; max-width: 760px; margin: auto; }
 .header { text-align: center; border-bottom: 3px solid #1e40af; padding-bottom: 16px; margin-bottom: 20px; }
-.header h1 { font-size: 24px; color: #1e40af; }
+.header h1 { font-size: 26px; color: #1e40af; }
 .header p { color: #666; font-size: 13px; }
-h2 { font-size: 16px; color: #1e40af; margin: 20px 0 8px; border-left: 4px solid #1e40af; padding-left: 8px; }
+h2 { font-size: 16px; color: #1e40af; margin: 22px 0 8px; border-left: 4px solid #1e40af; padding-left: 8px; }
+h3 { font-size: 14px; color: #334155; margin: 14px 0 6px; }
 .section { margin-bottom: 16px; }
 table { width: 100%; border-collapse: collapse; margin: 6px 0; }
-td { padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 13px; }
-td:first-child { width: 45%; font-weight: 600; }
-code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
-li { margin: 4px 0 4px 18px; font-size: 13px; }
+td { padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 13px; vertical-align: top; }
+td:first-child { width: 38%; font-weight: 600; }
+code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: Consolas, monospace; }
+ul { padding-left: 18px; }
+li { margin: 5px 0; font-size: 13px; }
 .tip { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; }
 .note { background: #fefce8; border: 1px solid #fde68a; border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 13px; }
+.warn { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 13px; }
 .example { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin: 6px 0; font-size: 12px; white-space: pre-line; }
 .footer { text-align: center; color: #999; font-size: 11px; margin-top: 24px; border-top: 1px solid #eee; padding-top: 10px; }
 .colors { display: flex; gap: 8px; flex-wrap: wrap; }
 .color-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 4px; }
+.t-admin { background: #fee2e2; color: #b91c1c; }
+.t-jefe { background: #ede9fe; color: #6d28d9; }
+.t-todos { background: #dcfce7; color: #166534; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>🤖 GUÍA DE LUNA</h1>
+  <h1>🤖 GUÍA COMPLETA DE LUNA</h1>
   <p>Asistente IA Administrativa · Live Productions GT</p>
   <p>WhatsApp: +502 3084 0447</p>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
+<div class="section">
+  <h2>🚀 CÓMO FUNCIONA (LEER PRIMERO)</h2>
+  <p style="font-size:13px;margin:6px 0;">
+    LUNA es tu asistente por WhatsApp. Cada tarea aparece <strong>numerada</strong> (ej: <code>1.</code>) y todas las
+    acciones se hacen con ese número. La semana laboral es de <strong>lunes a sábado</strong> (domingo descanso).
+  </p>
+  <ul>
+    <li><strong>📌 Tareas Fijas (🔁)</strong> = actividades repetitivas que forman parte del esquema semanal (ej: "revisar chat de pagos"). Se repiten diaria o semanalmente y <strong>si no se completan el día, pasan automáticamente al siguiente</strong>, y así hasta que se cumplan o las modifiques.</li>
+    <li><strong>⚡ Tareas Variables</strong> = pendientes puntuales (ej: "llamar al proveedor el viernes"). Se quedan en su día y si no se hacen también pasan al siguiente.</li>
+    <li>Los <strong>recordatorios</strong> son avisos puntuales (te suenan 10 min antes y a la hora exacta).</li>
+    <li>Las <strong>compras</strong> son pendientes de mercado/bodega que se marcan como "comprado".</li>
+  </ul>
+  <div class="example">✅ Ejemplo de la lista que te llega:
+📋 *Tus Tareas*
+
+📅 *ESTA SEMANA* (lunes 24 - sábado 29)
+
+📅 *lunes, 24 de agosto*
+1. 🔴 🔁 Revisar chat de pagos 📌 08:00 a. m.
+2. 🟡 Confirmar staff evento 📌 09:00 a. m.
+3. 🟢 Verificar caja chica 📌 11:00 a. m.
+
+📅 *martes, 25 de agosto*
+4. 🔴 Llamar a proveedor de luces 📌 10:00 a. m.
+...</div>
+  <div class="note">
+    💡 <strong>Regla de oro:</strong> primero ves tus tareas (con <code>tareas</code>), LUNA te las numera,
+    y luego usás esos números para <code>hecho 1</code>, <code>posponer 2</code>, etc.
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
   <h2>📊 VER MIS TAREAS</h2>
   <table>
-    <tr><td><code>tareas</code></td><td>Todas mis tareas, semana a semana (esta → próxima → siguiente), día por día y por hora</td></tr>
-    <tr><td><code>tareas hoy</code></td><td>Solo las de hoy (por hora)</td></tr>
-    <tr><td><code>tareas semana</code> / <code>tareas esta semana</code></td><td>Esta semana, día por día</td></tr>
-    <tr><td><code>tareas semana 2</code> / <code>tareas la próxima semana</code> / <code>tareas de la próxima semana</code></td><td>La próxima semana</td></tr>
-    <tr><td><code>tareas mes</code> / <code>tareas este mes</code></td><td>Este mes</td></tr>
-    <tr><td><code>tareas fijas</code></td><td>Actividades fijas/recurrentes (🔁)</td></tr>
+    <tr><td><code>tareas</code></td><td>Todas mis tareas semana a semana (esta → próxima → siguiente), día por día y por hora</td></tr>
+    <tr><td><code>tareas hoy</code></td><td>Solo las de <strong>hoy</strong> (por hora)</td></tr>
+    <tr><td><code>tareas mañana</code></td><td>Solo las de mañana</td></tr>
+    <tr><td><code>tareas semana</code> / <code>tareas esta semana</code></td><td>Esta semana completa, día por día</td></tr>
+    <tr><td><code>tareas próxima semana</code> / <code>tareas semana 2</code></td><td>La próxima semana</td></tr>
+    <tr><td><code>tareas mes</code> / <code>tareas este mes</code></td><td>Este mes completo</td></tr>
+    <tr><td><code>tareas fijas</code></td><td>Solo mis actividades fijas/recurrentes (🔁)</td></tr>
+    <tr><td><code>tareas lunes</code> / <code>tareas el viernes</code></td><td>Las del próximo día de la semana que digas</td></tr>
+    <tr><td><code>tareas 25 agosto</code></td><td>Las de una fecha específica</td></tr>
     <tr><td><code>fijas lunes</code> / <code>fija sábado</code></td><td>Actividades fijas de un día específico</td></tr>
   </table>
-  <div class="example">📋 *Tus Tareas*
-
-📅 *ESTA SEMANA* (17 ago - 22 ago)
-
-📅 *lunes, 17 de agosto*
-1. 🔴 🎪 Confirmar staff 📌 🔁 Diaria 17 ago 08:00 a. m.
-2. 🟡 🎪 Revisar cuadro equipo 📌 17 ago 09:00 a. m.
-
-📅 *martes, 18 de agosto*
-3. 🔴 🏁 Reporte proveedores 📌 17 ago 02:00 p. m.
-
-📅 *PRÓXIMA SEMANA* (24 ago - 29 ago)
-...</div>
   <p style="font-size:12px;color:#666;">
-    Orden dentro de cada día: <strong>🎪 Pre Evento → 🚀 Evento → 🏁 Post Evento</strong>, luego <strong>Fijas (🔁)</strong> antes que Variables, y de la hora más temprana a la más tarde.
+    Orden dentro de cada día: <strong>🎪 Pre Evento → 🚀 Evento → 🏁 Post Evento</strong>, luego <strong>🔁 Fijas</strong>
+    antes que <strong>⚡ Variables</strong>, y de la hora más temprana a la más tarde.
   </p>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
   <h2>🔍 CONSULTAS DINÁMICAS POR FECHA</h2>
   <table>
     <tr><td><code>tareas hoy</code> / <code>tareas mañana</code> / <code>tareas pasado mañana</code></td><td>Día puntual</td></tr>
     <tr><td><code>tareas lunes</code> / <code>tareas el viernes</code> / <code>tareas sábado</code></td><td>Próximo día de la semana</td></tr>
     <tr><td><code>tareas 25 agosto</code> / <code>tareas 25 de agosto</code></td><td>Fecha específica</td></tr>
-    <tr><td><code>viernes 28 agosto</code> / <code>lunes 17</code></td><td>Día con fecha</td></tr>
     <tr><td><code>tareas septiembre</code> / <code>ver octubre</code></td><td>Mes específico</td></tr>
     <tr><td><code>tareas de la próxima semana</code> / <code>tareas del mes que viene</code></td><td>Próximo periodo</td></tr>
     <tr><td><code>qué tengo el viernes</code> / <code>que tengo para mañana</code></td><td>Preguntas naturales</td></tr>
+    <tr><td><code>recordatorios</code></td><td>Recordatorios de <strong>hoy</strong> (solo hoy)</td></tr>
+    <tr><td><code>recordatorios semana</code></td><td>Recordatorios de toda la semana</td></tr>
+    <tr><td><code>recordatorios mañana</code> / <code>recordatorios viernes</code></td><td>Recordatorios de un día específico</td></tr>
   </table>
-  <p style="font-size:12px;color:#666;">Se considera la semana laboral de LUNES a SÁBADO (domingo descanso).</p>
+  <p style="font-size:12px;color:#666;">Por defecto <code>recordatorios</code> muestra <strong>solo el día de hoy</strong>; si querés la semana o un día puntual, lo pedís explícitamente.</p>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
-  <h2>⚡ ACCIONES SOBRE TAREAS (usa el #)</h2>
+  <h2>⚡ ACCIONES SOBRE TAREAS (usa el número #)</h2>
   <table>
     <tr><td>✅ <code>hecho 1</code></td><td>Completar la tarea #1</td></tr>
     <tr><td>✅✅ <code>hecho 1 2 3</code></td><td>Completar VARIAS a la vez (masivo)</td></tr>
-    <tr><td>✅✅ <code>hechos 1 y 2</code> / <code>hecho 1, 2, 3</code></td><td>Mismo, con separadores o "y"</td></tr>
-    <tr><td>↩️ <code>deshacer 1</code> / <code>revertir 1</code></td><td>Revertir una tarea completada (vuelve a pendiente)</td></tr>
-    <tr><td>🔄 <code>proceso 1</code> / <code>proceso 1 2 3</code></td><td>Marcar en proceso (una o varias)</td></tr>
-    <tr><td>⏰ <code>posponer 1</code></td><td>Posponer (pregunta día, hora y motivo)</td></tr>
-    <tr><td>📤 <code>transferir 1 a Diana</code></td><td>Reasignar a otra persona</td></tr>
-    <tr><td>💬 <code>comentar 1 texto</code></td><td>Agregar comentario</td></tr>
+    <tr><td>✅✅ <code>hechos 1 y 2</code> / <code>hecho 1, 2, 3</code></td><td>Igual, con separadores o "y"</td></tr>
+    <tr><td>↩️ <code>deshacer 1</code> / <code>revertir 1</code></td><td>Deshacer una tarea ya completada (vuelve a pendiente)</td></tr>
+    <tr><td>🔄 <code>proceso 1</code> / <code>proceso 1 2 3</code></td><td>Marcar "en proceso" (una o varias)</td></tr>
+    <tr><td>⏰ <code>posponer 1</code></td><td>Posponer → LUNA te pregunta día, hora y motivo (paso a paso)</td></tr>
+    <tr><td>📤 <code>transferir 1 a Diana</code></td><td>Reasignar la tarea #1 a otra persona (se le notifica)</td></tr>
+    <tr><td>💬 <code>comentar 1 texto</code></td><td>Agregar un comentario a la tarea</td></tr>
     <tr><td>❌ <code>no 1</code></td><td>Marcar como no realizada</td></tr>
     <tr><td>🗑️ <code>eliminar 1</code> / <code>eliminar 1 2 3</code></td><td>Eliminar tarea(s) por su número</td></tr>
-    <tr><td>🗑️ <code>eliminar todo</code></td><td>Eliminar todas mis tareas pendientes</td></tr>
-    <tr><td>🧹 <code>limpiar tareas de Diana</code></td><td>(admin/jefe) Eliminar todas las tareas de un usuario</td></tr>
+    <tr><td>🗑️ <code>eliminar todo</code></td><td>Eliminar todas MIS tareas pendientes</td></tr>
+    <tr><td>🧹 <code>limpiar tareas de Diana</code></td><td><span class="tag t-admin">ADMIN</span> Eliminar TODAS las tareas de una persona (masivo)</td></tr>
   </table>
-  <p style="font-size:12px;color:#666;">Los números (#) coinciden con la lista que viste por última vez. Si cambian, escribe <code>tareas</code> para refrescar.</p>
+  <p style="font-size:12px;color:#666;">Los números coinciden con la lista que viste por última vez (valen 30 min). Si cambian, escribí <code>tareas</code> para refrescar.</p>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
   <h2>➕ CREAR TAREAS</h2>
+  <h3>Variables (puntuales)</h3>
   <ul>
     <li><code>crea tarea revisar equipo mañana 10am</code></li>
-    <li><code>crea tarea para Diana llamar proveedor viernes 3pm</code> → notifica a Diana</li>
-    <li><code>asigna tarea a Abel revisar bodega el lunes 8am</code> → asignar a cualquier colaborador</li>
-    <li><code>agrega tarea para Jorge llamar a Abel mañana 8am</code> → notifica a Jorge</li>
-    <li><code>crea tarea fija revisar bodega cada lunes</code> → tarea fija semanal (🔁)</li>
-    <li><code>crea tarea</code> → asistente paso a paso</li>
+    <li><code>crea tarea para Diana llamar proveedor viernes 3pm</code> → se le notifica a Diana</li>
+    <li><code>asigna tarea a Abel revisar bodega el lunes 8am</code></li>
+    <li><code>agrega tarea para Jorge llamar a Abel mañana 8am</code></li>
+    <li><code>ponle tarea a Brenda cotizar luces el sábado 9am</code></li>
+    <li><code>nueva tarea ordenar inventario este jueves 2pm</code></li>
+    <li><code>crea tarea</code> → asistente guiado paso a paso (título, persona, fecha, hora, prioridad)</li>
   </ul>
-  <p style="font-size:12px;color:#666;"><strong>Fija (🔁)</strong> = se repite (Diaria/Semanal/Mensual) y se regenera al completarla. <strong>Variable</strong> = puntual.</p>
-</div>
 
-<div class="section">
-  <h2>💬 MENSAJES A CUALQUIER NÚMERO</h2>
+  <h3>Fijas (recurrentes 🔁)</h3>
   <ul>
-    <li><code>mándale un mensaje al 55551234 mañana a las 3pm que ya confirmé</code></li>
-    <li><code>envía mensaje al 55551234 el viernes a las 9am el pago está listo</code></li>
+    <li><code>crea tarea fija revisar bodega todos los lunes</code> → fija semanal (cada lunes)</li>
+    <li><code>crea tarea fija revisar chat de pagos cada día</code> → fija diaria</li>
+    <li><code>crea tarea fija inventario cada primer lunes</code> → fija mensual</li>
+    <li><code>asigna tarea fija a Diana verificar caja cada mañana 8am</code> → fija diaria para Diana (se le notifica)</li>
   </ul>
-  <p style="font-size:12px;color:#666;">Programa un mensaje a <strong>cualquier número de teléfono</strong> (externo: esposa, proveedor, cliente) a cualquier día y hora. LUNA lo envía automáticamente a esa hora.</p>
+
+  <h3>Con prioridad</h3>
+  <ul>
+    <li><code>crea tarea URGENTE pagar depósito hoy 5pm</code> → prioridad URGENTE</li>
+    <li><code>crea tarea ALTA revisar contrato mañana 9am</code> → ALTA</li>
+  </ul>
+
+  <p style="font-size:12px;color:#666;">
+    <strong>Fija (🔁)</strong> = se repite (diaria/semanal/mensual) y al completarla se regenera sola para su próximo día.
+    Si no se completa, <strong>pasa al día siguiente automáticamente</strong>. La semana cierra el sábado y continúa hasta
+    que la completes o la modifiques manualmente. <strong>Variable</strong> = tarea puntual.
+  </p>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
-  <h2>⏰ RECORDATORIOS PARA TI</h2>
+  <h2>⏰ RECORDATORIOS</h2>
+  <h3>Para ti</h3>
   <ul>
     <li><code>recuérdame llamar a Juan a las 3pm</code></li>
     <li><code>mándame un mensaje a las 8am mañana</code></li>
     <li><code>mándame un mensaje a las 2pm para la reunión</code></li>
     <li><code>avísame mañana a las 9am revisar bodega</code></li>
     <li><code>notifícame el viernes a las 4pm enviar reporte</code></li>
-    <li><code>recordatorios</code> → ver los de HOY (numerados)</li>
-    <li><code>recordatorios semana</code> / <code>recordatorios todos</code> → ver más</li>
-    <li><code>eliminar recordatorio 2</code> / <code>eliminar recordatorios 1 2 3</code> → eliminar</li>
+    <li><code>hazme un recordatorio para el 20 de agosto a las 9am</code></li>
   </ul>
-  <p style="font-size:12px;color:#666;">Por defecto <code>recordatorios</code> solo muestra los del día de hoy, ordenados. Si querés ver la semana completa, pedilo.</p>
-</div>
-
-<div class="section">
-  <h2>👥 RECORDATORIOS PARA OTROS (Dueño/Admin)</h2>
+  <h3>Para otra persona <span class="tag t-admin">ADMIN</span></h3>
   <ul>
     <li><code>recuédale a Diana llamar a proveedor a las 3pm</code></li>
     <li><code>mándale un mensaje a Abel a las 2pm para la bodega</code></li>
     <li><code>para Brenda recordatorio de cobros mañana 9am</code></li>
   </ul>
-  <p style="font-size:12px;color:#666;">La persona asignada recibe notificación inmediata + aviso 10 min antes y a la hora exacta.</p>
-</div>
-
-<div class="section">
-  <h2>📅 REUNIONES (Dueño/Admin)</h2>
+  <h3>Ver y eliminar recordatorios</h3>
   <ul>
-    <li><code>hacer reunión con Diana y Abel mañana a las 8am</code></li>
-    <li><code>reunión con Jorge, Diana y Abel el viernes a las 3pm</code></li>
-    <li><code>junta para Brenda y Selvin el lunes a las 9am</code></li>
+    <li><code>recordatorios</code> → los de hoy (numerados)</li>
+    <li><code>recordatorios semana</code> → toda la semana</li>
+    <li><code>recordatorios todos</code> → todos sin filtro</li>
+    <li><code>recordatorios mañana</code> → los de mañana</li>
+    <li><code>eliminar recordatorio 2</code> / <code>eliminar recordatorios 1 2 3</code> → eliminar por número</li>
   </ul>
-  <p style="font-size:12px;color:#666;">Agenda el día y la hora para TODOS los involucrados por su nombre, crea el recordatorio para cada uno y les envía notificación. Puedes poner los que necesites: "con X, Y y Z".</p>
+  <div class="note">
+    💡 <strong>Diferencia clave:</strong><br>
+    • "recuérdame / mándame / avísame" → para <strong>ti</strong><br>
+    • "recuérdale a [nombre] / mándale a [nombre] / para [nombre]" → para esa <strong>persona</strong> (recibe notificación)<br>
+    • El nombre dentro de la frase (ej: "llamar a Juan") NO es quien recibe el recordatorio.<br>
+    • Cada recordatorio genera además una tarea 📌 en el sistema para que no se pierda.
+  </div>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
   <h2>🛒 COMPRAS</h2>
   <ul>
     <li><code>compra pilas AA para Abel mañana</code></li>
     <li><code>comprar cinta ducto el viernes</code></li>
     <li><code>compra extensiones para Diana mañana a las 9am</code></li>
-    <li><code>compras</code> → ver compras pendientes</li>
+    <li><code>compra 4 micrófonos urgentes hoy</code></li>
+    <li><code>compras</code> / <code>compras pendientes</code> → ver compras por hacer (numeradas)</li>
     <li><code>comprado 2</code> → marcar la compra #2 como comprada</li>
+    <li><code>compra hecha 1</code> → igual</li>
   </ul>
-  <p style="font-size:12px;color:#666;">Puedes registrar compras propias o asignárselas a otra persona por nombre; al asignar, esa persona recibe la notificación. En la web aparecen en la misma hoja junto a tareas, ordenadas por día.</p>
+  <p style="font-size:12px;color:#666;">
+    Podés registrar compras propias o asignárselas a otra persona por nombre; al asignar, esa persona recibe la notificación.
+    En la web aparecen en la misma hoja, ordenadas por día.
+  </p>
 </div>
 
-<div class="note">
-  <strong>💡 Cómo distinguir quién recibe:</strong><br>
-  • "recuérdame / mándame / avísame" → para ti<br>
-  • "recuérdale a [nombre] / mándale a [nombre] / para [nombre]" → para esa persona<br>
-  • El nombre de la tarea (ej: "llamar a Juan") NO es quien recibe.
+<!-- ══════════════════════════════════════════════ -->
+<div class="section">
+  <h2>📅 REUNIONES <span class="tag t-admin">ADMIN</span></h2>
+  <ul>
+    <li><code>hacer reunión con Diana y Abel mañana a las 8am</code></li>
+    <li><code>reunión con Jorge, Diana y Abel el viernes a las 3pm</code></li>
+    <li><code>junta para Brenda y Selvin el lunes a las 9am</code></li>
+  </ul>
+  <p style="font-size:12px;color:#666;">
+    Agenda el día y la hora para TODOS los nombrados: crea el recordatorio para cada uno y les envía notificación.
+    Podés listar los que quieras: "con X, Y y Z".
+  </p>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
+<div class="section">
+  <h2>💬 MENSAJES A CUALQUIER NÚMERO</h2>
+  <ul>
+    <li><code>mándale un mensaje al 55551234 mañana a las 3pm que ya confirmé</code></li>
+    <li><code>envía mensaje al 55551234 el viernes a las 9am el pago está listo</code></li>
+    <li><code>mándame un mensaje a las 8am mañana</code> → para ti mismo</li>
+  </ul>
+  <p style="font-size:12px;color:#666;">
+    Programa un mensaje a <strong>cualquier número de teléfono</strong> (externo: esposa, proveedor, cliente) a cualquier
+    día y hora. LUNA lo envía automáticamente a esa hora. Ejemplos útiles:
+    <em>"mándale un mensaje a mi esposa al 55551234 a las 5pm que llego tarde"</em>.
+  </p>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
   <h2>🏢 CONSULTAR EL SISTEMA</h2>
   <table>
     <tr><td><code>inventario</code></td><td>Equipo disponible</td></tr>
     <tr><td><code>inventario sonido</code></td><td>Solo audio</td></tr>
-    <tr><td><code>vehiculos</code></td><td>Flota vehicular</td></tr>
+    <tr><td><code>vehiculos</code> / <code>vehículos</code></td><td>Flota vehicular</td></tr>
     <tr><td><code>cobros</code></td><td>Cobros pendientes</td></tr>
     <tr><td><code>empleados</code> / <code>personal</code></td><td>Directorio del equipo</td></tr>
     <tr><td><code>eventos</code></td><td>Próximos eventos</td></tr>
@@ -184,57 +261,102 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
   </table>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
-  <h2>📈 REPORTES (Dueño/Admin)</h2>
+  <h2>📈 REPORTES <span class="tag t-admin">ADMIN</span></h2>
   <table>
     <tr><td><code>resumen</code></td><td>Mis tareas + eventos + cumplimiento</td></tr>
     <tr><td><code>ranking</code></td><td>Top de cumplimiento del equipo</td></tr>
-    <tr><td><code>cómo va el equipo</code></td><td>Visión general</td></tr>
-    <tr><td><code>quién no ha entrado</code></td><td>Inactivos hoy</td></tr>
+    <tr><td><code>cómo va el equipo</code></td><td>Visión general del equipo</td></tr>
+    <tr><td><code>quién no ha entrado</code></td><td>Miembros inactivos hoy</td></tr>
   </table>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
+<div class="section">
+  <h2>🧹 ELIMINACIÓN MASIVA</h2>
+  <table>
+    <tr><td><code>eliminar todo</code></td><td>Eliminar todas MIS tareas pendientes</td></tr>
+    <tr><td><code>eliminar 1 2 3</code> / <code>borrar 4 7</code></td><td>Eliminar tareas específicas por número</td></tr>
+    <tr><td><code>limpiar tareas de Diana</code></td><td><span class="tag t-admin">ADMIN</span> Eliminar TODAS las tareas de Diana (masivo por persona)</td></tr>
+    <tr><td><code>limpiar las tareas de Abel</code> / <code>borrar tareas de Jorge</code></td><td><span class="tag t-admin">ADMIN</span> Variantes del mismo comando</td></tr>
+    <tr><td><code>eliminar recordatorio 2</code> / <code>eliminar recordatorios 1 2 3</code></td><td>Eliminar recordatorios por número</td></tr>
+  </table>
+  <div class="warn">
+    ⚠️ <code>limpiar tareas de X</code> y <code>eliminar todo</code> son irreversibles y requieren ser Dueño/Admin/Jefe.
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
   <h2>📤 CARGA MASIVA DE TAREAS (Excel)</h2>
-  <p style="font-size:12px;color:#666;">
+  <p style="font-size:13px;">
     En la web, pestaña <strong>Tareas</strong> → botón <strong>📥 Plantilla XLSX</strong> (descarga) y <strong>📤 Cargar masiva</strong> (subir).
   </p>
   <ul>
     <li>La plantilla trae <strong>3 hojas</strong>: Plantilla, Usuarios (nombres exactos) y Valores (opciones válidas).</li>
-    <li>Columnas: <code>titulo</code>, <code>asignado_a</code> (nombre exacto), <code>categoria</code>, <code>tipo</code> (FIJA/DINAMICA), <code>frecuencia</code>, <code>dia_semana</code>, <code>fecha</code> (YYYY-MM-DD), <code>hora</code> (HH:MM), <code>prioridad</code>.</li>
+    <li>Columnas: <code>titulo</code>, <code>asignado_a</code> (nombre exacto), <code>categoria</code>, <code>tipo</code> (FIJA/DINAMICA), <code>frecuencia</code>, <code>dia_semana</code>, <code>fecha</code> (YYYY-MM-DD o DD/MM/YYYY), <code>hora</code> (HH:MM), <code>prioridad</code>.</li>
     <li>Para tareas <strong>fijas</strong> (ej. "revisar chat de pagos cada lunes"): tipo=FIJA, frecuencia=SEMANAL, dia_semana=LUNES, dejar <code>fecha</code> vacía.</li>
     <li>Para tareas <strong>variables</strong> (puntuales): tipo=DINAMICA y llenar <code>fecha</code> (y hora si aplica).</li>
-    <li>Borrar la fila de ejemplo antes de subir. Se aceptan fechas DD/MM/AAAA también. Las tareas duplicadas (mismo título y asignado) se omiten automáticamente.</li>
+    <li>Borrar la fila de ejemplo antes de subir. Las tareas duplicadas (mismo título y asignado) se omiten automáticamente y se reportan.</li>
   </ul>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
   <h2>🖥️ VISTA WEB DE TAREAS (tipo Excel)</h2>
-  <p style="font-size:12px;color:#666;">
-    La pestaña <strong>Tareas</strong> se organiza por <strong>Fase → Día → Fijas/Variables</strong>:
+  <p style="font-size:13px;">
+    La pestaña <strong>Tareas</strong> se organiza por <strong>Día → Fase → Fijas/Variables</strong>:
   </p>
-  <div class="example">🎪 PRE EVENTO
-  📅 Lunes
+  <div class="example">📅 Lunes
+  🎪 PRE EVENTO
     🔁 Fijas (3)
     ⚡ Variables (2)
-  📅 Martes
+  🚀 EVENTO
+    ⚡ Variables (1)
+  🏁 POST EVENTO
     🔁 Fijas (1)
-🚀 EVENTO
-  📅 Sábado
-    ⚡ Variables (2)
-🏁 POST EVENTO
-  📅 Lunes
-    🔁 Fijas (4)</div>
+📅 Martes
+  🎪 PRE EVENTO
+    🔁 Fijas (2)
+...</div>
   <ul>
-    <li><strong>Botón +</strong> en cada fase o segmento → inserta una nueva fila/tarea ahí.</li>
+    <li><strong>Botón +</strong> en cada fase o segmento → inserta una nueva fila/tarea ahí (con día, fase y tipo ya prellenados).</li>
     <li><strong>Filtros</strong>: 🎪 Pre Evento / 🚀 Evento / 🏁 Post Evento, y 🔁 Fijas / ⚡ Variables.</li>
     <li><strong>Botón "Por Día"</strong> → cambia a vista agrupada solo por día (Lunes-Sábado).</li>
-    <li><strong>Acciones por fila</strong>: ✓ completar, ↑↓ subir/bajar (reordenar), ✏️ editar, ▶ en proceso, ⏰ posponer, 💬 comentar, 🗑 eliminar.</li>
+    <li><strong>Acciones por fila</strong>: ✓ completar, ↑↓ subir/bajar (reordenar dentro del segmento), ✏️ editar, ▶ en proceso, ⏰ posponer, 💬 comentar, 🗑 eliminar.</li>
     <li>Al completar una tarea, se quita del listado; si es <strong>fija</strong>, se regenera para su próxima semana/mes.</li>
-    <li>Debajo de las tareas aparecen los bloques de <strong>⏰ Recordatorios</strong> y <strong>🛒 Compras</strong>, todos ordenados por día y hora.</li>
+    <li>Debajo de las tareas aparecen los bloques de <strong>⏰ Recordatorios</strong> y <strong>🛒 Compras</strong>, también ordenados por día y hora y con sus acciones (✓, 🗑, ↑↓).</li>
   </ul>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
+<div class="section">
+  <h2>🔔 NOTIFICACIONES AUTOMÁTICAS (cada día)</h2>
+  <table>
+    <tr><td>🕖 07:00</td><td><strong>Briefing matutino</strong>: vencidas, tareas de esta semana, próximas, + se reprograman solas las no hechas</td></tr>
+    <tr><td>🕘 09:00</td><td>Recordatorio: tus tareas de HOY (por hora)</td></tr>
+    <tr><td>🕚 11:00</td><td>Recordatorio: tus tareas de HOY</td></tr>
+    <tr><td>🕐 13:00</td><td>Recordatorio: tus tareas de HOY</td></tr>
+    <tr><td>🕒 15:00</td><td>Recordatorio: tus tareas de HOY</td></tr>
+    <tr><td>🕔 17:00</td><td>Recordatorio: tus tareas de HOY + cierre del día</td></tr>
+    <tr><td>⏰ <em>a la hora</em></td><td>Cada recordatorio suena 10 minutos antes y a la hora exacta</td></tr>
+    <tr><td>📋 <em>al momento</em></td><td>Cuando te asignan una tarea, recordatorio o compra, llega notificación inmediata</td></tr>
+  </table>
+  <div class="example">🔔 Ejemplo de mensaje de las 09:00:
+🔔 *Tus tareas de HOY*
+
+Tienes 8 tareas pendientes hoy.
+
+1. 🔴 🔁 Revisar chat de pagos 📌 08:00 a. m.
+2. 🟡 Confirmar staff 📌 09:00 a. m.
+...
+
+⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.
+📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.</div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
 <div class="section">
   <h2>🎨 PRIORIDADES Y ESTADOS</h2>
   <div class="colors">
@@ -250,14 +372,13 @@ li { margin: 4px 0 4px 18px; font-size: 13px; }
 </div>
 
 <div class="tip">
-  💡 <strong>Tips:</strong><br>
-  • Cada tarea sale numerada y ordenada por fase (Pre/Evento/Post), luego día, luego fija/variable, y por hora. Usa el número para las acciones.<br>
-  • Podés completar varias de una vez: <code>hecho 1 2 3</code>.<br>
+  💡 <strong>Tips rápidos:</strong><br>
+  • Cada tarea sale numerada; usá el número para las acciones. Para completar varias: <code>hecho 1 2 3</code>.<br>
   • Las tareas pueden llevar hora o solo fecha (sin horario).<br>
-  • LUNA avisa <strong>10 minutos antes</strong> y a la hora exacta de cada recordatorio.<br>
-  • Las tareas no hechas se reprograman al día siguiente automáticamente y siguen apareciendo hasta completarse.<br>
-  • En la web, Tareas se ve como hoja de cálculo (Excel), organizada por Fase → Día → Fijas/Variables, con botón + para insertar filas, ↑↓ para reordenar y ✏️ para editar.<br>
-  • Si dudas, escribe <code>ayuda</code>.
+  • Las tareas no hechas <strong>pasan solas al día siguiente</strong> hasta completarse (la semana cierra sábado).<br>
+  • Si asignás algo a alguien, esa persona recibe notificación inmediata.<br>
+  • En la web: vista Excel con + para insertar filas, ↑↓ para reordenar, ✏️ para editar y filtros por fase/tipo.<br>
+  • Si no sabés qué escribir, escribí <code>ayuda</code>.
 </div>
 
 <div class="footer">Documento generado automáticamente · Live Productions GT · Guía de uso de LUNA</div>
