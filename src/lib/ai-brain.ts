@@ -842,15 +842,17 @@ export async function handleWhatsAppMessage(
     }
 
     const contextText = await getAIAssistantContext(user.id);
-    let proactiveText = "";
-    try {
-      const suggestions = await getProactiveSuggestions(user.id);
-      if (suggestions.length > 0) {
-        proactiveText = `\n\n--- SUGERENCIAS PROACTIVAS ---\n${suggestions.map((s) => `• ${s}`).join("\n")}`;
+let proactiveText = "";
+      try {
+        const suggestions = (await getProactiveSuggestions(user.id)).filter(
+          (s) => !/todo está en orden|todo esta en orden/i.test(s)
+        );
+        if (suggestions.length > 0) {
+          proactiveText = `\n\n--- SUGERENCIAS PROACTIVAS ---\n${suggestions.map((s) => `• ${s}`).join("\n")}`;
+        }
+      } catch {
+        // silencioso
       }
-    } catch {
-      // silencioso
-    }
     const fullContext = contextText + proactiveText;
 
     const lowerMsg = message.toLowerCase();
