@@ -199,6 +199,18 @@ li { margin: 5px 0; font-size: 13px; }
   </div>
 
 <div class="note">
+    💡 <strong>Horas sin AM/PM (números sueltos):</strong> LUNA también entiende "a las 3", "a la 1", "para las 8".
+    Regla automática: <strong>1 a 7 → tarde (PM)</strong> (1 = 1pm, 5 = 5pm) y <strong>8 a 12 → mañana (AM)</strong>
+    (8 = 8am, 11 = 11am). Ejemplos:
+    <code>recuérdame llamar a Juan a las 3</code> → 3:00 PM
+    · <code>crea tarea revisar equipo mañana a las 9</code> → 9:00 AM
+    · <code>reunión con Diana a las 6</code> → 6:00 PM
+    También sirven <code>a las 3 de la tarde</code> (PM), <code>a las 8 de la mañana</code> (AM),
+    <code>a las 9 de la noche</code> (PM) y formato 24h <code>a las 15</code>.
+    Para total claridad, podés usar siempre AM/PM: <code>3pm</code>, <code>9am</code>.
+  </div>
+
+<div class="note">
     💡 <strong>Diferencia clave:</strong><br>
     • "recuérdame / mándame / avísame" → para <strong>ti</strong><br>
     • "recuérdale a [nombre] / mándale a [nombre] / para [nombre]" → para esa <strong>persona</strong> (recibe notificación)<br>

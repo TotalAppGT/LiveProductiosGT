@@ -156,6 +156,28 @@ function parseTimeExpression(text: string): { hours: number; minutes: number } |
   if (/\ben la noche\b/.test(t)) return { hours: 19, minutes: 0 };
   if (/\bmedio\s*d[ií]a\b/.test(t)) return { hours: 12, minutes: 0 };
 
+  // Número suelto con "a las"/"a la"/"para las": "a las 3", "a la 1", "para las 8", "a las 15"
+  // Regla: 1-7 → PM (tarde), 8-12 → AM (mañana), 12 → mediodía, 13-23 → 24h directo.
+  // Si viene seguido de "de la tarde/noche" → PM; "de la mañana" → AM.
+  const bare = t.match(/(?:a\s+las?\s+|para\s+las?\s+|a\s+la\s+)(\d{1,2})\b/i);
+  if (bare) {
+    let hours = parseInt(bare[1]);
+    if (hours >= 1 && hours <= 23) {
+      const after = t.slice(bare.index! + bare[0].length);
+      if (/de\s+la\s+(tarde|noche)/.test(after)) {
+        if (hours < 12) hours += 12;
+        return roundToFive(hours, 0);
+      }
+      if (/de\s+la\s+mañana/.test(after)) {
+        if (hours === 12) hours = 0;
+        return roundToFive(hours, 0);
+      }
+      // Número suelto sin especificar: 1-7 → PM (tarde), 8-12 → AM (mañana)
+      if (hours <= 7) hours += 12;
+      return roundToFive(hours, 0);
+    }
+  }
+
   return null;
 }
 
