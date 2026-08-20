@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
+import { parseGTInputDate, nextRecurrenceDueDate } from "@/lib/task-utils";
 
 export async function GET(
   request: NextRequest,
@@ -117,7 +118,7 @@ export async function PUT(
         type: type !== undefined ? type : undefined,
         frequency: frequency !== undefined ? frequency : undefined,
         dayOfWeek: dayOfWeek !== undefined ? dayOfWeek : undefined,
-        dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : undefined,
+        dueDate: dueDate !== undefined ? parseGTInputDate(dueDate) : undefined,
         status: status !== undefined ? status : undefined,
         priority: priority !== undefined ? priority : undefined,
         category: category !== undefined ? category : undefined,
@@ -174,21 +175,7 @@ export async function PUT(
     }
 
     if (status === "COMPLETADA" && existingTask.type === "FIJA") {
-      const now = new Date();
-      let nextDueDate: Date;
-
-      if (existingTask.frequency === "SEMANAL") {
-        nextDueDate = new Date(now);
-        nextDueDate.setDate(nextDueDate.getDate() + 7);
-      } else if (existingTask.frequency === "MENSUAL") {
-        nextDueDate = new Date(now);
-        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-      } else {
-        nextDueDate = new Date(now);
-        nextDueDate.setDate(nextDueDate.getDate() + 1);
-      }
-
-      nextDueDate.setHours(0, 0, 0, 0);
+      const nextDueDate = nextRecurrenceDueDate(existingTask.dueDate ?? new Date(), existingTask.frequency);
 
       await prisma.task.create({
         data: {

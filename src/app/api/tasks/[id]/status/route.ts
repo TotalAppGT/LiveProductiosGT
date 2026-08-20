@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 import { sendMessage } from "@/lib/whatsapp";
+import { nextRecurrenceDueDate } from "@/lib/task-utils";
 
 export async function PUT(
   request: NextRequest,
@@ -161,19 +162,7 @@ export async function PUT(
 
     // Si es tarea fija completada: regenerar la próxima ocurrencia (semanal/mensual/diaria)
     if (status === "COMPLETADA" && existingTask.type === "FIJA") {
-      const now = new Date();
-      let nextDueDate: Date;
-      if (existingTask.frequency === "SEMANAL") {
-        nextDueDate = new Date(now);
-        nextDueDate.setDate(nextDueDate.getDate() + 7);
-      } else if (existingTask.frequency === "MENSUAL") {
-        nextDueDate = new Date(now);
-        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-      } else {
-        nextDueDate = new Date(now);
-        nextDueDate.setDate(nextDueDate.getDate() + 1);
-      }
-      nextDueDate.setHours(0, 0, 0, 0);
+      const nextDueDate = nextRecurrenceDueDate(existingTask.dueDate ?? new Date(), existingTask.frequency);
       await prisma.task.create({
         data: {
           title: existingTask.title,

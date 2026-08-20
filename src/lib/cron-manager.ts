@@ -28,9 +28,8 @@ function getJobState(name: string): JobState {
 }
 
 function getGuatemalaTime(): Date {
-  // Devuelve un Date cuyos componentes UTC equivalen a la hora de pared de Guatemala (UTC-6),
-  // robusto sin importar la zona horaria del servidor. Usar getUTC* para leer.
-  return gtNow();
+  // Instante real actual. Para obtener la hora de Guatemala usar getGuatemalaWallClock().
+  return new Date();
 }
 
 function aiSucceeded(msg: string): boolean {
@@ -81,12 +80,12 @@ async function morningBriefing() {
 
   for (const user of users) {
     try {
-      const now = getGuatemalaTime();
+      const wNow = getGuatemalaWallClock();
       const startOfToday = gtStartOfToday();
       const endOfToday = gtEndOfToday();
 
       // Semana laboral: LUNES a SÁBADO (fecha de Guatemala)
-      const dayOfWeek = now.getUTCDay(); // 0=domingo
+      const dayOfWeek = wNow.weekday; // 0=domingo
       const monday = new Date(startOfToday.getTime() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 24 * 60 * 60 * 1000);
       const saturday = new Date(monday.getTime() + 5 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
@@ -101,7 +100,7 @@ async function morningBriefing() {
 
       const events = await prisma.event.findMany({
         where: {
-          date: { gte: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1)) },
+          date: { gte: new Date(Date.UTC(wNow.year, wNow.month - 1, wNow.day - 1)) },
           status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
           OR: [{ plannerId: user.id }, { responsibleId: user.id }],
         },
@@ -110,7 +109,7 @@ async function morningBriefing() {
       });
 
       const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-      const dayName = dayNames[now.getUTCDay()];
+      const dayName = dayNames[wNow.weekday];
 
       const { orderTasksByDayHour, groupTasksByDayText } = await import("@/lib/task-view");
 
@@ -183,6 +182,7 @@ async function dailyDigest() {
 
   try {
     const now = getGuatemalaTime();
+    const w = getGuatemalaWallClock();
     const startOfDay = gtStartOfToday();
 
     const [pendingTasks, overdueTasks, todayEvents, activeUsers, inactiveUsers] = await Promise.all([
@@ -190,7 +190,7 @@ async function dailyDigest() {
       prisma.task.count({ where: { status: { in: ["PENDIENTE", "EN_PROCESO"] }, dueDate: { lt: now } } }),
       prisma.event.findMany({
         where: {
-          date: { gte: startOfDay, lte: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 7)) },
+          date: { gte: startOfDay, lte: new Date(Date.UTC(w.year, w.month - 1, w.day + 7, 23, 59, 59, 999) + 6 * 60 * 60 * 1000) },
           status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
         },
         orderBy: { date: "asc" },
@@ -560,8 +560,9 @@ let cronInterval: ReturnType<typeof setInterval> | null = g.__cronInterval || nu
 let initialized = g.__cronInitialized;
 
 async function shouldRunJob(job: CronJob): Promise<boolean> {
-  const now = getGuatemalaTime();
-  const key = `cron:${job.name}:${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,'0')}-${String(now.getUTCDate()).padStart(2,'0')}-${job.schedule.hour}`;
+  const w = getGuatemalaWallClock();
+  const now = new Date();
+  const key = `cron:${job.name}:${w.year}-${String(w.month).padStart(2,'0')}-${String(w.day).padStart(2,'0')}-${job.schedule.hour}`;
   try {
     await prisma.systemConfig.create({
       data: { key, value: now.toISOString(), description: `Last run of ${job.name}` },
@@ -581,13 +582,13 @@ async function runJobIfScheduled(job: CronJob) {
   // In-memory dedup: if this job ran in the last 10 minutes, skip
   if (state.lastRun && Date.now() - state.lastRun.getTime() < 10 * 60 * 1000) return;
 
-  const now = getGuatemalaTime();
-  const hourDiff = now.getUTCHours() - job.schedule.hour;
+  const w = getGuatemalaWallClock();
+  const hourDiff = w.hour - job.schedule.hour;
 
   // Future jobs: skip. Past jobs beyond 1 hour: skip.
   if (hourDiff < 0 || hourDiff > 1) return;
   // Catch-up from previous hour: only in first 10 minutes
-  if (hourDiff === 1 && now.getUTCMinutes() >= 10) return;
+  if (hourDiff === 1 && w.minute >= 10) return;
 
   if (!(await shouldRunJob(job))) {
     console.log(`[Cron] ${job.name}: ya se ejecutó en esta hora, saltando (DB dedup)`);

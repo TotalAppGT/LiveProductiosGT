@@ -4,7 +4,7 @@ import { handleWhatsAppMessage, askAI } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
-import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime } from "@/lib/task-utils";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate } from "@/lib/task-utils";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
 
@@ -438,9 +438,8 @@ function parseReminderLocal(text: string, user: { id: string; name: string }) {
   let date = parseRelativeDate(t, new Date());
 
   if (!date) {
-    // "a las 8 am mañana" → tiempo y mañana (base en Guatemala)
-    const w = getGuatemalaWallClock();
-    let base = new Date(Date.UTC(w.year, w.month - 1, w.day));
+    // "a las 8 am mañana" → tiempo y mañana (base real en Guatemala)
+    let base = gtStartOfToday();
     if (/\bpasado\s*mañana\b/.test(t)) base = new Date(base.getTime() + 2 * 24 * 60 * 60 * 1000);
     else if (/\bmañana\b/.test(t) && !/\ben la mañana\b/.test(t)) base = new Date(base.getTime() + 1 * 24 * 60 * 60 * 1000);
     date = applyGuatemalaTime(base, time?.hours ?? 9, time?.minutes ?? 0);
@@ -593,7 +592,7 @@ async function formatEventsForUser(userId: string) {
   const w = getGuatemalaWallClock(now);
   const events = await prisma.event.findMany({
     where: {
-      date: { gte: new Date(Date.UTC(w.year, w.month - 1, w.day - 1)) },
+      date: { gte: guatemalaDate(w.year, w.month, w.day - 1) },
       status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
       OR: [
         { plannerId: userId },
@@ -710,8 +709,7 @@ Responde SOLO JSON sin markdown.`
     const time = parseTimeExpression(details);
     let date = parseRelativeDate(details, new Date());
     if (!date) {
-      const w = getGuatemalaWallClock();
-      date = new Date(Date.UTC(w.year, w.month - 1, w.day));
+      date = gtStartOfToday();
       if (time) date = applyGuatemalaTime(date, time.hours, time.minutes);
       else date = applyGuatemalaTime(date, 9, 0);
     } else if (time) {
@@ -892,8 +890,7 @@ async function handleMeetingCommand(cmd: string, user: { id: string; name: strin
 
   // Extraer fecha/hora (reutilizando parseadores locales) — todo en hora de Guatemala
   const time = parseTimeExpression(cmd);
-  const wNow = getGuatemalaWallClock();
-  const gtTodayStart = new Date(Date.UTC(wNow.year, wNow.month - 1, wNow.day));
+  const gtTodayStart = gtStartOfToday();
   let meetDate: Date | null = null;
 
   if (/\bpasado\s*mañana\b/.test(cmd)) {
@@ -1193,8 +1190,8 @@ async function handleCommand(
 
   if (dynamicTaskMatch) {
     const w = getGuatemalaWallClock();
-    const today = new Date(Date.UTC(w.year, w.month - 1, w.day)); // medianoche Guatemala
-    const dayOfWeek = today.getUTCDay(); // 0=domingo (fecha de Guatemala)
+    const today = gtStartOfToday(); // medianoche real de Guatemala
+    const dayOfWeek = w.weekday; // 0=domingo (fecha de Guatemala)
     const monday = new Date(today.getTime() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 24 * 60 * 60 * 1000);
     const nextMonday = new Date(monday.getTime() + 7 * 24 * 60 * 60 * 1000);
     const nextSaturday = new Date(nextMonday.getTime() + 5 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
@@ -1220,9 +1217,9 @@ async function handleCommand(
     }
     // 2) Próximo mes
     else if (/el proximo mes|el mes que viene|el siguiente mes|siguiente mes/i.test(cmd)) {
-      const nextMonthStart = new Date(Date.UTC(w.year, w.month, 1));
+      const nextMonthStart = guatemalaDate(w.year, w.month, 1);
       dateFrom = nextMonthStart;
-      dateTo = new Date(Date.UTC(w.year, w.month + 1, 0) + (23 * 60 + 59) * 60 * 1000 + 999);
+      dateTo = new Date(guatemalaDate(w.year, w.month + 1, 0).getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
       title = nextMonthStart.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", month: "long", year: "numeric" }).toUpperCase();
     }
     // 3) Pasado mañana
@@ -1254,9 +1251,9 @@ async function handleCommand(
         const monthIdx = monthMap[monthName];
         let year = w.year;
         // Si la fecha ya pasó este año, usar el próximo año
-        const candidate = new Date(Date.UTC(year, monthIdx, dayNum));
+        const candidate = guatemalaDate(year, monthIdx + 1, dayNum);
         if (candidate.getTime() < today.getTime()) year += 1;
-        const targetDate = new Date(Date.UTC(year, monthIdx, dayNum));
+        const targetDate = guatemalaDate(year, monthIdx + 1, dayNum);
         title = `${targetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
         dateFrom = new Date(targetDate);
         dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
@@ -1267,10 +1264,10 @@ async function handleCommand(
       const match = cmd.match(/\b(\d{1,2})\b/i);
       if (match) {
         const dayNum = parseInt(match[1]);
-        let targetDate = new Date(Date.UTC(w.year, w.month - 1, dayNum));
+        let targetDate = guatemalaDate(w.year, w.month, dayNum);
         // Si ya pasó este mes, usar el próximo mes
         if (targetDate.getTime() < today.getTime()) {
-          targetDate = new Date(Date.UTC(w.year, w.month, dayNum));
+          targetDate = guatemalaDate(w.year, w.month + 1, dayNum);
         }
         title = `${targetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
         dateFrom = new Date(targetDate);
@@ -1288,10 +1285,10 @@ async function handleCommand(
         let year = w.year;
         // Si el mes ya pasó este año, es el próximo año
         if (targetMonth < w.month - 1) year += 1;
-        const monthName = new Date(Date.UTC(year, targetMonth, 1)).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", month: "long", year: "numeric" });
+        const monthName = guatemalaDate(year, targetMonth + 1, 1).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", month: "long", year: "numeric" });
         title = `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}`;
-        dateFrom = new Date(Date.UTC(year, targetMonth, 1));
-        dateTo = new Date(Date.UTC(year, targetMonth + 1, 0) + (23 * 60 + 59) * 60 * 1000 + 999);
+        dateFrom = guatemalaDate(year, targetMonth + 1, 1);
+        dateTo = new Date(guatemalaDate(year, targetMonth + 2, 0).getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
       }
     }
     // 6) Día específico de la semana (lunes, martes, etc.)
@@ -1396,8 +1393,7 @@ async function handleCommand(
       const time = parseTimeExpression(cmd);
       let when = parseRelativeDate(cmd, new Date());
       if (!when) {
-        const wNow = getGuatemalaWallClock();
-        when = new Date(Date.UTC(wNow.year, wNow.month - 1, wNow.day));
+        when = gtStartOfToday();
         when = applyGuatemalaTime(when, time?.hours ?? 9, time?.minutes ?? 0);
       } else if (time) {
         when = applyGuatemalaTime(when, time.hours, time.minutes);
@@ -1456,7 +1452,7 @@ async function handleCommand(
     await prisma.task.create({
       data: {
         title: `🔔 ${parsed.title}`,
-        description: parsed.description || `Recordatorio programado para ${parsed.remindAt.toLocaleString("es-GT")}`,
+        description: parsed.description || `Recordatorio programado para ${parsed.remindAt.toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`,
         assignedToId: parsed.assignToId || user.id,
         assignedById: user.id,
         dueDate: parsed.remindAt,

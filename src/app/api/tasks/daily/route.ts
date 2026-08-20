@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
+import { gtStartOfToday } from "@/lib/task-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,10 +13,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const today = gtStartOfToday();
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
     const tasks = await prisma.task.findMany({
       where: {

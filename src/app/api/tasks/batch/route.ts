@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
+import { parseGTInputDate } from "@/lib/task-utils";
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
             type: task.type || "FIJA",
             frequency: task.frequency || null,
             dayOfWeek: task.dayOfWeek || null,
-            dueDate: task.dueDate ? new Date(task.dueDate) : null,
+            dueDate: parseGTInputDate(task.dueDate),
             priority: task.priority || "MEDIA",
             category: task.category || "OTRO",
             assignedToId: task.assignedToId || null,

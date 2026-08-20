@@ -41,36 +41,72 @@ export function getGuatemalaWallClock(d: Date = new Date()): {
   };
 }
 
-// Ahora mismo en Guatemala como un Date cuyo valor absoluto
-// corresponde a la hora de pared de Guatemala (UTC-6).
+// Ahora mismo (instante real). Para leer la hora de Guatemala usar getGuatemalaWallClock().
 export function gtNow(): Date {
-  const w = getGuatemalaWallClock();
-  return new Date(Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second));
+  return new Date();
 }
 
-// Medianoche de HOY en Guatemala (instante absoluto).
+// Medianoche de HOY en Guatemala (instante absoluto real = componentes de Guatemala + 6h UTC).
 export function gtStartOfToday(): Date {
   const w = getGuatemalaWallClock();
-  return new Date(Date.UTC(w.year, w.month - 1, w.day));
+  return new Date(Date.UTC(w.year, w.month - 1, w.day) + 6 * 60 * 60 * 1000);
 }
 
-// Fin del día de HOY en Guatemala (23:59:59.999).
+// Fin del día de HOY en Guatemala (23:59:59.999) como instante absoluto real.
 export function gtEndOfToday(): Date {
   const w = getGuatemalaWallClock();
-  return new Date(Date.UTC(w.year, w.month - 1, w.day, 23, 59, 59, 999));
+  return new Date(Date.UTC(w.year, w.month - 1, w.day, 23, 59, 59, 999) + 6 * 60 * 60 * 1000);
 }
 
-// Dado un día (instante absoluto cualquiera de ese día en Guatemala),
-// devuelve el instante absoluto de ese MISMO día de Guatemala a las horas/minutos dados.
+// Dado un instante (o un día de Guatemala), devuelve el instante absoluto REAL
+// de ese MISMO día de Guatemala a las horas/minutos dados (hora de pared + 6h UTC).
 export function applyGuatemalaTime(date: Date, hours: number, minutes: number): Date {
   const w = getGuatemalaWallClock(date);
-  return new Date(Date.UTC(w.year, w.month - 1, w.day, hours, minutes, 0));
+  return new Date(Date.UTC(w.year, w.month - 1, w.day, hours, minutes, 0) + 6 * 60 * 60 * 1000);
+}
+
+// Medianoche de un día específico de Guatemala (instante absoluto real).
+export function guatemalaDate(year: number, month: number, day: number): Date {
+  return new Date(Date.UTC(year, month - 1, day) + 6 * 60 * 60 * 1000);
 }
 
 export function guatemalaToday(): Date {
-  // Medianoche de hoy en Guatemala, representada como Date UTC (componentes = fecha de Guatemala).
-  const w = getGuatemalaWallClock();
-  return new Date(Date.UTC(w.year, w.month - 1, w.day));
+  return gtStartOfToday();
+}
+
+// Interpreta un valor de fecha/hora proveniente del cliente/admin:
+//  - "YYYY-MM-DD" → medianoche de Guatemala
+//  - "YYYY-MM-DDTHH:mm(:ss)" sin zona → hora LOCAL de Guatemala (UTC-6)
+//  - Con zona (Z/+hh:mm) → instante absoluto directo
+export function parseGTInputDate(input: string | Date | null | undefined): Date | null {
+  if (!input) return null;
+  if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
+  const s = input.trim();
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) {
+    const [y, m, d] = s.split("-").map(Number);
+    return guatemalaDate(y, m, d);
+  }
+  if (/^\d{4}-\d{1,2}-\d{1,2}T\d{1,2}:\d{2}/.test(s) && !/[zZ]|[+-]\d{2}:\d{2}$/.test(s)) {
+    const d = new Date(s + "-06:00");
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Próxima ocurrencia de una tarea FIJA, preservando la hora de Guatemala de la original
+export function nextRecurrenceDueDate(base: Date, frequency: string | null): Date {
+  const w = getGuatemalaWallClock(base);
+  let day: Date;
+  if (frequency === "SEMANAL") {
+    day = guatemalaDate(w.year, w.month, w.day + 7);
+  } else if (frequency === "MENSUAL") {
+    const daysInNext = new Date(Date.UTC(w.year, w.month + 1, 0)).getUTCDate();
+    day = guatemalaDate(w.year, w.month + 1, Math.min(w.day, daysInNext));
+  } else {
+    day = guatemalaDate(w.year, w.month, w.day + 1);
+  }
+  return applyGuatemalaTime(day, w.hour, w.minute);
 }
 
 export async function carryOverUncompletedTasks() {

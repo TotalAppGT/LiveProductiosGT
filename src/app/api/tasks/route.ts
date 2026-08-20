@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 import { sendMessage } from "@/lib/whatsapp";
+import { parseGTInputDate } from "@/lib/task-utils";
 import type { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
         type: type || "FIJA",
         frequency: frequency || null,
         dayOfWeek: dayOfWeek || null,
-        dueDate: dueDate ? new Date(dueDate) : null,
+        dueDate: parseGTInputDate(dueDate),
         priority: priority || "MEDIA",
         category: category || "OTRO",
         assignedToId: assignedToId || null,

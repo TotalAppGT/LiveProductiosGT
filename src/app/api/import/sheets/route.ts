@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
 import { sendMessage } from "@/lib/whatsapp";
+import { guatemalaDate } from "@/lib/task-utils";
+
+function parseGTDueDate(raw: string): Date | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return guatemalaDate(parseInt(m[1]), parseInt(m[2]), parseInt(m[3]));
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (m) return guatemalaDate(parseInt(m[3]), parseInt(m[2]), parseInt(m[1]));
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
 
 interface SheetTaskData {
   title: string;
@@ -91,7 +103,7 @@ export async function POST(request: NextRequest) {
             description: item.description?.trim() || null,
             assignedToId,
             assignedById: auth.payload.userId,
-            dueDate: item.dueDate ? new Date(item.dueDate) : null,
+            dueDate: item.dueDate ? parseGTDueDate(item.dueDate) : null,
             category: category as any,
             priority: priority as any,
             type: "DINAMICA",

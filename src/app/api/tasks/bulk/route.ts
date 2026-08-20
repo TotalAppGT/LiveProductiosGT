@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
+import { guatemalaDate, applyGuatemalaTime } from "@/lib/task-utils";
 import * as XLSX from "xlsx";
 
 export async function POST(request: NextRequest) {
@@ -49,19 +50,29 @@ export async function POST(request: NextRequest) {
       return partial || null;
     }
 
-    function parseDate(raw: string): Date | null {
-      const s = raw.trim();
+    function parseDate(raw: any): Date | null {
+      // Excel serial (número de días desde 1900) → fecha
+      if (typeof raw === "number" && raw > 20000 && raw < 80000) {
+        const epoch = Date.UTC(1899, 11, 30) + Math.round(raw * 86400000);
+        const d = new Date(epoch);
+        return guatemalaDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+      }
+      const s = String(raw ?? "").trim();
       if (!s) return null;
-      // Formato YYYY-MM-DD
-      let d = new Date(s);
-      if (!isNaN(d.getTime())) return d;
+      // Formato YYYY-MM-DD (fecha de Guatemala)
+      let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (m) {
+        return guatemalaDate(parseInt(m[1]), parseInt(m[2]), parseInt(m[3]));
+      }
       // Formato DD/MM/YYYY o DD-MM-YYYY
-      const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+      m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
       if (m) {
         const dd = parseInt(m[1]), mm = parseInt(m[2]), yyyy = parseInt(m[3]);
-        d = new Date(yyyy, mm - 1, dd);
-        if (!isNaN(d.getTime())) return d;
+        return guatemalaDate(yyyy, mm, dd);
       }
+      // Fecha/hora ISO con zona (instante absoluto)
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d;
       return null;
     }
 
@@ -77,9 +88,9 @@ export async function POST(request: NextRequest) {
 
         if (dueDate && hora) {
           const [h, min] = hora.split(":").map((x: string) => parseInt(x));
-          if (!isNaN(h)) dueDate.setHours(h, min || 0, 0, 0);
+          if (!isNaN(h)) dueDate = applyGuatemalaTime(dueDate, h, min || 0);
         } else if (dueDate && !hora) {
-          dueDate.setHours(9, 0, 0, 0);
+          dueDate = applyGuatemalaTime(dueDate, 9, 0);
         }
 
         const priority = (row.prioridad || row.priority || "MEDIA").toString().toUpperCase().trim();
