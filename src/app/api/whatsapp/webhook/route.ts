@@ -122,12 +122,22 @@ function esGTDate(date: Date): string {
 function parseTimeExpression(text: string): { hours: number; minutes: number } | null {
   const t = text.toLowerCase().trim();
 
+  // Normalizar los minutos al múltiplo de 5 más cercano (00,05,10,...55)
+  // para que las alertas del cron y los recordatorios se disparen bien.
+  const roundToFive = (h: number, m: number): { hours: number; minutes: number } => {
+    const rounded = Math.round(m / 5) * 5;
+    if (rounded >= 60) {
+      return { hours: (h + 1) % 24, minutes: 0 };
+    }
+    return { hours: h, minutes: rounded };
+  };
+
   const time24 = t.match(/\b(\d{1,2}):(\d{2})\b/);
   if (time24) {
     const hours = parseInt(time24[1]);
     const minutes = parseInt(time24[2]);
     if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
-      return { hours, minutes };
+      return roundToFive(hours, minutes);
     }
   }
 
@@ -138,7 +148,7 @@ function parseTimeExpression(text: string): { hours: number; minutes: number } |
     const meridian = time12[3];
     if (/pm|p\.m\./i.test(meridian) && hours < 12) hours += 12;
     if (/am|a\.m\./i.test(meridian) && hours === 12) hours = 0;
-    return { hours, minutes };
+    return roundToFive(hours, minutes);
   }
 
   if (/\ben la mañana\b|\btemprano\b/.test(t)) return { hours: 8, minutes: 0 };
@@ -147,6 +157,15 @@ function parseTimeExpression(text: string): { hours: number; minutes: number } |
   if (/\bmedio\s*d[ií]a\b/.test(t)) return { hours: 12, minutes: 0 };
 
   return null;
+}
+
+// Redondear una fecha a los minutos en múltiplos de 5 (00,05,10,...55)
+function normalizeToFive(date: Date): Date {
+  const d = new Date(date);
+  const mins = d.getMinutes();
+  const rounded = Math.round(mins / 5) * 5;
+  d.setMinutes(rounded, 0, 0);
+  return d;
 }
 
 function parseRelativeDate(text: string, referenceDate: Date): Date | null {
@@ -464,7 +483,7 @@ Responde SOLO el JSON, sin markdown.`
     }], { responseFormat: "json", temperature: 0.1, maxTokens: 300 });
 
     const json = JSON.parse(response.replace(/```json|```/g, "").trim());
-    const remindAt = normalizeGuatemalaDate(json.remindAt);
+    const remindAt = normalizeToFive(normalizeGuatemalaDate(json.remindAt));
 
     let assignToId: string | undefined;
     if (json.assignToName) {
@@ -541,7 +560,7 @@ Responde SOLO el JSON, sin markdown.`
       title: json.title,
       description: json.description,
       assignToId,
-      dueDate: json.dueDate ? normalizeGuatemalaDate(json.dueDate) : undefined,
+      dueDate: json.dueDate ? normalizeToFive(normalizeGuatemalaDate(json.dueDate)) : undefined,
       priority: json.priority || "MEDIA",
       isFixed: json.isFixed || false,
       frequency: json.frequency,
@@ -1381,7 +1400,7 @@ async function handleCommand(
         data: {
           toNumber: targetNumber,
           message: msgText,
-          scheduledAt: when,
+          scheduledAt: normalizeToFive(when),
           createdById: user.id,
         },
       });
@@ -1755,7 +1774,7 @@ async function handleCreateTask(details: string, user: { id: string; name: strin
       description: parsed.description || "",
       assignedToId: parsed.assignToId || user.id,
       assignedById: user.id,
-      dueDate: parsed.dueDate || new Date(),
+      dueDate: parsed.dueDate ? normalizeToFive(parsed.dueDate) : new Date(),
       priority: parsed.priority || "MEDIA",
       category: "OTRO",
       type: parsed.isFixed ? "FIJA" : "DINAMICA",

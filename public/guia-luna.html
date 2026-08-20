@@ -192,6 +192,13 @@ li { margin: 5px 0; font-size: 13px; }
     <li><code>eliminar recordatorio 2</code> / <code>eliminar recordatorios 1 2 3</code> → eliminar por número</li>
   </ul>
   <div class="note">
+    💡 <strong>Horarios: usa intervalos de 5 minutos.</strong> Las horas para tareas, recordatorios, reuniones y mensajes
+    se ajustan automáticamente a los 5 minutos (…:00, :05, :10, :15, :20… :55). Ej: "3pm" → 3:00, "8:07" → 8:05,
+    "9:13" → 9:15. Así el cron de alertas dispara los avisos exactos. Evitá minutos "sueltos" (8:03, 9:17, 10:41),
+    aunque LUNA los redondeará igual.
+  </div>
+
+<div class="note">
     💡 <strong>Diferencia clave:</strong><br>
     • "recuérdame / mándame / avísame" → para <strong>ti</strong><br>
     • "recuérdale a [nombre] / mándale a [nombre] / para [nombre]" → para esa <strong>persona</strong> (recibe notificación)<br>
