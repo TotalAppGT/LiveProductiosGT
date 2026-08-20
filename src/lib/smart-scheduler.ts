@@ -859,30 +859,36 @@ export async function sendBihourlyReminders(): Promise<{
 
       if (pendingTasksCount === 0) continue;
 
-      // Incluir digest ordenado de las próximas tareas
+      // Solo tareas de HOY (ordenadas por hora), no de toda la semana
       let digest = "";
       try {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const end = new Date(today); end.setDate(end.getDate() + 7); end.setHours(23, 59, 59);
-        const upcomingTasks = await prisma.task.findMany({
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
+        const todayTasks = await prisma.task.findMany({
           where: {
             assignedToId: user.id,
             status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
-            dueDate: { gte: today, lte: end },
+            dueDate: { gte: todayStart, lte: todayEnd },
           },
           orderBy: { dueDate: "asc" },
-          take: 10,
+          take: 15,
         });
-        const { formatTaskDigest } = await import("@/lib/task-view");
-        const d = formatTaskDigest(upcomingTasks);
-        if (d) digest = `\n\n${d}`;
+        const { orderTasksByDayHour, formatTaskLine } = await import("@/lib/task-view");
+        const ordered = orderTasksByDayHour(todayTasks);
+        if (ordered.length > 0) {
+          digest = `\n\n${ordered.map((t: any, i: number) => formatTaskLine(t, i + 1)).join("\n")}`;
+        }
       } catch {
         // silencioso
       }
 
-      let message = `Tienes ${pendingTasksCount} tareas pendientes`;
+      const hour = now.getHours();
+      let greeting = "🔔";
+      let message = `${greeting} *Tus tareas de HOY*\n\nTienes ${pendingTasksCount} tareas pendientes`;
       if (overdueTasks > 0) message += `, ${overdueTasks} vencidas`;
-      message += `:${digest}\n\n_Escribe *tareas* para verlas todas y usa el # para completarlas (ej: *hecho 1*)._`;
+      message += ` hoy.`;
+      if (digest) message += digest;
+      message += `\n\n⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.\n📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.`;
 
       await sendMessage(to, message).catch(() => {});
 

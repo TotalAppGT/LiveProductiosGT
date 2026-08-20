@@ -541,10 +541,11 @@ const jobs: CronJob[] = [
   { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck },
   { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck },
   { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck },
-  { name: "bihourly10", schedule: { hour: 10, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(10) },
-  { name: "bihourly12", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(12) },
-  { name: "bihourly14", schedule: { hour: 14, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(14) },
-  { name: "bihourly16", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(16) },
+  { name: "bihourly9", schedule: { hour: 9, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(9) },
+  { name: "bihourly11", schedule: { hour: 11, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(11) },
+  { name: "bihourly13", schedule: { hour: 13, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(13) },
+  { name: "bihourly15", schedule: { hour: 15, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(15) },
+  { name: "bihourly17", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(17) },
 ];
 
 // Usar globalThis para que el cron sea UN SOLO singleton entre todas las instancias del módulo
