@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { normalizeGTPhone } from "@/lib/phone";
 import { sendMessage } from "@/lib/whatsapp";
+import { gtStartOfToday, gtEndOfToday } from "@/lib/task-utils";
 
 export const LUNA_SYSTEM_PROMPT = `Eres LUNA, la Asistente IA Administrativa de Live Productions GT, una empresa líder en producción de eventos en Guatemala. Eres la mano derecha digital de Jorge Mérida Godoy (Dueño) y de todo el equipo.
 
@@ -299,42 +300,47 @@ export async function askAI(
   messages: AIMessage[],
   options?: AIOptions
 ): Promise<string> {
-  try {
-    const { client, model, systemPrompt, temperature, maxTokens, provider, topP } =
-      await getAIClient();
+  let attempt = 0;
+  while (attempt < 2) {
+    attempt++;
+    try {
+      const { client, model, systemPrompt, temperature, maxTokens, provider, topP } =
+        await getAIClient();
 
-    const fullMessages: AIMessage[] =
-      messages[0]?.role === "system"
-        ? messages
-        : [{ role: "system", content: systemPrompt }, ...messages];
+      const fullMessages: AIMessage[] =
+        messages[0]?.role === "system"
+          ? messages
+          : [{ role: "system", content: systemPrompt }, ...messages];
 
-    const baseParams: Record<string, unknown> = {
-      model,
-      messages: fullMessages,
-      temperature: options?.temperature ?? temperature,
-      top_p: topP,
-      max_tokens: options?.maxTokens ?? maxTokens,
-      stream: false as const,
-    };
+      const baseParams: Record<string, unknown> = {
+        model,
+        messages: fullMessages,
+        temperature: options?.temperature ?? temperature,
+        top_p: topP,
+        max_tokens: options?.maxTokens ?? maxTokens,
+        stream: false as const,
+      };
 
-    if (provider === "NVIDIA") {
-      baseParams.extra_body = { chat_template_kwargs: { thinking: false } };
+      if (provider === "NVIDIA") {
+        baseParams.extra_body = { chat_template_kwargs: { thinking: false } };
+      }
+
+      if (options?.responseFormat === "json") {
+        baseParams.response_format = { type: "json_object" as const };
+      }
+
+      const response = await client.chat.completions.create(
+        baseParams as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming
+      );
+
+      const content = response.choices[0]?.message?.content || "";
+      if (content.trim()) return content;
+    } catch (error) {
+      console.error(`askAI error (intento ${attempt}):`, error);
+      invalidateCache();
     }
-
-    if (options?.responseFormat === "json") {
-      baseParams.response_format = { type: "json_object" as const };
-    }
-
-    const response = await client.chat.completions.create(
-      baseParams as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming
-    );
-
-    return response.choices[0]?.message?.content || "";
-  } catch (error) {
-    console.error("askAI error:", error);
-    invalidateCache();
-    return AI_ERROR_MESSAGE;
   }
+  return AI_ERROR_MESSAGE;
 }
 
 async function formatTasksForAI(tasks: Record<string, unknown>[]) {
@@ -852,7 +858,7 @@ export async function handleWhatsAppMessage(
         },
       });
 
-      return `📊 *Resumen del Equipo - ${new Date().toLocaleDateString("es-GT")}*\n\n${overview.summary}`;
+      return `📊 *Resumen del Equipo - ${new Date().toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })}*\n\n${overview.summary}`;
     }
 
     if (isAdminQuery && (
@@ -860,8 +866,7 @@ export async function handleWhatsAppMessage(
       lowerMsg.includes("quien no ha entrado") ||
       lowerMsg.includes("inactivos")
     )) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = gtStartOfToday();
 
       const activities = await prisma.activity.findMany({
         where: { createdAt: { gte: today } },
@@ -901,8 +906,8 @@ export async function handleWhatsAppMessage(
       const pendingToday = await prisma.task.findMany({
         where: {
           dueDate: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-            lte: new Date(new Date().setHours(23, 59, 59, 999)),
+            gte: gtStartOfToday(),
+            lte: gtEndOfToday(),
           },
           status: { in: ["PENDIENTE", "EN_PROCESO"] },
         },
@@ -972,10 +977,22 @@ export async function handleWhatsAppMessage(
       },
     });
 
+    if (response === AI_ERROR_MESSAGE) {
+      return (
+        "🤔 No pude procesar bien tu mensaje. ¿Qué querés hacer?\n\n" +
+        "• *Ver tareas* → escribí `tareas`\n" +
+        "• *Crear tarea* → `crea tarea revisar cotizaciones viernes 3pm`\n" +
+        "• *Recordatorio* → `recuérdame llamar a Jorge mañana 9am`\n" +
+        "• *Completar* → `hecho 3`\n" +
+        "• *Reunión* → `hacer reunión con Diana y Abel el viernes a las 8am`\n" +
+        "• *Ayuda completa* → escribí `ayuda`"
+      );
+    }
+
     return response;
   } catch (error) {
     console.error("handleWhatsAppMessage error:", error);
-    return "¡Hola! Soy LUNA, tu asistente de Live Productions. Lo siento, tuve un problema procesando tu mensaje. Por favor intenta de nuevo más tarde.";
+    return "🤔 No pude procesar tu mensaje. Probá con *ayuda* para ver los comandos, o intentá de nuevo.";
   }
 }
 

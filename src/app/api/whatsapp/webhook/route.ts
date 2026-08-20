@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { handleWhatsAppMessage, askAI } from "@/lib/ai-brain";
+import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
@@ -468,7 +468,7 @@ function parseReminderLocal(text: string, user: { id: string; name: string }) {
 
 async function parseReminderFromText(text: string, user: { id: string; name: string }) {
   try {
-    const response = await askAI([{
+    let response = await askAI([{
       role: "user",
       content: `Extrae de este texto en español un recordatorio. Devuelve SOLO JSON:
 {
@@ -497,6 +497,13 @@ Reglas IMPORTANTES:
 
 Responde SOLO el JSON, sin markdown.`
     }], { responseFormat: "json", temperature: 0.1, maxTokens: 300 });
+
+    if (response === AI_ERROR_MESSAGE) {
+      response = await askAI([{
+        role: "user",
+        content: `Extrae del texto "${text}" un recordatorio y devuelve SOLO JSON con: title, description, remindAt (YYYY-MM-DDTHH:mm:ss hora de Guatemala), assignToName (o null). Si dice "recuérdame"/"mándame" el asignado es null. Usuario: ${user.name}. Hoy en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}. Si no hay hora usa 09:00. Sin markdown.`
+      }], { responseFormat: "json", temperature: 0, maxTokens: 300 });
+    }
 
     const json = JSON.parse(response.replace(/```json|```/g, "").trim());
     const remindAt = normalizeToFive(normalizeGuatemalaDate(json.remindAt));
@@ -530,7 +537,7 @@ Responde SOLO el JSON, sin markdown.`
 
 async function parseTaskCreation(text: string, user: { id: string; name: string }) {
   try {
-    const response = await askAI([{
+    let response = await askAI([{
       role: "user",
       content: `Extrae de este texto en español los datos para crear una tarea. Devuelve SOLO JSON:
 {
@@ -561,6 +568,13 @@ Reglas IMPORTANTES:
 
 Responde SOLO el JSON, sin markdown.`
     }], { responseFormat: "json", temperature: 0.1, maxTokens: 400 });
+
+    if (response === AI_ERROR_MESSAGE) {
+      response = await askAI([{
+        role: "user",
+        content: `Crea una tarea a partir de "${text}" y devuelve SOLO JSON con: title, description, assignToName (o null), dueDate (YYYY-MM-DDTHH:mm:ss hora de Guatemala o null), priority (BAJA|MEDIA|ALTA|URGENTE), isFixed, frequency (DIARIA|SEMANAL|MENSUAL o null), dayOfWeek (o null). Usuario: ${user.name}. Hoy en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}. Si no hay hora usa 09:00. Sin markdown.`
+      }], { responseFormat: "json", temperature: 0, maxTokens: 400 });
+    }
 
     const json = JSON.parse(response.replace(/```json|```/g, "").trim());
 
@@ -1981,6 +1995,80 @@ async function handleConversationStep(
   return null;
 }
 
+/**
+ * Cuando ningún comando matchea, detecta la intención de una frase natural
+ * y sugiere el formato correcto. Retorna null para mensajes casuales (van al chat IA).
+ */
+function suggestCommand(text: string): string | null {
+  const lower = text.toLowerCase().trim();
+
+  if (/(recu[ée]rd|recordar|recordatorio|av[íi]s|notif[íi]came|m[aá]ndame\s+un\s+mensaje|m[aá]ndale\s+un\s+mensaje|hazme\s+un\s+recordatorio)/.test(lower)) {
+    return (
+      "⏰ *Para agendar un recordatorio* escribí en una sola línea:\n\n" +
+      "`recuérdame [qué] [día] [hora]`\n\n" +
+      "Ejemplos:\n" +
+      "• `recuérdame llamar a Jorge mañana 9am`\n" +
+      "• `recuérdale a Diana revisar cotizaciones el viernes 3pm`\n" +
+      "• `mándame un mensaje mañana a las 8am`\n\n" +
+      "También puedo recordarle a alguien: `recuérdale a Abel [tarea] [día] [hora]`."
+    );
+  }
+
+  if (/(reunion|reunión|junta|meeting|juntar)/.test(lower)) {
+    return (
+      "🤝 *Para agendar una reunión* escribí:\n\n" +
+      "`hacer reunión con [nombres] el [día] a las [hora]`\n\n" +
+      "Ejemplos:\n" +
+      "• `hacer reunión con Diana y Abel mañana a las 8am`\n" +
+      "• `reunión con Jorge, Diana y Abel el viernes a las 3pm`"
+    );
+  }
+
+  if (/(compra|comprar|compras|abastec)/.test(lower)) {
+    return (
+      "🛒 *Para registrar una compra* escribí:\n\n" +
+      "`compra [artículo] para [persona] el [día]`\n\n" +
+      "Ejemplos:\n" +
+      "• `compra pilas AA para Abel mañana`\n" +
+      "• `comprar cinta ducto el viernes`"
+    );
+  }
+
+  if (/(crea|crear|creo|nueva\s+tarea|agregar\s+tarea|agrega\s+tarea|registra|anota|agenda|agendar|agregale|p[aá]sale\s+la\s+tarea|deja\s+una\s+tarea)/.test(lower)) {
+    return (
+      "📝 *Para crear una tarea* escribí en una sola línea:\n\n" +
+      "`crea tarea [qué] [día] [hora]`\n\n" +
+      "Ejemplos:\n" +
+      "• `crea tarea revisar cotizaciones viernes 3pm`\n" +
+      "• `crea tarea para Jorge llamar a Abel mañana 8am`\n" +
+      "• `asigna tarea a Diana revisar bodega el lunes 10am`\n\n" +
+      "Para tareas que se repiten: `crea tarea fija revisar inventario cada lunes 9am`."
+    );
+  }
+
+  if (/(pospon|pospus|reprogram|mueve\s+la\s+tarea|para\s+despues|para\s+después)/.test(lower)) {
+    return "⏰ *Para posponer una tarea* escribí:\n\n`posponer [número] para [día]`\n\nEj: `posponer 3 para mañana`. Primero escribí *tareas* para ver los números.";
+  }
+
+  if (/(complet|hech|finaliz|termin|list[oa]|hacer\s+la\s+tarea|acabar)/.test(lower)) {
+    return "✅ *Para marcar una tarea como hecha* escribí:\n\n`hecho [número]` (pueden ser varios: `hecho 1 2 3`)\n\nPrimero escribí *tareas* para ver los números.";
+  }
+
+  if (/(elimin|borr|quitar\s+la\s+tarea|quitar\s+tarea|limpia|limpiar)/.test(lower)) {
+    return "🗑️ *Para eliminar tareas* escribí:\n\n`eliminar [número]` (varios: `borrar 1 2 3`)\n\nPrimero escribí *tareas* para ver los números.";
+  }
+
+  if (/(tarea|tareas|pendiente)/.test(lower) && !/qué\s+tal|como\s+est[áa]s|hola|buenas|gracias/.test(lower)) {
+    return "📋 *Para ver tareas* escribí:\n\n• `tareas` → las de hoy\n• `tareas mañana` → las de mañana\n• `tareas semana` / `tareas mes`\n• `resumen` → todo junto\n\nEj: `tareas del lunes`, `tareas de la próxima semana`.";
+  }
+
+  if (/(a\s+las\s+\d|:\d{2}\s*(am|pm)|mañana\s+a\s+las|el\s+\d{1,2}\s+de)/.test(lower) && !/hola|qué\s+tal|gracias|buenas/.test(lower)) {
+    return "🤔 Veo que mencionás un día u hora, pero no tengo claro qué acción querés.\n\nProbá con:\n• `recuérdame [qué] [día] [hora]`\n• `crea tarea [qué] [día] [hora]`\n• `hacer reunión con [personas] [día] [hora]`\n\nEj: `recuérdame llamar a Jorge mañana 9am`";
+  }
+
+  return null;
+}
+
 function isKnownCommand(text: string): boolean {
   const knownCommands = [
     "tareas", "hoy", "semana", "completar", "hecho", "completado", "proceso", "iniciar", "en proceso", "posponer", "comentar",
@@ -2218,7 +2306,8 @@ export async function POST(request: NextRequest) {
                       setConversation(normalizedFrom, "task_create_title", {});
                     }
                   } else {
-                    const aiReply = await handleWhatsAppMessage(fromNumber, text);
+                    const suggestion = suggestCommand(text);
+                    const aiReply = suggestion ?? (await handleWhatsAppMessage(fromNumber, text));
 
                     const sendResult = await sendMessage(fromNumber, aiReply);
 
