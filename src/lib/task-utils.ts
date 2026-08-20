@@ -109,6 +109,55 @@ export function nextRecurrenceDueDate(base: Date, frequency: string | null): Dat
   return applyGuatemalaTime(day, w.hour, w.minute);
 }
 
+const WEEKDAY_MAP: Record<string, number> = {
+  DOMINGO: 0, LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6,
+};
+
+// ¿La tarea está programada para un día de Guatemala específico?
+// Incluye: dueDate dentro de ese día + tareas FIJA (DIARIA todos los días,
+// SEMANAL según su dayOfWeek).
+export function isTaskDueOnDate(
+  task: { dueDate: Date | string | null; type?: string | null; frequency?: string | null; dayOfWeek?: string | null },
+  gtDate: Date
+): boolean {
+  const w = getGuatemalaWallClock(gtDate);
+  const dayStart = guatemalaDate(w.year, w.month, w.day);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+
+  if (task.dueDate) {
+    const d = new Date(task.dueDate);
+    if (!isNaN(d.getTime()) && d >= dayStart && d <= dayEnd) return true;
+  }
+
+  if (task.type === "FIJA") {
+    if (task.frequency === "DIARIA") return true;
+    if (task.frequency === "SEMANAL" && task.dayOfWeek) {
+      const target = WEEKDAY_MAP[String(task.dayOfWeek).toUpperCase()];
+      if (target !== undefined && target === w.weekday) return true;
+    }
+  }
+
+  return false;
+}
+
+// Próxima fecha de una tarea FIJA al completarse:
+// - SEMANAL con dayOfWeek → próximo día de la semana indicado (no depende de la fecha actual)
+// - Si no, reusa la lógica genérica basada en la fecha original
+export function nextFixedDueDate(
+  task: { dueDate?: Date | string | null; type?: string | null; frequency?: string | null; dayOfWeek?: string | null }
+): Date {
+  if (task.type === "FIJA" && task.frequency === "SEMANAL" && task.dayOfWeek) {
+    const base = task.dueDate ? new Date(task.dueDate) : new Date();
+    const w = getGuatemalaWallClock(base);
+    const target = WEEKDAY_MAP[String(task.dayOfWeek).toUpperCase()];
+    let delta = target !== undefined ? (target - w.weekday + 7) % 7 : 7;
+    if (delta === 0) delta = 7;
+    const day = guatemalaDate(w.year, w.month, w.day + delta);
+    return applyGuatemalaTime(day, w.hour, w.minute);
+  }
+  return nextRecurrenceDueDate(task.dueDate ? new Date(task.dueDate) : new Date(), task.frequency ?? null);
+}
+
 export async function carryOverUncompletedTasks() {
   // Mover a HOY todas las tareas vencidas no completadas (siguen corriendo hasta que se hagan)
   const today = guatemalaToday();

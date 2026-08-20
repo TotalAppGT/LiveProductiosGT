@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
-import { parseGTInputDate, nextRecurrenceDueDate } from "@/lib/task-utils";
+import { parseGTInputDate, nextFixedDueDate } from "@/lib/task-utils";
 
 export async function GET(
   request: NextRequest,
@@ -123,7 +123,7 @@ export async function PUT(
         priority: priority !== undefined ? priority : undefined,
         category: category !== undefined ? category : undefined,
         comments: comments !== undefined ? comments : undefined,
-        rescheduledTo: rescheduledTo !== undefined ? (rescheduledTo ? new Date(rescheduledTo) : null) : undefined,
+        rescheduledTo: rescheduledTo !== undefined ? parseGTInputDate(rescheduledTo) : undefined,
         assignedToId: assignedToId !== undefined ? assignedToId : undefined,
         eventId: eventId !== undefined ? eventId : undefined,
         requiresConfirmation: requiresConfirmation !== undefined ? requiresConfirmation : undefined,
@@ -175,7 +175,7 @@ export async function PUT(
     }
 
     if (status === "COMPLETADA" && existingTask.type === "FIJA") {
-      const nextDueDate = nextRecurrenceDueDate(existingTask.dueDate ?? new Date(), existingTask.frequency);
+      const nextDueDate = nextFixedDueDate(existingTask);
 
       await prisma.task.create({
         data: {

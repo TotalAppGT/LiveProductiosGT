@@ -4,7 +4,7 @@ import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
-import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate } from "@/lib/task-utils";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate } from "@/lib/task-utils";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
 
@@ -320,7 +320,7 @@ async function formatTasksForUser(userId: string, period?: string) {
     take: 200,
   });
 
-  const todayTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= todayStart && new Date(t.dueDate) <= todayEnd);
+  const todayTasks = allTasks.filter(t => isTaskDueOnDate(t, todayStart));
   const thisWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) > todayEnd && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= sunday);
   const nextWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= nextMonday && new Date(t.dueDate) <= nextSunday);
   const thirdWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= thirdMonday && new Date(t.dueDate) <= thirdSunday);
@@ -341,7 +341,9 @@ async function formatTasksForUser(userId: string, period?: string) {
   if (period === "hoy") {
     if (todayTasks.length === 0) return "✅ No tienes tareas para hoy.";
     output = `📋 *HOY - ${todayStart.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday:"long",day:"numeric",month:"long" })}*\n\n`;
-    output += formatTaskList(todayTasks);
+    const orderedToday = orderTasksForDisplay(todayTasks);
+    output += formatTaskList(orderedToday);
+    saveTaskView(userId, orderedToday);
     output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output;
   }
@@ -1801,7 +1803,7 @@ async function handleCreateTask(details: string, user: { id: string; name: strin
       description: parsed.description || "",
       assignedToId: parsed.assignToId || user.id,
       assignedById: user.id,
-      dueDate: parsed.dueDate ? normalizeToFive(parsed.dueDate) : new Date(),
+      dueDate: parsed.dueDate ? normalizeToFive(parsed.dueDate) : parsed.isFixed ? null : new Date(),
       priority: parsed.priority || "MEDIA",
       category: "OTRO",
       type: parsed.isFixed ? "FIJA" : "DINAMICA",

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMessage, sendAutomatedReminder } from "@/lib/whatsapp";
 import { generateSmartAlert, detectAnomalies, summarizeCompany, weeklyPerformanceReport } from "@/lib/ai-brain";
 import { subDays, differenceInHours } from "date-fns";
-import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday } from "@/lib/task-utils";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, isTaskDueOnDate } from "@/lib/task-utils";
 
 async function logActivity(
   action: string,
@@ -842,52 +842,51 @@ export async function sendBihourlyReminders(): Promise<{
 
       if (lastReminder) continue;
 
-      const pendingTasksCount = await prisma.task.count({
+      const todayStart = gtStartOfToday();
+
+      // Todas las pendientes del usuario (para contar y clasificar)
+      const allPending = await prisma.task.findMany({
         where: {
           assignedToId: user.id,
-          status: { in: ["PENDIENTE", "EN_PROCESO"] },
+          status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
         },
+        orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
+        take: 200,
       });
 
-      const overdueTasks = await prisma.task.count({
-        where: {
-          assignedToId: user.id,
-          status: { in: ["PENDIENTE", "EN_PROCESO"] },
-          dueDate: { lt: now },
-        },
-      });
+      if (allPending.length === 0) continue;
 
-      if (pendingTasksCount === 0) continue;
+      // Las de HOY (por fecha o por día fijo de la semana) — mismo criterio que "tareas de hoy"
+      const todayTasks = allPending.filter((t) => isTaskDueOnDate(t, todayStart));
+      // Vencidas de otros días (no reprogramadas a hoy)
+      const overdueOtherDays = allPending.filter(
+        (t) => t.dueDate && new Date(t.dueDate) < todayStart && !isTaskDueOnDate(t, todayStart)
+      ).length;
+      const upcoming = allPending.length - todayTasks.length - overdueOtherDays;
 
-      // Solo tareas de HOY (ordenadas por hora), no de toda la semana
       let digest = "";
       try {
-        const todayStart = gtStartOfToday();
-        const todayEnd = gtEndOfToday();
-        const todayTasks = await prisma.task.findMany({
-          where: {
-            assignedToId: user.id,
-            status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
-            dueDate: { gte: todayStart, lte: todayEnd },
-          },
-          orderBy: { dueDate: "asc" },
-          take: 15,
-        });
         const { orderTasksByDayHour, formatTaskLine } = await import("@/lib/task-view");
         const ordered = orderTasksByDayHour(todayTasks);
         if (ordered.length > 0) {
-          digest = `\n\n${ordered.map((t: any, i: number) => formatTaskLine(t, i + 1)).join("\n")}`;
+          digest = `\n\n${ordered.slice(0, 15).map((t: any, i: number) => formatTaskLine(t, i + 1)).join("\n")}`;
         }
       } catch {
         // silencioso
       }
 
-      const hour = getGuatemalaWallClock(now).hour;
-      let greeting = "🔔";
-      let message = `${greeting} *Tus tareas de HOY*\n\nTienes ${pendingTasksCount} tareas pendientes`;
-      if (overdueTasks > 0) message += `, ${overdueTasks} vencidas`;
-      message += ` hoy.`;
-      if (digest) message += digest;
+      let message: string;
+      if (todayTasks.length > 0) {
+        message = `🔔 *Tus tareas de HOY*\n\nTienes ${todayTasks.length} tarea${todayTasks.length > 1 ? "s" : ""} para hoy`;
+        if (overdueOtherDays > 0) message += ` (${overdueOtherDays} vencida${overdueOtherDays > 1 ? "s" : ""} de otros días)`;
+        message += `.`;
+        if (digest) message += digest;
+      } else {
+        message = `🔔 *Tus tareas*\n\nNo tienes tareas programadas para HOY, pero tienes ${allPending.length} pendiente${allPending.length > 1 ? "s" : ""} en total`;
+        if (overdueOtherDays > 0) message += ` (${overdueOtherDays} vencida${overdueOtherDays > 1 ? "s" : ""} de otros días)`;
+        if (upcoming > 0) message += ` y ${upcoming} próxima${upcoming > 1 ? "s" : ""}`;
+        message += `.\n\n📅 Escribí *tareas* para ver toda la semana.`;
+      }
       message += `\n\n⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.\n📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.`;
 
       await sendMessage(to, message).catch(() => {});
@@ -906,12 +905,12 @@ export async function sendBihourlyReminders(): Promise<{
         "BIHOURLY_REMINDER",
         "USER",
         user.id,
-        `Recordatorio bi-horario enviado a ${user.name} (${pendingTasksCount} pendientes)`,
+        `Recordatorio bi-horario enviado a ${user.name} (${todayTasks.length} para hoy, ${allPending.length} pendientes en total)`,
         "system"
       );
 
       usersReminded++;
-      totalPendingTasks += pendingTasksCount;
+      totalPendingTasks += todayTasks.length;
     }
 
     return { usersReminded, totalPendingTasks };
