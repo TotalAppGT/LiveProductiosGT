@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { askAI } from "@/lib/ai-brain";
+import { askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
-import { carryOverUncompletedTasks } from "@/lib/task-utils";
+import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow } from "@/lib/task-utils";
 
 interface CronJob {
   name: string;
@@ -28,8 +28,13 @@ function getJobState(name: string): JobState {
 }
 
 function getGuatemalaTime(): Date {
-  // Guatemala is UTC-6. Adjust server time to Guatemala local.
-  return new Date(Date.now() - 6 * 60 * 60 * 1000);
+  // Devuelve un Date cuyos componentes UTC equivalen a la hora de pared de Guatemala (UTC-6),
+  // robusto sin importar la zona horaria del servidor. Usar getUTC* para leer.
+  return gtNow();
+}
+
+function aiSucceeded(msg: string): boolean {
+  return !!msg && !msg.includes("no pude procesar tu solicitud");
 }
 
 async function logActivity(userId: string, action: string, details: string) {
@@ -77,14 +82,13 @@ async function morningBriefing() {
   for (const user of users) {
     try {
       const now = getGuatemalaTime();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const endOfToday = new Date(startOfToday); endOfToday.setHours(23, 59, 59, 999);
+      const startOfToday = gtStartOfToday();
+      const endOfToday = gtEndOfToday();
 
-      // Semana laboral: LUNES a SÁBADO
-      const dayOfWeek = now.getDay(); // 0=domingo
-      const monday = new Date(startOfToday);
-      monday.setDate(startOfToday.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-      const saturday = new Date(monday); saturday.setDate(monday.getDate() + 5); saturday.setHours(23, 59, 59, 999);
+      // Semana laboral: LUNES a SÁBADO (fecha de Guatemala)
+      const dayOfWeek = now.getUTCDay(); // 0=domingo
+      const monday = new Date(startOfToday.getTime() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 24 * 60 * 60 * 1000);
+      const saturday = new Date(monday.getTime() + 5 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
       const tasks = await prisma.task.findMany({
         where: {
@@ -97,7 +101,7 @@ async function morningBriefing() {
 
       const events = await prisma.event.findMany({
         where: {
-          date: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) },
+          date: { gte: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1)) },
           status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
           OR: [{ plannerId: user.id }, { responsibleId: user.id }],
         },
@@ -106,7 +110,7 @@ async function morningBriefing() {
       });
 
       const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-      const dayName = dayNames[now.getDay()];
+      const dayName = dayNames[now.getUTCDay()];
 
       const { orderTasksByDayHour, groupTasksByDayText } = await import("@/lib/task-view");
 
@@ -123,7 +127,7 @@ async function morningBriefing() {
         taskLines += `⚠️ *Vencidas / No completadas (${overdue.length})*\n${groupTasksByDayText(orderTasksByDayHour(overdue))}\n\n`;
       }
       if (thisWeek.length > 0) {
-        taskLines += `📅 *Esta Semana — lunes ${monday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} a sábado ${saturday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} (${thisWeek.length})*\n${groupTasksByDayText(orderTasksByDayHour(thisWeek))}\n\n`;
+        taskLines += `📅 *Esta Semana — lunes ${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} a sábado ${saturday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} (${thisWeek.length})*\n${groupTasksByDayText(orderTasksByDayHour(thisWeek))}\n\n`;
       }
       if (upcoming.length > 0) {
         taskLines += `📅 *Próximas semanas (${upcoming.length})*\n${groupTasksByDayText(orderTasksByDayHour(upcoming))}\n\n`;
@@ -139,6 +143,9 @@ async function morningBriefing() {
           { temperature: 0.7, maxTokens: 250 }
         );
       } catch {
+        aiMessage = "";
+      }
+      if (!aiSucceeded(aiMessage)) {
         aiMessage = `¡Buenos días ${user.name}! Soy LUNA. Esta semana tienes ${thisWeek.length} tareas${overdue.length ? ` y ${overdue.length} vencidas que debes atender` : ""}. ¡A darle con todo! 💪`;
       }
 
@@ -176,14 +183,14 @@ async function dailyDigest() {
 
   try {
     const now = getGuatemalaTime();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfDay = gtStartOfToday();
 
     const [pendingTasks, overdueTasks, todayEvents, activeUsers, inactiveUsers] = await Promise.all([
       prisma.task.count({ where: { status: { in: ["PENDIENTE", "EN_PROCESO"] } } }),
       prisma.task.count({ where: { status: { in: ["PENDIENTE", "EN_PROCESO"] }, dueDate: { lt: now } } }),
       prisma.event.findMany({
         where: {
-          date: { gte: startOfDay, lte: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7) },
+          date: { gte: startOfDay, lte: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 7)) },
           status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
         },
         orderBy: { date: "asc" },
@@ -221,12 +228,15 @@ Próximos eventos:\n${eventLines || "Ninguno"}`;
         { temperature: 0.5, maxTokens: 800 }
       );
     } catch {
+      aiDigest = "";
+    }
+    if (!aiSucceeded(aiDigest)) {
       aiDigest = `Resumen del día: ${pendingTasks} tareas pendientes, ${overdueTasks} vencidas, ${activeUsers} usuarios activos.`;
     }
 
     for (const admin of admins) {
       try {
-        const msg = `📊 *Resumen Diario - ${new Date().toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}*\n\n${aiDigest}\n\n📋 *Tareas:* ${pendingTasks} pendientes | ⏰ ${overdueTasks} vencidas\n👥 *Equipo:* ${activeUsers} activos | 😴 ${inactiveUsers.length} inactivos\n💰 *Cobros pendientes:* Q ${cobrosSum._sum.amount ? Number(cobrosSum._sum.amount).toLocaleString("es-GT", { minimumFractionDigits: 2 }) : "0.00"}\n🎪 *Eventos próximos:* ${todayEvents.length}`;
+        const msg = `📊 *Resumen Diario - ${new Date().toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}*\n\n${aiDigest}\n\n📋 *Tareas:* ${pendingTasks} pendientes | ⏰ ${overdueTasks} vencidas\n👥 *Equipo:* ${activeUsers} activos | 😴 ${inactiveUsers.length} inactivos\n💰 *Cobros pendientes:* Q ${cobrosSum._sum.amount ? Number(cobrosSum._sum.amount).toLocaleString("es-GT", { minimumFractionDigits: 2 }) : "0.00"}\n🎪 *Eventos próximos:* ${todayEvents.length}`;
 
         const to = admin.whatsappNumber || admin.phone;
         if (to) {
@@ -247,8 +257,7 @@ async function middayCheck() {
   const admins = await getAdminUsers();
 
   try {
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startOfDay = gtStartOfToday();
 
     const usersWithoutActivity = await prisma.user.findMany({
       where: {
@@ -307,8 +316,7 @@ async function eveningRecap() {
   const admins = await getAdminUsers();
 
   try {
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startOfDay = gtStartOfToday();
 
     const [completedToday, pendingCount, usersWithActivity] = await Promise.all([
       prisma.task.count({ where: { status: "COMPLETADA", updatedAt: { gte: startOfDay } } }),
@@ -498,11 +506,8 @@ async function eveningAccessCheck() {
 async function endOfDayTaskCheck() {
   console.log("[Cron] Ejecutando cierre de jornada (5:00 PM)");
   try {
-    const [endResult, today] = await Promise.all([
-      sendEndOfDayAlerts(),
-      Promise.resolve(new Date()),
-    ]);
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endResult = await sendEndOfDayAlerts();
+    const startOfDay = gtStartOfToday();
     console.log(`[Cron] Fin de día: ${endResult.usersWithPending} usuarios con pendientes, ${endResult.tasksRescheduled} tareas reprogramadas`);
 
     const [completedToday, pendingCount] = await Promise.all([
@@ -556,7 +561,7 @@ let initialized = g.__cronInitialized;
 
 async function shouldRunJob(job: CronJob): Promise<boolean> {
   const now = getGuatemalaTime();
-  const key = `cron:${job.name}:${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}-${job.schedule.hour}`;
+  const key = `cron:${job.name}:${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,'0')}-${String(now.getUTCDate()).padStart(2,'0')}-${job.schedule.hour}`;
   try {
     await prisma.systemConfig.create({
       data: { key, value: now.toISOString(), description: `Last run of ${job.name}` },
@@ -577,12 +582,12 @@ async function runJobIfScheduled(job: CronJob) {
   if (state.lastRun && Date.now() - state.lastRun.getTime() < 10 * 60 * 1000) return;
 
   const now = getGuatemalaTime();
-  const hourDiff = now.getHours() - job.schedule.hour;
+  const hourDiff = now.getUTCHours() - job.schedule.hour;
 
   // Future jobs: skip. Past jobs beyond 1 hour: skip.
   if (hourDiff < 0 || hourDiff > 1) return;
   // Catch-up from previous hour: only in first 10 minutes
-  if (hourDiff === 1 && now.getMinutes() >= 10) return;
+  if (hourDiff === 1 && now.getUTCMinutes() >= 10) return;
 
   if (!(await shouldRunJob(job))) {
     console.log(`[Cron] ${job.name}: ya se ejecutó en esta hora, saltando (DB dedup)`);
@@ -634,7 +639,7 @@ export function startCronManager(): void {
   console.log(`[Cron] Cron manager iniciado con ${jobs.length} trabajos. Verificando cada 1 minuto.`);
 
   const now = getGuatemalaTime();
-  console.log(`[Cron] Hora actual en Guatemala: ${now.toLocaleTimeString("es-GT")}`);
+  console.log(`[Cron] Hora actual en Guatemala: ${now.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala" })}`);
 
   // Immediate first check
   runAllJobChecks().catch((err) => console.error("[Cron] Error en verificación inicial:", err));

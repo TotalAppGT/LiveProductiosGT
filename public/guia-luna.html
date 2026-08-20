@@ -211,6 +211,29 @@ li { margin: 5px 0; font-size: 13px; }
   </div>
 
 <div class="note">
+    💡 <strong>PARÁMETROS DE HORA COMPLETOS (copiar y pegar a tu equipo):</strong>
+    <table style="width:100%; border-collapse:collapse; font-size:0.9em; margin-top:8px;">
+      <tr style="text-align:left;"><th style="border:1px solid #eee; padding:6px;">Formato</th><th style="border:1px solid #eee; padding:6px;">Ejemplo</th><th style="border:1px solid #eee; padding:6px;">Resultado</th></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>X:XX am</code></td><td style="border:1px solid #eee; padding:6px;">a las 9:15 am</td><td style="border:1px solid #eee; padding:6px;">9:15 AM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>X:XX pm</code></td><td style="border:1px solid #eee; padding:6px;">a las 3:45 pm</td><td style="border:1px solid #eee; padding:6px;">3:45 PM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>X am / X pm</code></td><td style="border:1px solid #eee; padding:6px;">a las 10am / a las 2pm</td><td style="border:1px solid #eee; padding:6px;">10:00 AM / 2:00 PM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>HH:MM</code> (24h)</td><td style="border:1px solid #eee; padding:6px;">a las 18:30</td><td style="border:1px solid #eee; padding:6px;">6:30 PM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>Número suelto 1-7</code></td><td style="border:1px solid #eee; padding:6px;">a las 3 / a la 1</td><td style="border:1px solid #eee; padding:6px;">3:00 PM / 1:00 PM (tarde)</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>Número suelto 8-12</code></td><td style="border:1px solid #eee; padding:6px;">a las 9 / a las 12</td><td style="border:1px solid #eee; padding:6px;">9:00 AM / 12:00 PM (mediodía)</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>Número suelto 13-23</code></td><td style="border:1px solid #eee; padding:6px;">a las 15</td><td style="border:1px solid #eee; padding:6px;">3:00 PM (24h)</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>de la mañana</code></td><td style="border:1px solid #eee; padding:6px;">a las 8 de la mañana</td><td style="border:1px solid #eee; padding:6px;">8:00 AM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>de la tarde / de la noche</code></td><td style="border:1px solid #eee; padding:6px;">a las 7 de la noche</td><td style="border:1px solid #eee; padding:6px;">7:00 PM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>en la mañana</code> (sin hora)</td><td style="border:1px solid #eee; padding:6px;">en la mañana</td><td style="border:1px solid #eee; padding:6px;">9:00 AM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>en la tarde</code> (sin hora)</td><td style="border:1px solid #eee; padding:6px;">en la tarde</td><td style="border:1px solid #eee; padding:6px;">3:00 PM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>en la noche</code> (sin hora)</td><td style="border:1px solid #eee; padding:6px;">en la noche</td><td style="border:1px solid #eee; padding:6px;">7:00 PM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>al mediodía</code></td><td style="border:1px solid #eee; padding:6px;">al mediodía</td><td style="border:1px solid #eee; padding:6px;">12:00 PM</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>sin hora</code> (solo fecha)</td><td style="border:1px solid #eee; padding:6px;">para mañana</td><td style="border:1px solid #eee; padding:6px;">Mañana 9:00 AM (hora por defecto)</td></tr>
+      <tr><td style="border:1px solid #eee; padding:6px;"><code>hoy / mañana / pasado mañana</code></td><td style="border:1px solid #eee; padding:6px;">hoy a las 5pm</td><td style="border:1px solid #eee; padding:6px;">Hoy 5:00 PM</td></tr>
+    </table>
+    <p style="margin-top:6px;">⚠️ <strong>Importante:</strong> los minutos se redondean a 5 (8:07 → 8:05, 9:13 → 9:15). Si NO escribís hora, se usa la hora por defecto. Todo se guarda y se muestra en <strong>hora de Guatemala (UTC-6)</strong>, sin desfases.</p>
+  </div>
+
+<div class="note">
     💡 <strong>Diferencia clave:</strong><br>
     • "recuérdame / mándame / avísame" → para <strong>ti</strong><br>
     • "recuérdale a [nombre] / mándale a [nombre] / para [nombre]" → para esa <strong>persona</strong> (recibe notificación)<br>

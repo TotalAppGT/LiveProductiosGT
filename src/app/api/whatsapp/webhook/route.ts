@@ -4,6 +4,7 @@ import { handleWhatsAppMessage, askAI } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime } from "@/lib/task-utils";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
 
@@ -181,37 +182,36 @@ function parseTimeExpression(text: string): { hours: number; minutes: number } |
   return null;
 }
 
-// Redondear una fecha a los minutos en múltiplos de 5 (00,05,10,...55)
+// Redondear una fecha a los minutos en múltiplos de 5 (00,05,10,...55) — hora de Guatemala
 function normalizeToFive(date: Date): Date {
   const d = new Date(date);
-  const mins = d.getMinutes();
-  const rounded = Math.round(mins / 5) * 5;
-  d.setMinutes(rounded, 0, 0);
-  return d;
+  const w = getGuatemalaWallClock(d);
+  const rounded = Math.round(w.minute / 5) * 5;
+  return applyGuatemalaTime(d, w.hour, rounded);
 }
 
 function parseRelativeDate(text: string, referenceDate: Date): Date | null {
   const t = text.toLowerCase().trim();
   const ref = new Date(referenceDate);
 
+  // Componentes de fecha en hora de Guatemala (para que "mañana"/"lunes" caigan en el día correcto de Guatemala)
+  const refGT = new Date(ref.getTime() - 6 * 60 * 60 * 1000);
+  const base = Date.UTC(refGT.getUTCFullYear(), refGT.getUTCMonth(), refGT.getUTCDate());
+  const refDay = new Date(base).getUTCDay();
+
+  // Construir un Date a las 09:00 de Guatemala (instante absoluto correcto)
+  const at9 = (dayUtc: number) => new Date(dayUtc + 9 * 60 * 60 * 1000 + 6 * 60 * 60 * 1000);
+
   if (/\bhoy\b/.test(t)) {
-    const result = new Date(ref);
-    result.setHours(9, 0, 0, 0);
-    return result;
+    return at9(base);
   }
 
   if (/\bpasado\s*mañana\b/.test(t)) {
-    const result = new Date(ref);
-    result.setDate(result.getDate() + 2);
-    result.setHours(9, 0, 0, 0);
-    return result;
+    return at9(base + 2 * 24 * 60 * 60 * 1000);
   }
 
   if (/\bmañana\b/.test(t) && !/\ben la mañana\b/.test(t)) {
-    const result = new Date(ref);
-    result.setDate(result.getDate() + 1);
-    result.setHours(9, 0, 0, 0);
-    return result;
+    return at9(base + 1 * 24 * 60 * 60 * 1000);
   }
 
   const days: Record<string, number> = {
@@ -229,16 +229,12 @@ function parseRelativeDate(text: string, referenceDate: Date): Date | null {
   for (const [dayName, dayNum] of Object.entries(days)) {
     const regex = new RegExp(`\\b${dayName}\\b`, "i");
     if (regex.test(t)) {
-      const currentDay = ref.getDay();
-      let daysUntil = dayNum - currentDay;
+      let daysUntil = dayNum - refDay;
       if (daysUntil <= 0) daysUntil += 7;
       if (/\bpr[oó]ximo\b/.test(t)) {
         daysUntil += 7;
       }
-      const result = new Date(ref);
-      result.setDate(result.getDate() + daysUntil);
-      result.setHours(9, 0, 0, 0);
-      return result;
+      return at9(base + daysUntil * 24 * 60 * 60 * 1000);
     }
   }
 
@@ -285,12 +281,12 @@ function parsePostponeDetails(text: string): { newDate: Date | null; reason: str
       }
 
       const fullDateStr = dateStart + timeStr;
-      const date = parseRelativeDate(fullDateStr, now);
+      let date = parseRelativeDate(fullDateStr, now);
 
       if (date) {
         const time = parseTimeExpression(fullDateStr);
         if (time) {
-          date.setHours(time.hours, time.minutes, 0, 0);
+          date = applyGuatemalaTime(date, time.hours, time.minutes);
         }
         const reason = afterDate.slice(consumedAfterDate).trim();
         return { newDate: date, reason: reason || "Sin razón especificada" };
@@ -302,19 +298,21 @@ function parsePostponeDetails(text: string): { newDate: Date | null; reason: str
 }
 
 async function formatTasksForUser(userId: string, period?: string) {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-  const endOfToday = new Date(today); endOfToday.setHours(23,59,59);
+  const w = getGuatemalaWallClock();
+  const todayStart = gtStartOfToday();
+  const todayEnd = gtEndOfToday();
 
-  const dayOfWeek = today.getDay();
-  const monday = new Date(today); monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23,59,59);
+  // Semana laboral (LUNES a SÁBADO) en hora de Guatemala
+  const dayOfWeek = w.weekday; // 0=domingo
+  const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(todayStart.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
+  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
-  const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7);
-  const nextSunday = new Date(sunday); nextSunday.setDate(sunday.getDate() + 7);
+  const nextMonday = new Date(monday.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const nextSunday = new Date(sunday.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  const thirdMonday = new Date(monday); thirdMonday.setDate(monday.getDate() + 14);
-  const thirdSunday = new Date(sunday); thirdSunday.setDate(sunday.getDate() + 14);
+  const thirdMonday = new Date(monday.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const thirdSunday = new Date(sunday.getTime() + 14 * 24 * 60 * 60 * 1000);
 
   const allTasks = await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
@@ -322,8 +320,8 @@ async function formatTasksForUser(userId: string, period?: string) {
     take: 200,
   });
 
-  const todayTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= today && new Date(t.dueDate) <= endOfToday);
-  const thisWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) > endOfToday && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= sunday);
+  const todayTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= todayStart && new Date(t.dueDate) <= todayEnd);
+  const thisWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) > todayEnd && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= sunday);
   const nextWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= nextMonday && new Date(t.dueDate) <= nextSunday);
   const thirdWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= thirdMonday && new Date(t.dueDate) <= thirdSunday);
 
@@ -342,7 +340,7 @@ async function formatTasksForUser(userId: string, period?: string) {
 
   if (period === "hoy") {
     if (todayTasks.length === 0) return "✅ No tienes tareas para hoy.";
-    output = `📋 *HOY - ${today.toLocaleDateString("es-GT", {weekday:"long",day:"numeric",month:"long"})}*\n\n`;
+    output = `📋 *HOY - ${todayStart.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday:"long",day:"numeric",month:"long" })}*\n\n`;
     output += formatTaskList(todayTasks);
     output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output;
@@ -435,22 +433,19 @@ function parseReminderLocal(text: string, user: { id: string; name: string }) {
     }
   }
 
-  // Fecha/hora
+  // Fecha/hora (todo en hora de Guatemala)
   const time = parseTimeExpression(t);
   let date = parseRelativeDate(t, new Date());
 
   if (!date) {
-    // "a las 8 am mañana" → tiempo y mañana
-    let base = new Date();
-    if (/\bpasado\s*mañana\b/.test(t)) base.setDate(base.getDate() + 2);
-    else if (/\bmañana\b/.test(t) && !/\ben la mañana\b/.test(t)) base.setDate(base.getDate() + 1);
-    else if (/\bhoy\b/.test(t)) base.setDate(base.getDate());
-    else if (/\ben la noche\b/.test(t)) base.setDate(base.getDate());
-    else if (time) base.setDate(base.getDate()); // solo hora → hoy
-    base.setHours(time?.hours ?? 9, time?.minutes ?? 0, 0, 0);
-    date = base;
+    // "a las 8 am mañana" → tiempo y mañana (base en Guatemala)
+    const w = getGuatemalaWallClock();
+    let base = new Date(Date.UTC(w.year, w.month - 1, w.day));
+    if (/\bpasado\s*mañana\b/.test(t)) base = new Date(base.getTime() + 2 * 24 * 60 * 60 * 1000);
+    else if (/\bmañana\b/.test(t) && !/\ben la mañana\b/.test(t)) base = new Date(base.getTime() + 1 * 24 * 60 * 60 * 1000);
+    date = applyGuatemalaTime(base, time?.hours ?? 9, time?.minutes ?? 0);
   } else if (time) {
-    date.setHours(time.hours, time.minutes, 0, 0);
+    date = applyGuatemalaTime(date, time.hours, time.minutes);
   }
 
   // Título: quitar prefijos de comando y asignación
@@ -595,9 +590,10 @@ Responde SOLO el JSON, sin markdown.`
 
 async function formatEventsForUser(userId: string) {
   const now = new Date();
+  const w = getGuatemalaWallClock(now);
   const events = await prisma.event.findMany({
     where: {
-      date: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) },
+      date: { gte: new Date(Date.UTC(w.year, w.month - 1, w.day - 1)) },
       status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
       OR: [
         { plannerId: userId },
@@ -632,8 +628,8 @@ function saveTaskView(userId: string, tasks: { id: string }[]) {
 
 // Digest ordenado de tareas próximas de un usuario (para notificaciones)
 async function getOrderedTaskDigest(userId: string): Promise<string> {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const end = new Date(today); end.setDate(end.getDate() + 21); end.setHours(23, 59, 59);
+  const today = gtStartOfToday();
+  const end = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
   const tasks = await prisma.task.findMany({
     where: {
       assignedToId: userId,
@@ -714,11 +710,12 @@ Responde SOLO JSON sin markdown.`
     const time = parseTimeExpression(details);
     let date = parseRelativeDate(details, new Date());
     if (!date) {
-      date = new Date();
-      if (time) date.setHours(time.hours, time.minutes, 0, 0);
-      else date.setHours(9, 0, 0, 0);
+      const w = getGuatemalaWallClock();
+      date = new Date(Date.UTC(w.year, w.month - 1, w.day));
+      if (time) date = applyGuatemalaTime(date, time.hours, time.minutes);
+      else date = applyGuatemalaTime(date, 9, 0);
     } else if (time) {
-      date.setHours(time.hours, time.minutes, 0, 0);
+      date = applyGuatemalaTime(date, time.hours, time.minutes);
     }
     let title = details.replace(/\b(a\s+las\s+)?\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?/gi, "")
       .replace(/\b(hoy|mañana|manana|pasado\s+mañana|el\s+(lunes|martes|miercoles|jueves|viernes|sabado|domingo))\b/gi, "")
@@ -752,7 +749,7 @@ Responde SOLO JSON sin markdown.`
 
   const targetName = purchase.assignedTo ? purchase.assignedTo.name : user.name;
   const dateStr = purchase.dueDate
-    ? `${purchase.dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}${purchase.dueDate.getHours() !== 9 ? ` a las ${purchase.dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}` : ""}`
+    ? `${purchase.dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}${getGuatemalaWallClock(purchase.dueDate).hour !== 9 ? ` a las ${purchase.dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}` : ""}`
     : "Sin fecha";
 
   // Notificar si es para otra persona
@@ -835,8 +832,8 @@ async function delegateTask(taskId: string, newUserId: string, reason: string, f
 }
 
 async function getComplianceSummary(userId: string) {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const w = getGuatemalaWallClock();
+  const thirtyDaysAgo = new Date(Date.UTC(w.year, w.month - 1, w.day - 30));
 
   const [assignedCount, completedCount] = await Promise.all([
     prisma.task.count({ where: { assignedToId: userId, createdAt: { gte: thirtyDaysAgo } } }),
@@ -893,35 +890,37 @@ async function handleMeetingCommand(cmd: string, user: { id: string; name: strin
     return `No encontré a ninguna de esas personas. Usa *equipo* para ver los nombres registrados.`;
   }
 
-  // Extraer fecha/hora (reutilizando parseadores locales)
+  // Extraer fecha/hora (reutilizando parseadores locales) — todo en hora de Guatemala
   const time = parseTimeExpression(cmd);
+  const wNow = getGuatemalaWallClock();
+  const gtTodayStart = new Date(Date.UTC(wNow.year, wNow.month - 1, wNow.day));
   let meetDate: Date | null = null;
 
   if (/\bpasado\s*mañana\b/.test(cmd)) {
-    meetDate = new Date(); meetDate.setDate(meetDate.getDate() + 2);
+    meetDate = new Date(gtTodayStart.getTime() + 2 * 24 * 60 * 60 * 1000);
   } else if (/\bmañana\b/.test(cmd) && !/\ben la mañana\b/.test(cmd)) {
-    meetDate = new Date(); meetDate.setDate(meetDate.getDate() + 1);
+    meetDate = new Date(gtTodayStart.getTime() + 1 * 24 * 60 * 60 * 1000);
   } else if (/\bhoy\b/.test(cmd)) {
-    meetDate = new Date();
+    meetDate = new Date(gtTodayStart);
   } else if (/\ben la tarde\b/.test(cmd) && !time) {
-    meetDate = new Date();
+    meetDate = new Date(gtTodayStart);
   } else if (/\ben la noche\b/.test(cmd) && !time) {
-    meetDate = new Date();
+    meetDate = new Date(gtTodayStart);
   } else {
     meetDate = parseRelativeDate(cmd, new Date());
   }
 
-  if (!meetDate) meetDate = new Date();
+  if (!meetDate) meetDate = new Date(gtTodayStart);
   if (time) {
-    meetDate.setHours(time.hours, time.minutes, 0, 0);
+    meetDate = applyGuatemalaTime(meetDate, time.hours, time.minutes);
   } else if (!/en la (mañana|tarde|noche)/.test(cmd)) {
-    meetDate.setHours(9, 0, 0, 0);
+    meetDate = applyGuatemalaTime(meetDate, 9, 0);
   } else if (/en la mañana/.test(cmd)) {
-    meetDate.setHours(9, 0, 0, 0);
+    meetDate = applyGuatemalaTime(meetDate, 9, 0);
   } else if (/en la tarde/.test(cmd)) {
-    meetDate.setHours(15, 0, 0, 0);
+    meetDate = applyGuatemalaTime(meetDate, 15, 0);
   } else if (/en la noche/.test(cmd)) {
-    meetDate.setHours(19, 0, 0, 0);
+    meetDate = applyGuatemalaTime(meetDate, 19, 0);
   }
 
   const title = `📅 Reunión con ${targets.map((t) => t.name).join(" y ")}`;
@@ -1106,7 +1105,7 @@ async function handleCommand(
     const afterNum = rest.slice(parts[0].length).trim();
     const { newDate, reason } = parsePostponeDetails(afterNum);
 
-    const finalDate = newDate || (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(0, 0, 0, 0); return d; })();
+    const finalDate = newDate || applyGuatemalaTime(new Date(gtStartOfToday().getTime() + 24 * 60 * 60 * 1000), 9, 0);
 
     await postponeTask(task.id, finalDate, reason, user);
 
@@ -1193,13 +1192,12 @@ async function handleCommand(
     /\b(\d{1,2})\s*(de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(cmd);
 
   if (dynamicTaskMatch) {
-    const now = new Date();
-    const today = new Date(now); today.setHours(0, 0, 0, 0);
-    const dayOfWeek = today.getDay(); // 0=domingo
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    const nextMonday = new Date(monday); nextMonday.setDate(monday.getDate() + 7);
-    const nextSaturday = new Date(nextMonday); nextSaturday.setDate(nextMonday.getDate() + 5); nextSaturday.setHours(23, 59, 59);
+    const w = getGuatemalaWallClock();
+    const today = new Date(Date.UTC(w.year, w.month - 1, w.day)); // medianoche Guatemala
+    const dayOfWeek = today.getUTCDay(); // 0=domingo (fecha de Guatemala)
+    const monday = new Date(today.getTime() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 24 * 60 * 60 * 1000);
+    const nextMonday = new Date(monday.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const nextSaturday = new Date(nextMonday.getTime() + 5 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
     const dayMap: Record<string, number> = {
       lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4, viernes: 5,
@@ -1222,29 +1220,30 @@ async function handleCommand(
     }
     // 2) Próximo mes
     else if (/el proximo mes|el mes que viene|el siguiente mes|siguiente mes/i.test(cmd)) {
-      title = "PRÓXIMO MES";
-      dateFrom = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      dateTo = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+      const nextMonthStart = new Date(Date.UTC(w.year, w.month, 1));
+      dateFrom = nextMonthStart;
+      dateTo = new Date(Date.UTC(w.year, w.month + 1, 0) + (23 * 60 + 59) * 60 * 1000 + 999);
+      title = nextMonthStart.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", month: "long", year: "numeric" }).toUpperCase();
     }
     // 3) Pasado mañana
     else if (/pasado mañana|pasado manana/i.test(cmd)) {
-      const d = new Date(today); d.setDate(today.getDate() + 2);
-      title = `PASADO MAÑANA - ${d.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
-      dateFrom = new Date(d); dateFrom.setHours(0, 0, 0, 0);
-      dateTo = new Date(d); dateTo.setHours(23, 59, 59);
+      const d = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
+      title = `PASADO MAÑANA - ${d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}`;
+      dateFrom = new Date(d);
+      dateTo = new Date(d.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
     }
     // 4) Mañana
     else if (/mañana|manana/i.test(cmd)) {
-      const d = new Date(today); d.setDate(today.getDate() + 1);
-      title = `MAÑANA - ${d.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
-      dateFrom = new Date(d); dateFrom.setHours(0, 0, 0, 0);
-      dateTo = new Date(d); dateTo.setHours(23, 59, 59);
+      const d = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+      title = `MAÑANA - ${d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}`;
+      dateFrom = new Date(d);
+      dateTo = new Date(d.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
     }
     // 5) Hoy
     else if (/hoy/.test(cmd)) {
-      title = `HOY - ${today.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
-      dateFrom = new Date(today); dateFrom.setHours(0, 0, 0, 0);
-      dateTo = new Date(today); dateTo.setHours(23, 59, 59);
+      title = `HOY - ${today.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}`;
+      dateFrom = new Date(today);
+      dateTo = new Date(today.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
     }
     // 5.25) Fecha específica con número: "25 agosto", "25 de agosto", "viernes 28 agosto", "lunes 17"
     else if (/(\d{1,2})\s*(de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)/i.test(cmd)) {
@@ -1253,15 +1252,14 @@ async function handleCommand(
         const dayNum = parseInt(match[1]);
         const monthName = match[3].toLowerCase();
         const monthIdx = monthMap[monthName];
-        let year = now.getFullYear();
+        let year = w.year;
         // Si la fecha ya pasó este año, usar el próximo año
-        const candidate = new Date(year, monthIdx, dayNum);
-        if (candidate < today) year += 1;
-        const targetDate = new Date(year, monthIdx, dayNum);
-        targetDate.setHours(0, 0, 0, 0);
-        title = `${targetDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
-        dateFrom = new Date(targetDate); dateFrom.setHours(0, 0, 0, 0);
-        dateTo = new Date(targetDate); dateTo.setHours(23, 59, 59);
+        const candidate = new Date(Date.UTC(year, monthIdx, dayNum));
+        if (candidate.getTime() < today.getTime()) year += 1;
+        const targetDate = new Date(Date.UTC(year, monthIdx, dayNum));
+        title = `${targetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
+        dateFrom = new Date(targetDate);
+        dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
       }
     }
     // 5.27) Día con número sin mes: "lunes 17", "tareas 17" (día del mes actual/próximo)
@@ -1269,16 +1267,14 @@ async function handleCommand(
       const match = cmd.match(/\b(\d{1,2})\b/i);
       if (match) {
         const dayNum = parseInt(match[1]);
-        let targetDate = new Date(now.getFullYear(), now.getMonth(), dayNum);
-        targetDate.setHours(0, 0, 0, 0);
+        let targetDate = new Date(Date.UTC(w.year, w.month - 1, dayNum));
         // Si ya pasó este mes, usar el próximo mes
-        if (targetDate < today) {
-          targetDate = new Date(now.getFullYear(), now.getMonth() + 1, dayNum);
-          targetDate.setHours(0, 0, 0, 0);
+        if (targetDate.getTime() < today.getTime()) {
+          targetDate = new Date(Date.UTC(w.year, w.month, dayNum));
         }
-        title = `${targetDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
-        dateFrom = new Date(targetDate); dateFrom.setHours(0, 0, 0, 0);
-        dateTo = new Date(targetDate); dateTo.setHours(23, 59, 59);
+        title = `${targetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
+        dateFrom = new Date(targetDate);
+        dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
       }
     }
     // 5.5) Mes específico por nombre (enero, febrero, ... septiembre, octubre)
@@ -1289,15 +1285,13 @@ async function handleCommand(
         if (lowerCmd.includes(name)) { targetMonth = idx; break; }
       }
       if (targetMonth !== null) {
-        let year = now.getFullYear();
+        let year = w.year;
         // Si el mes ya pasó este año, es el próximo año
-        if (targetMonth < now.getMonth()) year += 1;
-        const monthName = new Date(year, targetMonth, 1).toLocaleDateString("es-GT", { month: "long", year: "numeric" });
+        if (targetMonth < w.month - 1) year += 1;
+        const monthName = new Date(Date.UTC(year, targetMonth, 1)).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", month: "long", year: "numeric" });
         title = `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}`;
-        dateFrom = new Date(year, targetMonth, 1);
-        dateFrom.setHours(0, 0, 0, 0);
-        dateTo = new Date(year, targetMonth + 1, 0);
-        dateTo.setHours(23, 59, 59);
+        dateFrom = new Date(Date.UTC(year, targetMonth, 1));
+        dateTo = new Date(Date.UTC(year, targetMonth + 1, 0) + (23 * 60 + 59) * 60 * 1000 + 999);
       }
     }
     // 6) Día específico de la semana (lunes, martes, etc.)
@@ -1311,12 +1305,10 @@ async function handleCommand(
         // Próxima ocurrencia de ese día (si hoy es el día pedido, va a la próxima semana)
         let delta = (targetDay - dayOfWeek + 7) % 7;
         if (delta === 0) delta = 7;
-        const targetDate = new Date(today);
-        targetDate.setDate(today.getDate() + delta);
-        targetDate.setHours(0, 0, 0, 0);
-        title = `${targetDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}`;
-        dateFrom = new Date(targetDate); dateFrom.setHours(0, 0, 0, 0);
-        dateTo = new Date(targetDate); dateTo.setHours(23, 59, 59);
+        const targetDate = new Date(today.getTime() + delta * 24 * 60 * 60 * 1000);
+        title = `${targetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}`;
+        dateFrom = new Date(targetDate);
+        dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
       }
     }
 
@@ -1338,8 +1330,10 @@ async function handleCommand(
       return `${user.name}, no tienes tareas para *${title}*. ¡Bien! 🎉`;
     }
 
-    // Determinar si es un solo día o varios días
-    const isSingleDay = dateFrom.toDateString() === dateTo.toDateString();
+    // Determinar si es un solo día o varios días (comparación en hora de Guatemala)
+    const d1 = getGuatemalaWallClock(dateFrom);
+    const d2 = getGuatemalaWallClock(dateTo);
+    const isSingleDay = d1.year === d2.year && d1.month === d2.month && d1.day === d2.day;
 
     let body: string;
     if (isSingleDay) {
@@ -1398,15 +1392,15 @@ async function handleCommand(
     if (phoneMatch) {
       const rawNumber = phoneMatch[0];
       const targetNumber = normalizeGTPhone(rawNumber);
-      // Extraer mensaje y fecha/hora
+      // Extraer mensaje y fecha/hora (hora de Guatemala)
       const time = parseTimeExpression(cmd);
       let when = parseRelativeDate(cmd, new Date());
       if (!when) {
-        when = new Date();
-        if (time) when.setHours(time.hours, time.minutes, 0, 0);
-        else when.setHours(9, 0, 0, 0);
+        const wNow = getGuatemalaWallClock();
+        when = new Date(Date.UTC(wNow.year, wNow.month - 1, wNow.day));
+        when = applyGuatemalaTime(when, time?.hours ?? 9, time?.minutes ?? 0);
       } else if (time) {
-        when.setHours(time.hours, time.minutes, 0, 0);
+        when = applyGuatemalaTime(when, time.hours, time.minutes);
       }
       // Quitar el número, fecha/hora y prefijos del mensaje
       let msgText = cmd
@@ -1575,9 +1569,9 @@ async function handleCommand(
   // ⏰ RECORDATORIOS: ver y eliminar (por defecto muestra solo los de HOY)
   if (cmd === "recordatorios" || cmd === "mis recordatorios" || cmd === "ver recordatorios" || cmd.startsWith("recordatorios ")) {
     const period = cmd.replace(/^recordatorios\s*/i, "").trim();
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const endOfToday = new Date(today); endOfToday.setHours(23, 59, 59, 999);
-    const endOfWeek = new Date(today); endOfWeek.setDate(endOfWeek.getDate() + 6); endOfWeek.setHours(23, 59, 59, 999);
+    const today = gtStartOfToday();
+    const endOfToday = gtEndOfToday();
+    const endOfWeek = new Date(today.getTime() + 6 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
     let where: any = { assignedToId: user.id, isCompleted: false };
     let title = "RECORDATORIOS DE HOY";
@@ -1593,10 +1587,11 @@ async function handleCommand(
       // Si pide un día específico (ej. "recordatorios mañana"), intenta parsear
       const d = parseRelativeDate(period, new Date());
       if (d) {
-        const start = new Date(d); start.setHours(0, 0, 0, 0);
-        const end = new Date(d); end.setHours(23, 59, 59, 999);
+        const w = getGuatemalaWallClock(d);
+        const start = new Date(Date.UTC(w.year, w.month - 1, w.day));
+        const end = new Date(start.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
         where.remindAt = { gte: start, lte: end };
-        title = `RECORDATORIOS ${d.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}`;
+        title = `RECORDATORIOS ${d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" }).toUpperCase()}`;
       }
     } else {
       // Por defecto: solo hoy
@@ -1875,8 +1870,7 @@ async function handleConversationStep(
     if (!time) {
       return "No entendí la hora. Usa: *9am*, *3pm*, *15:00*, o escribe *default*.\n\n⏰ *Posponer Tarea*\n¿A qué hora?";
     }
-    const dueDate = new Date(conv.data.dueDate);
-    dueDate.setHours(time.hours, time.minutes, 0, 0);
+    const dueDate = applyGuatemalaTime(new Date(conv.data.dueDate), time.hours, time.minutes);
     setConversation(fromNumber, "postpone_reason", { ...conv.data, dueDate: dueDate.toISOString() });
     return `⏰ *Posponer Tarea*\n\nHora: ${time.hours}:${String(time.minutes).padStart(2, "0")}\n\n¿Por qué la pospones? (comentario)\nO escribe *sin motivo*`;
   }
@@ -1921,8 +1915,7 @@ async function handleConversationStep(
       return "No entendí la hora. Usa: *9am*, *3pm*, *en la mañana*, *en la tarde*, *15:00*, o escribe *default*.\n\n📝 *Nueva Tarea* - Paso 4/5\n¿A qué hora?";
     }
 
-    const dueDate = new Date(conv.data.dueDate);
-    dueDate.setHours(time.hours, time.minutes, 0, 0);
+    const dueDate = applyGuatemalaTime(new Date(conv.data.dueDate), time.hours, time.minutes);
 
     setConversation(fromNumber, "task_create_priority", {
       ...conv.data,

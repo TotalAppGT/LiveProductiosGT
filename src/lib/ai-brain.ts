@@ -292,6 +292,9 @@ export async function getAIClient(): Promise<{
   };
 }
 
+export const AI_ERROR_MESSAGE =
+  "Lo siento, no pude procesar tu solicitud en este momento. Por favor intenta de nuevo.";
+
 export async function askAI(
   messages: AIMessage[],
   options?: AIOptions
@@ -330,7 +333,7 @@ export async function askAI(
   } catch (error) {
     console.error("askAI error:", error);
     invalidateCache();
-    return "Lo siento, no pude procesar tu solicitud en este momento. Por favor intenta de nuevo.";
+    return AI_ERROR_MESSAGE;
   }
 }
 

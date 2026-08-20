@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { sendMessage, sendAutomatedReminder } from "@/lib/whatsapp";
 import { generateSmartAlert, detectAnomalies, summarizeCompany, weeklyPerformanceReport } from "@/lib/ai-brain";
-import { startOfDay, endOfDay, subDays, addDays, differenceInHours } from "date-fns";
+import { subDays, differenceInHours } from "date-fns";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday } from "@/lib/task-utils";
 
 async function logActivity(
   action: string,
@@ -27,7 +28,7 @@ export async function checkInactivity(): Promise<{
   alertsSent: number;
 }> {
   try {
-    const today = startOfDay(new Date());
+    const today = gtStartOfToday();
 
     const activeUsers = await prisma.activity.findMany({
       where: { createdAt: { gte: today } },
@@ -96,7 +97,7 @@ export async function checkOverdueTasks(): Promise<{
 }> {
   try {
     const now = new Date();
-    const startToday = startOfDay(now);
+    const startToday = gtStartOfToday();
 
     const overdueTasks = await prisma.task.findMany({
       where: {
@@ -185,8 +186,8 @@ export async function generateDailyBriefing(): Promise<{
   briefingsSent: number;
 }> {
   try {
-    const today = startOfDay(new Date());
-    const endToday = endOfDay(new Date());
+    const today = gtStartOfToday();
+    const endToday = gtEndOfToday();
 
     const users = await prisma.user.findMany({
       where: { active: true },
@@ -388,9 +389,9 @@ export async function triggerEventReminders(): Promise<{
   eventsProcessed: number;
 }> {
   try {
-    const today = startOfDay(new Date());
-    const tomorrow = startOfDay(addDays(new Date(), 1));
-    const weekFromNow = startOfDay(addDays(new Date(), 7));
+    const today = gtStartOfToday();
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const upcomingEvents = await prisma.event.findMany({
       where: {
@@ -494,7 +495,7 @@ export async function checkDailyAccessRequirement(): Promise<{
   inactiveToday: number;
 }> {
   try {
-    const today = startOfDay(new Date());
+    const today = gtStartOfToday();
     let minDaily = 4;
 
     try {
@@ -633,8 +634,8 @@ export async function sendEndOfDayAlerts(): Promise<{
   alertsSent: number;
 }> {
   try {
-    const today = startOfDay(new Date());
-    const endToday = endOfDay(new Date());
+    const today = gtStartOfToday();
+    const endToday = gtEndOfToday();
 
     const pendingTasks = await prisma.task.findMany({
       where: {
@@ -662,8 +663,7 @@ export async function sendEndOfDayAlerts(): Promise<{
     let alertsSent = 0;
     let tasksRescheduled = 0;
 
-    const tomorrow = addDays(new Date(), 1);
-    tomorrow.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(gtStartOfToday().getTime() + 24 * 60 * 60 * 1000);
 
     for (const [, entry] of byUser) {
       const to = entry.user.whatsappNumber || entry.user.phone;
@@ -743,8 +743,8 @@ export async function sendMorningBriefing(): Promise<{
   briefingsSent: number;
 }> {
   try {
-    const today = startOfDay(new Date());
-    const endToday = endOfDay(new Date());
+    const today = gtStartOfToday();
+    const endToday = gtEndOfToday();
 
     const users = await prisma.user.findMany({
       where: { active: true },
@@ -777,7 +777,7 @@ export async function sendMorningBriefing(): Promise<{
         }),
       ]);
 
-      const thirtyDaysAgo = subDays(new Date(), 30);
+      const thirtyDaysAgo = new Date(gtStartOfToday().getTime() - 30 * 24 * 60 * 60 * 1000);
       const completedCount = await prisma.task.count({
         where: { assignedToId: user.id, status: "COMPLETADA", updatedAt: { gte: thirtyDaysAgo } },
       });
@@ -862,8 +862,8 @@ export async function sendBihourlyReminders(): Promise<{
       // Solo tareas de HOY (ordenadas por hora), no de toda la semana
       let digest = "";
       try {
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
+        const todayStart = gtStartOfToday();
+        const todayEnd = gtEndOfToday();
         const todayTasks = await prisma.task.findMany({
           where: {
             assignedToId: user.id,
@@ -882,7 +882,7 @@ export async function sendBihourlyReminders(): Promise<{
         // silencioso
       }
 
-      const hour = now.getHours();
+      const hour = getGuatemalaWallClock(now).hour;
       let greeting = "🔔";
       let message = `${greeting} *Tus tareas de HOY*\n\nTienes ${pendingTasksCount} tareas pendientes`;
       if (overdueTasks > 0) message += `, ${overdueTasks} vencidas`;
@@ -925,8 +925,8 @@ export async function sendEveningRecap(): Promise<{
   recapsSent: number;
 }> {
   try {
-    const today = startOfDay(new Date());
-    const endToday = endOfDay(new Date());
+    const today = gtStartOfToday();
+    const endToday = gtEndOfToday();
 
     const users = await prisma.user.findMany({
       where: { active: true },
@@ -1092,9 +1092,9 @@ export async function getComplianceRanking(): Promise<{
   }>;
   totalUsers: number;
 }> {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const today = new Date(); today.setHours(0,0,0,0);
+  const w = getGuatemalaWallClock();
+  const monthStart = new Date(Date.UTC(w.year, w.month - 1, 1));
+  const today = new Date(Date.UTC(w.year, w.month - 1, w.day));
 
   const users = await prisma.user.findMany({
     where: { active: true },
@@ -1134,8 +1134,9 @@ export async function fireScheduledAlerts(): Promise<{ sent: number }> {
   let sent = 0;
   try {
     const now = new Date();
-    const currentDayStr = now.getDay().toString();
-    const currentTime = now.toTimeString().slice(0, 5);
+    const w = getGuatemalaWallClock();
+    const currentDayStr = w.weekday.toString();
+    const currentTime = `${String(w.hour).padStart(2, "0")}:${String(w.minute).padStart(2, "0")}`;
 
     const alerts = await prisma.$queryRaw<Array<{
       id: string; title: string; message: string; groupId: string | null;
