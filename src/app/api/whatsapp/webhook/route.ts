@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
-import { sendMessage } from "@/lib/whatsapp";
+import { sendMessage, sendInteractiveButtons } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate } from "@/lib/task-utils";
@@ -981,9 +981,38 @@ async function handleMeetingCommand(cmd: string, user: { id: string; name: strin
 
 async function handleCommand(
   command: string,
-  user: { id: string; name: string; role: string }
+  user: { id: string; name: string; role: string },
+  fromNumber?: string
 ): Promise<string | null> {
   const cmd = command.toLowerCase().trim().replace(/[áéíóúñ]/g, (c: string) => ({ á: "a", é: "e", í: "i", ó: "o", ú: "u", ñ: "n" }[c] || c));
+
+  // 🧭 Menú principal con botones interactivos
+  if (cmd === "menu" || cmd === "menú" || cmd === "inicio" || cmd === "opciones") {
+    if (fromNumber) {
+      await sendInteractiveButtons(fromNumber, `👋 *¡Hola ${user.name}!* Soy LUNA 🌙\n¿Qué querés hacer hoy?`, [
+        { id: "menu_reminder", title: "⏰ Recordatorio" },
+        { id: "menu_task", title: "📝 Tarea" },
+        { id: "menu_message", title: "💬 Mensaje" },
+      ]);
+    }
+    return null;
+  }
+
+  // Respuestas de botones del menú
+  if (command.trim() === "⏰ Recordatorio") {
+    if (fromNumber) setConversation(fromNumber, "menu_reminder_title", {});
+    return "⏰ *Nuevo Recordatorio*\n\nEscribí qué te recuerdo, con día y hora:\n\n• `llamar al proveedor mañana 9am`\n• `revisar bodega hoy 3pm`\n• `reunión con Jorge el viernes 10am`";
+  }
+
+  if (command.trim() === "📝 Tarea") {
+    if (fromNumber) setConversation(fromNumber, "task_create_title", {});
+    return "📝 *Nueva Tarea*\n\n¿Qué tarea querés crear? Escribí el título.\n\nEj: *revisar cotizaciones*";
+  }
+
+  if (command.trim() === "💬 Mensaje") {
+    if (fromNumber) setConversation(fromNumber, "menu_message_to", {});
+    return "💬 *Mensaje Programado*\n\n¿A quién se lo mando? Escribí el *número* (ej: `55551234`) o el *nombre* de alguien del equipo.";
+  }
 
   if (cmd.startsWith("completar ") || cmd.startsWith("hecho ") || cmd.startsWith("completado ") || cmd.startsWith("hechos ") || cmd.startsWith("completadas ")) {
     const numStr = cmd.replace(/^(completar|completado|completadas|hecho|hechos)\s+/i, "").trim();
@@ -1742,6 +1771,9 @@ async function handleCommand(
   if (cmd === "ayuda") {
     return `🤖 *LUNA - Tu Controladora Administrativa*
 
+🧭 *Menú con botones:*
+menu
+
 📊 *Ver tareas:*
 tareas
 tareas hoy
@@ -1993,6 +2025,124 @@ async function handleConversationStep(
     return `✅ Tarea creada para *${targetName}*: "${data.title}"\n📅 ${dueDate.toLocaleDateString("es-GT", {timeZone:"America/Guatemala",weekday:"long",day:"numeric",month:"long"})} a las ${dueDate.toLocaleTimeString("es-GT", {timeZone:"America/Guatemala",hour:"2-digit",minute:"2-digit"})}\n🔵 Prioridad: ${priority}\n🔔 ${targetUser && targetUser.id !== user.id ? `Notificación enviada a *${targetName}*` : "Todo listo"}`;
   }
 
+  // ── Wizard: Recordatorio (botón ⏰) ──────────────────────────────
+  if (conv.state === "menu_reminder_title") {
+    const parsed = await parseReminderFromText(text, user);
+    if (!parsed || !parsed.remindAt) {
+      return "🤔 No pude leer el día y la hora. Escribilo de nuevo con día y hora.\nEj: *llamar al proveedor mañana 9am*";
+    }
+    setConversation(fromNumber, "menu_reminder_who", {
+      title: parsed.title,
+      remindAt: parsed.remindAt.toISOString(),
+      assignToId: parsed.assignToId,
+    });
+    const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+    return `⏰ *${parsed.title}*\n📅 ${dateStr}\n\n¿Para quién es?\n• Escribí *para mí*\n• O el nombre (ej: *Diana*)`;
+  }
+
+  if (conv.state === "menu_reminder_who") {
+    const data = conv.data;
+    let assignToId: string = data.assignToId || user.id;
+    const isSelf = /(^|\s)(para\s+)?(mi|mí|yo)(\s|$)/.test(cmdLower);
+
+    if (!isSelf) {
+      const target = await prisma.user.findFirst({
+        where: { name: { contains: cmdLower, mode: "insensitive" }, active: true },
+      });
+      if (!target) return `No encontré a "${text}". Escribí *para mí* o el nombre de alguien del equipo.`;
+      assignToId = target.id;
+    } else {
+      assignToId = user.id;
+    }
+
+    conversations.delete(fromNumber);
+    const remindAt = new Date(data.remindAt);
+
+    await prisma.reminder.create({
+      data: { title: data.title, description: "", remindAt, createdById: user.id, assignedToId: assignToId },
+    });
+    await prisma.task.create({
+      data: {
+        title: `🔔 ${data.title}`,
+        description: "",
+        assignedToId: assignToId,
+        assignedById: user.id,
+        dueDate: remindAt,
+        priority: "ALTA",
+        category: "OTRO",
+        type: "DINAMICA",
+        frequency: "DIARIA",
+        status: "PENDIENTE",
+      },
+    });
+
+    const targetUser = assignToId !== user.id ? await prisma.user.findUnique({ where: { id: assignToId } }) : null;
+    const targetName = targetUser ? targetUser.name : "ti";
+    const dateStr = `${remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+
+    if (targetUser && targetUser.id !== user.id) {
+      const to = targetUser.whatsappNumber || targetUser.phone;
+      if (to) {
+        await sendMessage(
+          to,
+          `⏰ *Recordatorio asignado*\n\n${user.name} te dejó un recordatorio:\n*${data.title}*\n📅 ${dateStr}\n\nTe avisaré 10 minutos antes y a la hora exacta.`
+        ).catch(() => {});
+      }
+      return `✅ Recordatorio creado para *${targetName}*: *${data.title}*\n📅 ${dateStr}\n🔔 Le avisé a *${targetName}*.`;
+    }
+    return `✅ Recordatorio creado para ti: *${data.title}*\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
+  }
+
+  // ── Wizard: Mensaje programado (botón 💬) ────────────────────────
+  if (conv.state === "menu_message_to") {
+    let toNumber = "";
+    let toName = "";
+    const digits = text.replace(/\D/g, "");
+    if (digits.length >= 8) {
+      toNumber = normalizeGTPhone(digits.slice(-8));
+    } else {
+      const target = await prisma.user.findFirst({
+        where: { name: { contains: text, mode: "insensitive" }, active: true },
+      });
+      if (target) {
+        toNumber = target.whatsappNumber || target.phone || "";
+        toName = target.name;
+      }
+      if (!toNumber) return "No encontré ese número ni esa persona. Escribí el *número* (ej: `55551234`) o un *nombre* del equipo.";
+    }
+    setConversation(fromNumber, "menu_message_text", { toNumber, toName });
+    return `💬 Mensaje para *${toName || toNumber}*\n\n¿Qué le digo? Escribí el mensaje.`;
+  }
+
+  if (conv.state === "menu_message_text") {
+    setConversation(fromNumber, "menu_message_when", { ...conv.data, message: text });
+    return `📝 "${text}"\n\n¿Cuándo lo mando?\nEj: *mañana 3pm*, *hoy 8pm*, *el viernes 9am*`;
+  }
+
+  if (conv.state === "menu_message_when") {
+    const time = parseTimeExpression(text);
+    let when = parseRelativeDate(text, new Date());
+    if (!when) {
+      when = applyGuatemalaTime(gtStartOfToday(), time?.hours ?? 9, time?.minutes ?? 0);
+    } else if (time) {
+      when = applyGuatemalaTime(when, time.hours, time.minutes);
+    }
+    conversations.delete(fromNumber);
+
+    const msgText = conv.data.message || "Mensaje de Live Productions";
+    await prisma.scheduledMessage.create({
+      data: {
+        toNumber: conv.data.toNumber,
+        message: msgText,
+        scheduledAt: normalizeToFive(when),
+        createdById: user.id,
+      },
+    });
+
+    const ds = `${when.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${when.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+    return `✅ *Mensaje programado*\n\nPara: ${conv.data.toName || conv.data.toNumber}\n🕐 ${ds}\nTexto: "${msgText}"\n\nLo enviaré a esa hora.`;
+  }
+
   return null;
 }
 
@@ -2087,6 +2237,7 @@ function isKnownCommand(text: string): boolean {
     "mandale", "mándale", "manda", "envia", "enviale", "envíale", "mensaje",
     "eliminar", "borrar", "elimina", "borra", "limpiar", "recordatorios",
     "enviar actualizacion", "enviar actualización", "enviar detalle", "enviar mejoras", "enviar aviso", "broadcast", "enviar a todos",
+    "menu", "menú", "inicio", "opciones",
   ];
   const lower = text.toLowerCase().trim();
   return knownCommands.some(k => lower.startsWith(k));
@@ -2125,6 +2276,12 @@ export async function POST(request: NextRequest) {
               const messageType = message.type;
               let text = message.text?.body?.trim() || "";
 
+              // Respuestas de botones/listas interactivas → se tratan como texto
+              if (messageType === "interactive") {
+                const interactive = (message as Record<string, any>).interactive;
+                text = (interactive?.button_reply?.title || interactive?.list_reply?.title || "").trim();
+              }
+
               console.log("Mensaje recibido de WhatsApp:", {
                 from: fromNumber,
                 contactName,
@@ -2133,7 +2290,7 @@ export async function POST(request: NextRequest) {
                 timestamp: message.timestamp,
               });
 
-              if (messageType && messageType !== "text") {
+              if (messageType && messageType !== "text" && messageType !== "interactive") {
                 if (messageType === "audio" && message.audio?.id) {
                   try {
                     text = await transcribeAudio(message.audio.id);
@@ -2267,7 +2424,7 @@ export async function POST(request: NextRequest) {
                     }
                   }
 
-                  const commandResponse = await handleCommand(text, user);
+                  const commandResponse = await handleCommand(text, user, fromNumber);
 
                   if (commandResponse) {
                     const sendResult = await sendMessage(fromNumber, commandResponse);

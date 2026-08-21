@@ -998,11 +998,11 @@ let proactiveText = "";
     if (response === AI_ERROR_MESSAGE) {
       return (
         "🤔 No pude procesar bien tu mensaje. ¿Qué querés hacer?\n\n" +
+        "• *Menú con botones* → escribí `menu`\n" +
         "• *Ver tareas* → escribí `tareas`\n" +
         "• *Crear tarea* → `crea tarea revisar cotizaciones viernes 3pm`\n" +
         "• *Recordatorio* → `recuérdame llamar a Jorge mañana 9am`\n" +
         "• *Completar* → `hecho 3`\n" +
-        "• *Reunión* → `hacer reunión con Diana y Abel el viernes a las 8am`\n" +
         "• *Ayuda completa* → escribí `ayuda`"
       );
     }

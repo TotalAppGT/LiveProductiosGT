@@ -749,6 +749,66 @@ async function sendEndOfDayPendingAlert(
   return false;
 }
 
+// Envía un mensaje con botones rápidos (max 3). Si el proveedor no lo soporta,
+// cae a un menú de texto con los mismos botones numerados.
+async function sendInteractiveButtons(
+  to: string,
+  body: string,
+  buttons: { id: string; title: string }[]
+): Promise<boolean> {
+  const provider = await getProvider();
+
+  if (provider === "META") {
+    const config = await getWhatsAppConfig();
+    const phoneNumberId = config?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+    const accessToken = config?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN || "";
+
+    if (phoneNumberId && accessToken) {
+      const WHATSAPP_API_VERSION = "v22.0";
+      try {
+        const normalizedNumber = normalizeGTPhone(to).replace(/\D/g, "");
+        const response = await fetch(
+          `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${phoneNumberId}/messages`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              recipient_type: "individual",
+              to: normalizedNumber,
+              type: "interactive",
+              interactive: {
+                type: "button",
+                body: { text: body },
+                action: {
+                  buttons: buttons.slice(0, 3).map((b) => ({
+                    type: "reply",
+                    reply: { id: b.id, title: b.title.slice(0, 20) },
+                  })),
+                },
+              },
+            }),
+          }
+        );
+
+        const data: WhatsAppApiResponse = await response.json();
+        if (response.ok && !data.error) return true;
+        console.error("WhatsApp buttons error:", data.error);
+      } catch (error) {
+        console.error("WhatsApp buttons fetch error:", error);
+      }
+    }
+  }
+
+  // Fallback: menú de texto numerado (también para Twilio)
+  const fallback = `${body}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join("\n")}\n\n_Escribí el número para elegir._`;
+  const result = await sendMessage(to, fallback).catch(() => null);
+  return result !== null;
+}
+
 export {
   sendMessage,
   sendTextMessage,
@@ -762,6 +822,7 @@ export {
   sendDelegationNotification,
   sendAccessAlert,
   sendEndOfDayPendingAlert,
+  sendInteractiveButtons,
 };
 export type {
   WhatsAppApiResponse,
