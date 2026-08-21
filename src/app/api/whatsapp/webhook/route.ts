@@ -5,6 +5,7 @@ import { sendMessage } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate } from "@/lib/task-utils";
+import { sendLUNAUpdateBroadcast } from "@/lib/broadcast";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
 
@@ -1790,6 +1791,16 @@ empleados
 🌐 liveproductionsgt.com`;
   }
 
+  // Broadcast de actualización (solo Dueño/Admin/Jefe)
+  if (
+    (user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE") &&
+    /enviar\s+(actualizaci|detalle|mejoras|aviso|informaci)|^broadcast|enviar\s+a\s+todos|avisar\s+a\s+todos/.test(cmd)
+  ) {
+    const result = await sendLUNAUpdateBroadcast(user.id);
+    const meetingStr = result.meetingTime.toLocaleString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    return `📢 *Broadcast enviado*\n\n✅ Mensaje entregado a ${result.sent} ${result.sent === 1 ? "persona" : "personas"}${result.failed > 0 ? ` (${result.failed} fallidos)` : ""}.\n⏰ Se crearon ${result.remindersCreated} recordatorios de la reunión.\n\n📅 *Reunión: ${meetingStr}*`;
+  }
+
   return null;
 }
 
@@ -2087,6 +2098,7 @@ function isKnownCommand(text: string): boolean {
     "asigna", "asignar", "agrega tarea", "agregar tarea", "ponle", "deja",
     "mandale", "mándale", "manda", "envia", "enviale", "envíale", "mensaje",
     "eliminar", "borrar", "elimina", "borra", "limpiar", "recordatorios",
+    "enviar actualizacion", "enviar actualización", "enviar detalle", "enviar mejoras", "enviar aviso", "broadcast", "enviar a todos",
   ];
   const lower = text.toLowerCase().trim();
   return knownCommands.some(k => lower.startsWith(k));
