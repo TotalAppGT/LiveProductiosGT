@@ -121,6 +121,36 @@ async function morningBriefing() {
       const thisWeek = tasks.filter((t) => t.dueDate && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= saturday);
       const upcoming = tasks.filter((t) => t.dueDate && new Date(t.dueDate) > saturday);
 
+      // Fijas recurrentes sin fecha concreta (el esquema): se muestran por día de la semana
+      const DAY_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
+      const DAY_LABEL: Record<string, string> = {
+        LUNES: "lunes", MARTES: "martes", MIERCOLES: "miércoles", JUEVES: "jueves",
+        VIERNES: "viernes", SABADO: "sábado", DOMINGO: "domingo",
+      };
+      const fixedByDay: Record<string, any[]> = {};
+      for (const t of tasks) {
+        if (t.type !== "FIJA" || t.dueDate) continue;
+        if (t.frequency === "DIARIA") {
+          (fixedByDay["DIARIA"] = fixedByDay["DIARIA"] || []).push(t);
+        } else if (t.dayOfWeek) {
+          const k = String(t.dayOfWeek).toUpperCase();
+          (fixedByDay[k] = fixedByDay[k] || []).push(t);
+        }
+      }
+      let fixedLines = "";
+      const fixedBlocks: string[] = [];
+      for (const d of DAY_ORDER) {
+        if (fixedByDay[d]?.length) {
+          fixedBlocks.push(`📅 *${DAY_LABEL[d]}*\n${fixedByDay[d].map((t: any) => `• 🔁 ${t.title}`).join("\n")}`);
+        }
+      }
+      if (fixedByDay["DIARIA"]?.length) {
+        fixedBlocks.push(`📅 *todos los días*\n${fixedByDay["DIARIA"].map((t: any) => `• 🔁 ${t.title}`).join("\n")}`);
+      }
+      if (fixedBlocks.length > 0) {
+        fixedLines = `📌 *FIJAS DE LA SEMANA (recurrentes)*\n\n${fixedBlocks.join("\n\n")}\n\n`;
+      }
+
       let taskLines = "";
       if (overdue.length > 0) {
         taskLines += `⚠️ *Vencidas / No completadas (${overdue.length})*\n${groupTasksByDayText(orderTasksByDayHour(overdue))}\n\n`;
@@ -131,7 +161,7 @@ async function morningBriefing() {
       if (upcoming.length > 0) {
         taskLines += `📅 *Próximas semanas (${upcoming.length})*\n${groupTasksByDayText(orderTasksByDayHour(upcoming))}\n\n`;
       }
-      taskLines = taskLines.trim();
+      taskLines = (taskLines + fixedLines).trim();
 
       const aiPrompt = `Eres LUNA de Live Productions GT. Genera un saludo de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Tiene ${tasks.length} tareas pendientes (${overdue.length} vencidas, ${thisWeek.length} esta semana, ${upcoming.length} próximas), ${events.length} eventos próximos. Sé profesional, cálida y motivadora. Mencioná sus prioridades. Máximo 3 oraciones. Español de Guatemala. Presentate como LUNA.`;
 

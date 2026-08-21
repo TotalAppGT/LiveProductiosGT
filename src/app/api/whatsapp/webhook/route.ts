@@ -1225,6 +1225,7 @@ async function handleCommand(
     let title = "";
     let dateFrom: Date | null = null;
     let dateTo: Date | null = null;
+    let queriedDay: string | null = null;
 
     // 1) Próxima semana
     if (/la proxima semana|la semana que viene|la siguiente semana|proxima semana/i.test(cmd)) {
@@ -1232,14 +1233,7 @@ async function handleCommand(
       dateFrom = nextMonday;
       dateTo = nextSaturday;
     }
-    // 2) Próximo mes
-    else if (/el proximo mes|el mes que viene|el siguiente mes|siguiente mes/i.test(cmd)) {
-      const nextMonthStart = guatemalaDate(w.year, w.month, 1);
-      dateFrom = nextMonthStart;
-      dateTo = new Date(guatemalaDate(w.year, w.month + 1, 0).getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
-      title = nextMonthStart.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", month: "long", year: "numeric" }).toUpperCase();
-    }
-    // 3) Pasado mañana
+    // 2) Pasado mañana
     else if (/pasado mañana|pasado manana/i.test(cmd)) {
       const d = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
       title = `PASADO MAÑANA - ${d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}`;
@@ -1291,29 +1285,17 @@ async function handleCommand(
         dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
       }
     }
-    // 5.5) Mes específico por nombre (enero, febrero, ... septiembre, octubre)
+    // 5.5) Sin vista de meses (solo por día o semana)
     else {
-      let targetMonth: number | null = null;
-      for (const [name, idx] of Object.entries(monthMap)) {
-        const lowerCmd = cmd.toLowerCase();
-        if (lowerCmd.includes(name)) { targetMonth = idx; break; }
-      }
-      if (targetMonth !== null) {
-        let year = w.year;
-        // Si el mes ya pasó este año, es el próximo año
-        if (targetMonth < w.month - 1) year += 1;
-        const monthName = guatemalaDate(year, targetMonth + 1, 1).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", month: "long", year: "numeric" });
-        title = `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}`;
-        dateFrom = guatemalaDate(year, targetMonth + 1, 1);
-        dateTo = new Date(guatemalaDate(year, targetMonth + 2, 0).getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
-      }
+      return "📅 Solo puedo consultar por *día* o por *semana*. Probá: *tareas mañana*, *tareas del lunes*, *tareas de la próxima semana*.";
     }
     // 6) Día específico de la semana (lunes, martes, etc.)
     if (!dateFrom && !dateTo) {
       let targetDay: number | null = null;
+      let targetName: string | null = null;
       for (const [name, idx] of Object.entries(dayMap)) {
         const lowerCmd = cmd.toLowerCase();
-        if (lowerCmd.includes(name)) { targetDay = idx; break; }
+        if (lowerCmd.includes(name)) { targetDay = idx; targetName = name; break; }
       }
       if (targetDay !== null) {
         // Próxima ocurrencia de ese día (si hoy es el día pedido, va a la próxima semana)
@@ -1323,6 +1305,7 @@ async function handleCommand(
         title = `${targetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })}`;
         dateFrom = new Date(targetDate);
         dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
+        queriedDay = targetName ? targetName.toUpperCase() : null;
       }
     }
 
@@ -1334,7 +1317,12 @@ async function handleCommand(
       where: {
         assignedToId: user.id,
         status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
-        dueDate: { gte: dateFrom, lte: dateTo },
+        OR: queriedDay
+          ? [
+              { dueDate: { gte: dateFrom, lte: dateTo } },
+              { type: "FIJA", frequency: "SEMANAL", dayOfWeek: queriedDay as any, dueDate: null },
+            ]
+          : [{ dueDate: { gte: dateFrom, lte: dateTo } }],
       },
       orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
       take: 20,
@@ -1814,7 +1802,7 @@ async function handleCreateTask(details: string, user: { id: string; name: strin
       description: parsed.description || "",
       assignedToId: parsed.assignToId || user.id,
       assignedById: user.id,
-      dueDate: parsed.dueDate ? normalizeToFive(parsed.dueDate) : parsed.isFixed ? null : new Date(),
+      dueDate: parsed.isFixed && parsed.dayOfWeek ? null : parsed.dueDate ? normalizeToFive(parsed.dueDate) : parsed.isFixed ? null : new Date(),
       priority: parsed.priority || "MEDIA",
       category: "OTRO",
       type: parsed.isFixed ? "FIJA" : "DINAMICA",

@@ -141,19 +141,19 @@ export function isTaskDueOnDate(
 }
 
 // Próxima fecha de una tarea FIJA al completarse:
-// - SEMANAL con dayOfWeek → próximo día de la semana indicado (no depende de la fecha actual)
+// - SEMANAL con dayOfWeek → null (se rige por su día de la semana, sin fecha concreta)
+// - DIARIA sin fecha → null (todos los días)
 // - Si no, reusa la lógica genérica basada en la fecha original
 export function nextFixedDueDate(
   task: { dueDate?: Date | string | null; type?: string | null; frequency?: string | null; dayOfWeek?: string | null }
-): Date {
-  if (task.type === "FIJA" && task.frequency === "SEMANAL" && task.dayOfWeek) {
-    const base = task.dueDate ? new Date(task.dueDate) : new Date();
-    const w = getGuatemalaWallClock(base);
-    const target = WEEKDAY_MAP[String(task.dayOfWeek).toUpperCase()];
-    let delta = target !== undefined ? (target - w.weekday + 7) % 7 : 7;
-    if (delta === 0) delta = 7;
-    const day = guatemalaDate(w.year, w.month, w.day + delta);
-    return applyGuatemalaTime(day, w.hour, w.minute);
+): Date | null {
+  if (task.type === "FIJA") {
+    if (task.frequency === "SEMANAL" && task.dayOfWeek) {
+      return null;
+    }
+    if (task.frequency === "DIARIA" && !task.dueDate) {
+      return null;
+    }
   }
   return nextRecurrenceDueDate(task.dueDate ? new Date(task.dueDate) : new Date(), task.frequency ?? null);
 }
@@ -172,6 +172,15 @@ export async function carryOverUncompletedTasks() {
 
   let carried = 0;
   for (const task of overdue) {
+    // Fijas que se rigen por su día de la semana / diarias: sin fecha concreta
+    if (task.type === "FIJA" && (task.frequency === "DIARIA" || (task.frequency === "SEMANAL" && task.dayOfWeek))) {
+      if (task.dueDate) {
+        await prisma.task.update({ where: { id: task.id }, data: { dueDate: null } });
+        carried++;
+      }
+      continue;
+    }
+
     if (task.type === "FIJA") {
       const nextOccurrence = await prisma.task.findFirst({
         where: {

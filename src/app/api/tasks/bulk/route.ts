@@ -113,6 +113,12 @@ export async function POST(request: NextRequest) {
           if (["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"].includes(day)) dayOfWeek = day;
         }
 
+        // Fijas semanales por día / diarias: se rigen por su día, sin fecha concreta.
+        // Las fijas del esquema se repiten CADA semana, por eso la columna "fecha" se ignora.
+        if (finalType === "FIJA" && (dayOfWeek || frequency === "DIARIA")) {
+          dueDate = null;
+        }
+
         const targetUserId = assignedToId?.id || auth.payload.userId;
 
         // Deduplicación: si ya existe una tarea PENDIENTE con el mismo título y asignado, la salta

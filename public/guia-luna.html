@@ -100,7 +100,6 @@ li { margin: 5px 0; font-size: 13px; }
     <tr><td><code>tareas mañana</code></td><td>Solo las de mañana</td></tr>
     <tr><td><code>tareas semana</code> / <code>tareas esta semana</code></td><td>Esta semana completa, día por día</td></tr>
     <tr><td><code>tareas próxima semana</code> / <code>tareas semana 2</code></td><td>La próxima semana</td></tr>
-    <tr><td><code>tareas mes</code> / <code>tareas este mes</code></td><td>Este mes completo</td></tr>
     <tr><td><code>tareas fijas</code></td><td>Solo mis actividades fijas/recurrentes (🔁)</td></tr>
     <tr><td><code>tareas lunes</code> / <code>tareas el viernes</code></td><td>Las del próximo día de la semana que digas</td></tr>
     <tr><td><code>tareas 25 agosto</code></td><td>Las de una fecha específica</td></tr>
@@ -110,6 +109,12 @@ li { margin: 5px 0; font-size: 13px; }
     Orden dentro de cada día: <strong>🎪 Pre Evento → 🚀 Evento → 🏁 Post Evento</strong>, luego <strong>🔁 Fijas</strong>
     antes que <strong>⚡ Variables</strong>, y de la hora más temprana a la más tarde.
   </p>
+  <div class="note">
+    📌 <strong>Sobre las tareas fijas (esquema):</strong> las fijas semanales <strong>no tienen fecha concreta</strong>;
+    se repiten <strong>todos los días de la semana indicado</strong> (ej: "todos los viernes"). Por eso aparecen en
+    <code>tareas de hoy</code> solo el día que toca, y el esquema se consulta con <code>tareas</code> (bloque
+    "Actividades Fijas") o con <code>tareas viernes</code>. No se muestran con fechas futuras de otros meses.
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════ -->
@@ -119,8 +124,7 @@ li { margin: 5px 0; font-size: 13px; }
     <tr><td><code>tareas hoy</code> / <code>tareas mañana</code> / <code>tareas pasado mañana</code></td><td>Día puntual</td></tr>
     <tr><td><code>tareas lunes</code> / <code>tareas el viernes</code> / <code>tareas sábado</code></td><td>Próximo día de la semana</td></tr>
     <tr><td><code>tareas 25 agosto</code> / <code>tareas 25 de agosto</code></td><td>Fecha específica</td></tr>
-    <tr><td><code>tareas septiembre</code> / <code>ver octubre</code></td><td>Mes específico</td></tr>
-    <tr><td><code>tareas de la próxima semana</code> / <code>tareas del mes que viene</code></td><td>Próximo periodo</td></tr>
+    <tr><td><code>tareas de la próxima semana</code></td><td>Próxima semana</td></tr>
     <tr><td><code>qué tengo el viernes</code> / <code>que tengo para mañana</code></td><td>Preguntas naturales</td></tr>
     <tr><td><code>recordatorios</code></td><td>Recordatorios de <strong>hoy</strong> (solo hoy)</td></tr>
     <tr><td><code>recordatorios semana</code></td><td>Recordatorios de toda la semana</td></tr>
@@ -386,7 +390,7 @@ li { margin: 5px 0; font-size: 13px; }
     <li><strong>Filtros</strong>: 🎪 Pre Evento / 🚀 Evento / 🏁 Post Evento, y 🔁 Fijas / ⚡ Variables.</li>
     <li><strong>Botón "Por Día"</strong> → cambia a vista agrupada solo por día (Lunes-Sábado).</li>
     <li><strong>Acciones por fila</strong>: ✓ completar, ↑↓ subir/bajar (reordenar dentro del segmento), ✏️ editar, ▶ en proceso, ⏰ posponer, 💬 comentar, 🗑 eliminar.</li>
-    <li>Al completar una tarea, se quita del listado; si es <strong>fija</strong>, se regenera para su próxima semana/mes.</li>
+    <li>Al completar una tarea, se quita del listado; si es <strong>fija</strong>, se regenera para su próxima semana.</li>
     <li>Debajo de las tareas aparecen los bloques de <strong>⏰ Recordatorios</strong> y <strong>🛒 Compras</strong>, también ordenados por día y hora y con sus acciones (✓, 🗑, ↑↓).</li>
   </ul>
 </div>
