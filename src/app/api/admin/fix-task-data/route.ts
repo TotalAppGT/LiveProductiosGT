@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
+import { weekdayNameOf } from "@/lib/task-utils";
 
 // Corrección de datos existentes desde la raíz:
 // 1) Tareas FIJA semanales/diarias (con dayOfWeek o DIARIA) → dueDate = null
@@ -61,6 +62,28 @@ export async function POST(request: NextRequest) {
       await prisma.task.deleteMany({ where: { id: { in: deletedIds } } });
     }
 
+    // 2.5) Anclar VARIABLES existentes: ponerles su día de la semana (día ancla) si no lo tienen
+    const variables = await prisma.task.findMany({
+      where: {
+        type: "DINAMICA",
+        category: "OTRO",
+        dayOfWeek: null,
+        dueDate: { not: null },
+        title: { not: { startsWith: "🔔" } },
+        status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
+      },
+      select: { id: true, dueDate: true },
+    });
+    let anchored = 0;
+    for (const v of variables) {
+      if (!v.dueDate) continue;
+      await prisma.task.update({
+        where: { id: v.id },
+        data: { dayOfWeek: weekdayNameOf(new Date(v.dueDate)) as any },
+      });
+      anchored++;
+    }
+
     // 3) Renombrar la cuenta de Daniel (número 35187153)
     const adminUser = await prisma.user.findFirst({
       where: {
@@ -85,10 +108,11 @@ export async function POST(request: NextRequest) {
         data: {
           fixedNormalized: normalized.count,
           duplicatesDeleted: deleted,
+          variablesAnchored: anchored,
           renamedAdmin: renamed,
           adminName: adminUser?.name || "no encontrado",
         },
-        message: `Corrección completada: ${normalized.count} fijas sin fecha concreta, ${deleted} duplicados eliminados${renamed ? ", cuenta renombrada a Daniel" : ""}.`,
+        message: `Corrección completada: ${normalized.count} fijas sin fecha concreta, ${deleted} duplicados eliminados, ${anchored} variables ancladas a su día${renamed ? ", cuenta renombrada a Daniel" : ""}.`,
       },
       { status: 200 }
     );

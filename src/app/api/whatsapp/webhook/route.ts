@@ -4,7 +4,7 @@ import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendInteractiveButtons } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
-import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate } from "@/lib/task-utils";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, nextWeeklyDueDate, weekdayNameOf } from "@/lib/task-utils";
 import { sendLUNAUpdateBroadcast } from "@/lib/broadcast";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
@@ -827,6 +827,28 @@ async function completeTask(taskId: string, user: { id: string; name: string }) 
   await prisma.activity.create({
     data: { userId: user.id, action: "TASK_COMPLETED_WHATSAPP", resource: "TASK", resourceId: taskId, details: `Tarea completada via WhatsApp por ${user.name}` },
   });
+
+  // VARIABLES (Actividades diarias): al completarlas desaparecen esta semana
+  // y vuelven el próximo día ancla (ej: cada martes).
+  const isReminderTask = task.title.startsWith("🔔");
+  if (task.type === "DINAMICA" && task.category === "OTRO" && task.dayOfWeek && !isReminderTask) {
+    const nextDue = nextWeeklyDueDate(task);
+    await prisma.task.create({
+      data: {
+        title: task.title,
+        description: task.description,
+        type: "DINAMICA",
+        frequency: task.frequency,
+        dayOfWeek: task.dayOfWeek,
+        dueDate: nextDue,
+        priority: task.priority,
+        category: task.category,
+        assignedToId: task.assignedToId,
+        assignedById: task.assignedById || user.id,
+        status: "PENDIENTE",
+      },
+    });
+  }
 }
 
 async function postponeTask(taskId: string, newDate: Date, reason: string, user: { id: string; name: string }) {
@@ -1840,18 +1862,28 @@ async function handleCreateTask(details: string, user: { id: string; name: strin
   const parsed = await parseTaskCreation(details, user);
   if (!parsed) return "No entendí. Ejemplo: *crea tarea para Diana revisar cotizaciones mañana 10am*";
 
+  const dueDateVal = parsed.isFixed && parsed.dayOfWeek
+    ? null
+    : parsed.dueDate
+      ? normalizeToFive(parsed.dueDate)
+      : parsed.isFixed
+        ? null
+        : new Date();
+  // Variables: su día ancla es el día de la semana de su fecha (se repiten cada ese día)
+  const dayOfWeekVal = parsed.isFixed ? parsed.dayOfWeek : dueDateVal ? weekdayNameOf(dueDateVal) : null;
+
   const task = await prisma.task.create({
     data: {
       title: parsed.title,
       description: parsed.description || "",
       assignedToId: parsed.assignToId || user.id,
       assignedById: user.id,
-      dueDate: parsed.isFixed && parsed.dayOfWeek ? null : parsed.dueDate ? normalizeToFive(parsed.dueDate) : parsed.isFixed ? null : new Date(),
+      dueDate: dueDateVal,
       priority: parsed.priority || "MEDIA",
       category: "OTRO",
       type: parsed.isFixed ? "FIJA" : "DINAMICA",
       frequency: parsed.isFixed ? (parsed.frequency || "DIARIA") : "DIARIA",
-      dayOfWeek: parsed.dayOfWeek,
+      dayOfWeek: dayOfWeekVal,
       status: "PENDIENTE",
     },
   });

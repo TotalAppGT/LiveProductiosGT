@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 import { sendMessage } from "@/lib/whatsapp";
-import { parseGTInputDate, nextFixedDueDate } from "@/lib/task-utils";
+import { parseGTInputDate, nextFixedDueDate, nextWeeklyDueDate } from "@/lib/task-utils";
 
 export async function PUT(
   request: NextRequest,
@@ -172,6 +172,32 @@ export async function PUT(
           frequency: existingTask.frequency,
           dayOfWeek: existingTask.dayOfWeek,
           dueDate: nextDueDate,
+          priority: existingTask.priority,
+          category: existingTask.category,
+          assignedToId: existingTask.assignedToId,
+          assignedById: existingTask.assignedById || auth.payload.userId,
+          eventId: existingTask.eventId,
+          requiresConfirmation: existingTask.requiresConfirmation,
+        },
+      });
+    }
+
+    // VARIABLES: al completarlas desaparecen esta semana y vuelven el próximo día ancla
+    if (
+      status === "COMPLETADA" &&
+      existingTask.type === "DINAMICA" &&
+      existingTask.category === "OTRO" &&
+      existingTask.dayOfWeek &&
+      !existingTask.title.startsWith("🔔")
+    ) {
+      await prisma.task.create({
+        data: {
+          title: existingTask.title,
+          description: existingTask.description,
+          type: "DINAMICA",
+          frequency: existingTask.frequency,
+          dayOfWeek: existingTask.dayOfWeek,
+          dueDate: nextWeeklyDueDate(existingTask),
           priority: existingTask.priority,
           category: existingTask.category,
           assignedToId: existingTask.assignedToId,

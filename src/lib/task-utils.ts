@@ -158,6 +158,31 @@ export function nextFixedDueDate(
   return nextRecurrenceDueDate(task.dueDate ? new Date(task.dueDate) : new Date(), task.frequency ?? null);
 }
 
+// Próxima ocurrencia del DÍA ANCLA de una VARIABLE (su día de la semana).
+// Se usa al completar una variable: desaparece esta semana y vuelve el próximo día ancla.
+export function nextWeeklyDueDate(
+  task: { dueDate?: Date | string | null; dayOfWeek?: string | null }
+): Date {
+  const base = task.dueDate ? new Date(task.dueDate) : new Date();
+  const w = getGuatemalaWallClock(base);
+  let targetWeekday = w.weekday;
+  if (task.dayOfWeek) {
+    const t = WEEKDAY_MAP[String(task.dayOfWeek).toUpperCase()];
+    if (t !== undefined) targetWeekday = t;
+  }
+  const tw = getGuatemalaWallClock();
+  let delta = (targetWeekday - tw.weekday + 7) % 7;
+  if (delta === 0) delta = 7; // ya es/pasó el día ancla → próxima semana
+  const day = guatemalaDate(tw.year, tw.month, tw.day + delta);
+  return applyGuatemalaTime(day, w.hour, w.minute);
+}
+
+// Nombre del día de la semana (LUNES..DOMINGO) para una fecha dada
+export function weekdayNameOf(date: Date): string {
+  const names = ["DOMINGO", "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"];
+  return names[getGuatemalaWallClock(date).weekday];
+}
+
 export async function carryOverUncompletedTasks() {
   // Mover a HOY todas las tareas vencidas no completadas (siguen corriendo hasta que se hagan)
   const today = guatemalaToday();
@@ -181,20 +206,16 @@ export async function carryOverUncompletedTasks() {
       continue;
     }
 
-    // VARIABLES (dinámicas de Actividades Diarias): si no se cumplen en la semana,
-    // pasan a la SIGUIENTE semana (mismo día de la semana), no a hoy.
+    // VARIABLES (dinámicas de Actividades Diarias): si no se cumplen en su día,
+    // pasan a HOY como prioridad y siguen día a día hasta que se hagan.
     if (task.type === "DINAMICA" && task.dueDate) {
       const wd = getGuatemalaWallClock(new Date(task.dueDate));
-      const tw = getGuatemalaWallClock();
-      let delta = (wd.weekday - tw.weekday + 7) % 7;
-      if (delta === 0) delta = 7;
-      const nextWeekDay = guatemalaDate(tw.year, tw.month, tw.day + delta);
-      const newDue = applyGuatemalaTime(nextWeekDay, wd.hour, wd.minute);
+      const newDue = applyGuatemalaTime(today, wd.hour, wd.minute);
       await prisma.task.update({
         where: { id: task.id },
         data: {
           dueDate: newDue,
-          postponeReason: "No completada - pasó a la siguiente semana",
+          postponeReason: "No completada - prioridad para hoy",
           postponeCount: { increment: 1 },
         },
       });
