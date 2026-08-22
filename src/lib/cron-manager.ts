@@ -163,7 +163,7 @@ async function morningBriefing() {
       }
       taskLines = (taskLines + fixedLines).trim();
 
-      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un saludo de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Tiene ${tasks.length} tareas pendientes (${overdue.length} vencidas, ${thisWeek.length} esta semana, ${upcoming.length} próximas), ${events.length} eventos próximos. Sé profesional, cálida y motivadora. Mencioná sus prioridades. Máximo 3 oraciones. Español de Guatemala. Presentate como LUNA.`;
+      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un mensaje corto de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Tiene ${tasks.length} tareas pendientes (${overdue.length} vencidas, ${thisWeek.length} esta semana, ${upcoming.length} próximas), ${events.length} eventos próximos. Sé cálida y motivadora, mencioná por dónde empezar (las vencidas o la más urgente). Máximo 2 oraciones. Español de Guatemala. NO te presentes (ya hay un encabezado).`;
 
       let aiMessage = "";
       try {
@@ -175,7 +175,7 @@ async function morningBriefing() {
         aiMessage = "";
       }
       if (!aiSucceeded(aiMessage)) {
-        aiMessage = `¡Buenos días ${user.name}! Soy LUNA. Esta semana tienes ${thisWeek.length} tareas${overdue.length ? ` y ${overdue.length} vencidas que debes atender` : ""}. ¡A darle con todo! 💪`;
+        aiMessage = `Esta semana tienes ${thisWeek.length} tareas${overdue.length ? ` y ${overdue.length} vencidas que debemos atender primero` : ""}. ¡A darle con todo! 💪`;
       }
 
       const eventLines = events
@@ -183,9 +183,10 @@ async function morningBriefing() {
         .map((e) => `🎪 ${e.name} - ${new Date(e.date).toLocaleDateString("es-GT")}`)
         .join("\n");
 
-      let fullMessage = `☀️ *Buenos días, ${user.name}*\n${dayName}\n\n${aiMessage}`;
+      let fullMessage = `👋 *¡Hola ${user.name}!*\nSoy *LUNA* 🌙 · Asistente de Live Productions\n📅 ${dayName}\n\n☀️ ${aiMessage}`;
       if (taskLines) fullMessage += `\n\n${taskLines}`;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
+      fullMessage += `\n\n_Escribí *menu* para ver las opciones con botones, o *tareas* para actuar._`;
 
       const to = user.whatsappNumber || user.phone;
       if (to) {

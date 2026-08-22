@@ -1059,6 +1059,28 @@ async function handleCommand(
     return "💬 *Mensaje Programado*\n\n¿A quién se lo mando? Escribí el *número* (ej: `55551234`) o el *nombre* de alguien del equipo.";
   }
 
+  // Botones de acción sobre tareas (aparecen después de "tareas")
+  if (command.trim() === "✅ Completar") {
+    if (fromNumber) setConversation(fromNumber, "action_complete", {});
+    return "✅ Escribí el *número* de la tarea que completás.\n\n• Una: `1`\n• Varias: `1 2 3`\n\nSi no recordás los números, escribí *tareas*.";
+  }
+
+  if (command.trim() === "⏰ Posponer") {
+    if (fromNumber) setConversation(fromNumber, "action_postpone", {});
+    return "⏰ Escribí el *número* de la tarea que posponés (ej: `1`).\n\nSi no recordás los números, escribí *tareas*.";
+  }
+
+  if (command.trim() === "📋 Menú") {
+    if (fromNumber) {
+      await sendInteractiveButtons(fromNumber, `👋 *¡Hola ${user.name}!* Soy *LUNA* 🌙 · Asistente de Live Productions\n¿Qué querés hacer hoy?`, [
+        { id: "menu_reminder", title: "⏰ Recordatorio" },
+        { id: "menu_task", title: "📝 Tarea" },
+        { id: "menu_message", title: "💬 Mensaje" },
+      ]);
+    }
+    return null;
+  }
+
   if (cmd.startsWith("completar ") || cmd.startsWith("hecho ") || cmd.startsWith("completado ") || cmd.startsWith("hechos ") || cmd.startsWith("completadas ")) {
     const numStr = cmd.replace(/^(completar|completado|completadas|hecho|hechos)\s+/i, "").trim();
     const nums = extractNumbers(numStr);
@@ -1452,7 +1474,16 @@ async function handleCommand(
     (cmd.includes("tarea") && !cmd.startsWith("tareas hoy") && !cmd.startsWith("tareas semana") && !cmd.includes("crea") && !cmd.includes("crear") && !cmd.includes("nueva") && !cmd.includes("asigna") && !cmd.includes("asignar") && !cmd.includes("agrega") && !cmd.includes("agregar") && !cmd.includes("ponle") && !cmd.includes("deja"))
   ) {
     const tasks = await formatTasksForUser(user.id);
-    if (!tasks) return `Hola ${user.name}, no tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
+    if (!tasks) return `👋 *¡Hola ${user.name}!* Soy *LUNA* 🌙\n\nNo tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
+    if (fromNumber) {
+      await sendMessage(fromNumber, tasks);
+      await sendInteractiveButtons(fromNumber, "⚡ ¿Qué querés hacer con tus tareas?", [
+        { id: "act_complete", title: "✅ Completar" },
+        { id: "act_postpone", title: "⏰ Posponer" },
+        { id: "act_menu", title: "📋 Menú" },
+      ]);
+      return null;
+    }
     return tasks;
   }
 
@@ -2203,6 +2234,24 @@ async function handleConversationStep(
     return `✅ *Mensaje programado*\n\nPara: ${conv.data.toName || conv.data.toNumber}\n🕐 ${ds}\nTexto: "${msgText}"\n\nLo enviaré a esa hora.`;
   }
 
+  // ── Botón "✅ Completar": espera el número de tarea ─────────────
+  if (conv.state === "action_complete") {
+    conversations.delete(fromNumber);
+    if (!/\d/.test(text)) {
+      return "Escribí el *número* de la tarea. Ej: `1` (o varios: `1 2 3`).\n\nEscribí *tareas* para ver los números.";
+    }
+    return await handleCommand("hecho " + text, user, fromNumber);
+  }
+
+  // ── Botón "⏰ Posponer": espera el número de tarea ──────────────
+  if (conv.state === "action_postpone") {
+    conversations.delete(fromNumber);
+    if (!/\d/.test(text)) {
+      return "Escribí el *número* de la tarea. Ej: `1`.\n\nEscribí *tareas* para ver los números.";
+    }
+    return await handleCommand("posponer " + text, user, fromNumber);
+  }
+
   return null;
 }
 
@@ -2298,6 +2347,7 @@ function isKnownCommand(text: string): boolean {
     "eliminar", "borrar", "elimina", "borra", "limpiar", "recordatorios",
     "enviar actualizacion", "enviar actualización", "enviar detalle", "enviar mejoras", "enviar aviso", "broadcast", "enviar a todos",
     "menu", "menú", "inicio", "opciones",
+    "✅ completar", "⏰ posponer", "📋 menú", "⏰ recordatorio", "📝 tarea", "💬 mensaje",
   ];
   const lower = text.toLowerCase().trim();
   return knownCommands.some(k => lower.startsWith(k));
