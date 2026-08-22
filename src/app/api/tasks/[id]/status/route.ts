@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 import { sendMessage } from "@/lib/whatsapp";
-import { parseGTInputDate, nextFixedDueDate, nextWeeklyDueDate } from "@/lib/task-utils";
+import { parseGTInputDate, nextFixedDueDate } from "@/lib/task-utils";
 
 export async function PUT(
   request: NextRequest,
@@ -182,30 +182,14 @@ export async function PUT(
       });
     }
 
-    // VARIABLES: al completarlas desaparecen esta semana y vuelven el próximo día ancla
+    // VARIABLES (Actividades diarias): se BORRAN al completarlas (no vuelven; se agregan de nuevo)
     if (
       status === "COMPLETADA" &&
       existingTask.type === "DINAMICA" &&
       existingTask.category === "OTRO" &&
-      existingTask.dayOfWeek &&
       !existingTask.title.startsWith("🔔")
     ) {
-      await prisma.task.create({
-        data: {
-          title: existingTask.title,
-          description: existingTask.description,
-          type: "DINAMICA",
-          frequency: existingTask.frequency,
-          dayOfWeek: existingTask.dayOfWeek,
-          dueDate: nextWeeklyDueDate(existingTask),
-          priority: existingTask.priority,
-          category: existingTask.category,
-          assignedToId: existingTask.assignedToId,
-          assignedById: existingTask.assignedById || auth.payload.userId,
-          eventId: existingTask.eventId,
-          requiresConfirmation: existingTask.requiresConfirmation,
-        },
-      });
+      await prisma.task.delete({ where: { id } });
     }
 
     return NextResponse.json(

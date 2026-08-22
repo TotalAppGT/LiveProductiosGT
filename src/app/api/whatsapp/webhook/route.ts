@@ -4,7 +4,7 @@ import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendInteractiveButtons } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
-import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, nextWeeklyDueDate, weekdayNameOf } from "@/lib/task-utils";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate } from "@/lib/task-utils";
 import { sendLUNAUpdateBroadcast } from "@/lib/broadcast";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
@@ -820,6 +820,19 @@ function extractNumbers(text: string): number[] {
 async function completeTask(taskId: string, user: { id: string; name: string }) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) throw new Error("Tarea no encontrada");
+
+  // VARIABLES (Actividades diarias): se BORRAN al completarlas.
+  // No vuelven la próxima semana; se agregan de nuevo si se necesitan.
+  const isReminderTask = task.title.startsWith("🔔");
+  const isVariable = task.type === "DINAMICA" && task.category === "OTRO" && !isReminderTask;
+  if (isVariable) {
+    await prisma.activity.create({
+      data: { userId: user.id, action: "TASK_COMPLETED_WHATSAPP", resource: "TASK", resourceId: taskId, details: `Variable "${task.title}" completada y eliminada por ${user.name}` },
+    });
+    await prisma.task.delete({ where: { id: taskId } });
+    return;
+  }
+
   await prisma.task.update({ where: { id: taskId }, data: { status: "COMPLETADA" } });
   await prisma.taskHistory.create({
     data: { taskId, userId: user.id, action: "COMPLETADA via WhatsApp", previousStatus: task.status, newStatus: "COMPLETADA" },
@@ -828,16 +841,14 @@ async function completeTask(taskId: string, user: { id: string; name: string }) 
     data: { userId: user.id, action: "TASK_COMPLETED_WHATSAPP", resource: "TASK", resourceId: taskId, details: `Tarea completada via WhatsApp por ${user.name}` },
   });
 
-  // VARIABLES (Actividades diarias): al completarlas desaparecen esta semana
-  // y vuelven el próximo día ancla (ej: cada martes).
-  const isReminderTask = task.title.startsWith("🔔");
-  if (task.type === "DINAMICA" && task.category === "OTRO" && task.dayOfWeek && !isReminderTask) {
-    const nextDue = nextWeeklyDueDate(task);
+  // FIJAS: regenerar la próxima ocurrencia al completarlas
+  if (task.type === "FIJA") {
+    const nextDue = nextFixedDueDate(task);
     await prisma.task.create({
       data: {
         title: task.title,
         description: task.description,
-        type: "DINAMICA",
+        type: "FIJA",
         frequency: task.frequency,
         dayOfWeek: task.dayOfWeek,
         dueDate: nextDue,
@@ -1803,46 +1814,51 @@ async function handleCommand(
   }
 
   if (cmd === "ayuda") {
-    return `🤖 *LUNA - Tu Controladora Administrativa*
+    return `🤖 *LUNA · Asistente de Live Productions*
 
-🧭 *Menú con botones:*
-menu
+🧭 *MENÚ CON BOTONES*
+Escribí *menu* y tocá un botón (Recordatorio / Tarea / Mensaje).
 
-📊 *Ver tareas:*
-tareas
-tareas hoy
-tareas semana
+📋 *VER TAREAS*
+• *tareas* → toda la semana
+• *tareas hoy* / *tareas mañana*
+• *tareas del lunes* / *tareas 25 agosto*
 
-⚡ *Acciones de tareas (usa el #):*
-#1 Completada → hecho 1
-#2 Varias a la vez → hecho 1 2 3
-#3 En proceso → proceso 1
-#4 Posponer para mañana → posponer 1
-#5 Transferir → transferir 1 a Diana
-#6 Comentar → comentar 1 texto
+⚡ *ACTUAR SOBRE TAREAS (usá el número)*
+• *hecho 1* (o *hecho 1 2 3*) → completar
+• *proceso 1* → en proceso
+• *posponer 1* → cambiar de día
+• *transferir 1 a Diana* → reasignar
+• *comentar 1 texto* → agregar nota
+• *deshacer 1* → revertir completada
+• *eliminar 1* → borrar
 
-➕ *Crear tareas:*
-crea tarea [título] mañana 10am
+➕ *CREAR*
+• *crea tarea [qué] [día] [hora]* → ej: crea tarea revisar cotizaciones viernes 3pm
+• *recuérdame [qué] mañana 9am* → recordatorio
+• *recuérdale a Diana [qué] 3pm* → recordatorio a otro
+• *mándale un mensaje al 55551234 mañana 3pm [texto]*
+• *hacer reunión con Diana y Abel mañana 8am*
+• *compra [artículo] para Abel mañana*
 
-⏰ *Recordatorios:*
-recuérdame [tarea] mañana 3pm
+🔎 *CONSULTAR*
+• *recordatorios* → los de hoy
+• *compras* → pendientes
+• *eventos* → próximos
 
-📈 *Reportes (dueños/gerentes):*
-resumen
-ranking
-cómo va el equipo
+📈 *REPORTES (jefes/dueños)*
+• *resumen* · *ranking* · *cómo va el equipo*
 
-🏢 *Sistema:*
-inventario
-vehiculos
-cobros
-empleados
+🏢 *SISTEMA*
+• *inventario* · *vehiculos* · *cobros* · *empleados*
 
-🎨 *Colores:*
-🟢 Baja | 🟡 Media | 🔴 Alta/Urgente
+📌 *CÓMO FUNCIONAN LAS TAREAS*
+• 🔁 *Fijas*: se repiten (diarias o por día de semana).
+• ⚡ *Variables*: si las completás se borran (agregás de nuevo); si no, siguen como prioridad hasta que las hagas.
+• ⚠️ Los mensajes siempre empiezan con tus tareas *vencidas*.
 
-📞 *Contacto:* +502 3090-3172
-🌐 liveproductionsgt.com`;
+🎨 🟢 Baja · 🟡 Media · 🔴 Alta/Urgente
+📞 +502 3090-3172 · liveproductionsgt.com`;
   }
 
   // Broadcast de actualización (solo Dueño/Admin/Jefe)

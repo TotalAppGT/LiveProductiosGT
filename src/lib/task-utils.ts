@@ -133,7 +133,13 @@ export function isTaskDueOnDate(
     if (task.frequency === "DIARIA") return true;
     if (task.frequency === "SEMANAL" && task.dayOfWeek) {
       const target = WEEKDAY_MAP[String(task.dayOfWeek).toUpperCase()];
-      if (target !== undefined && target === w.weekday) return true;
+      if (target !== undefined) {
+        if (!task.dueDate) {
+          // Sin fecha concreta: persiste durante la semana desde su día (domingo = descanso)
+          return w.weekday !== 0 && w.weekday >= target;
+        }
+        return target === w.weekday;
+      }
     }
   }
 
@@ -141,7 +147,7 @@ export function isTaskDueOnDate(
 }
 
 // Próxima fecha de una tarea FIJA al completarse:
-// - SEMANAL con dayOfWeek → null (se rige por su día de la semana, sin fecha concreta)
+// - SEMANAL con dayOfWeek → próximo día de la semana indicado (fecha concreta, para que no aparezca esta semana)
 // - DIARIA sin fecha → null (todos los días)
 // - Si no, reusa la lógica genérica basada en la fecha original
 export function nextFixedDueDate(
@@ -149,7 +155,7 @@ export function nextFixedDueDate(
 ): Date | null {
   if (task.type === "FIJA") {
     if (task.frequency === "SEMANAL" && task.dayOfWeek) {
-      return null;
+      return nextWeeklyDueDate(task);
     }
     if (task.frequency === "DIARIA" && !task.dueDate) {
       return null;
