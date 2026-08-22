@@ -215,6 +215,18 @@ function parseRelativeDate(text: string, referenceDate: Date): Date | null {
     return at9(base + 1 * 24 * 60 * 60 * 1000);
   }
 
+  // Fechas más adelante: "dentro de N días" / "en N días" / "en N semanas" / "dentro de N semanas"
+  const relDays = t.match(/\b(?:dentro\s+de|en)\s+(\d{1,3})\s+d[ií]as?\b/);
+  if (relDays) {
+    const n = parseInt(relDays[1], 10);
+    if (!isNaN(n) && n > 0 && n <= 365) return at9(base + n * 24 * 60 * 60 * 1000);
+  }
+  const relWeeks = t.match(/\b(?:dentro\s+de|en)\s+(\d{1,2})\s+semanas?\b/);
+  if (relWeeks) {
+    const n = parseInt(relWeeks[1], 10);
+    if (!isNaN(n) && n > 0 && n <= 52) return at9(base + n * 7 * 24 * 60 * 60 * 1000);
+  }
+
   const days: Record<string, number> = {
     domingo: 0,
     lunes: 1,

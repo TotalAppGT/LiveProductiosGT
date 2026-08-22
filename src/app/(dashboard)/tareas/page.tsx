@@ -49,7 +49,6 @@ const STATUS_TABS = [
 const CATEGORY_OPTIONS = [
   { value: "", label: "Todas las categorías" },
   { value: "PRE_EVENTO", label: "🎪 Pre Evento" },
-  { value: "EVENTO", label: "🚀 Evento" },
   { value: "POST_EVENTO", label: "🏁 Post Evento" },
   { value: "COTIZACION", label: "Cotización" },
   { value: "COBRO", label: "Cobro" },
@@ -59,7 +58,7 @@ const CATEGORY_OPTIONS = [
   { value: "BODEGA", label: "Bodega" },
   { value: "MANTENIMIENTO", label: "Mantenimiento" },
   { value: "ADMINISTRACION", label: "Administración" },
-  { value: "OTRO", label: "Otro" },
+  { value: "OTRO", label: "📌 Actividades diarias" },
 ];
 
 export default function TareasPage() {
@@ -560,14 +559,13 @@ export default function TareasPage() {
     });
   });
 
-  // Agrupación tipo hoja de cálculo: Pre Evento → Evento → Post Evento → Otros
+  // Agrupación tipo hoja de cálculo: Pre Evento → Post Evento → Actividades diarias
   // Dentro de cada fase: Fijas primero, luego Variables; todo ordenado por día y hora
   // Las completadas se quitan del listado (salvo en la pestaña Completadas)
   const sheetOrder = [
     { key: "PRE_EVENTO", label: "🎪 Pre Evento", bg: "bg-blue-600" },
-    { key: "EVENTO", label: "🚀 Evento", bg: "bg-purple-600" },
     { key: "POST_EVENTO", label: "🏁 Post Evento", bg: "bg-emerald-600" },
-    { key: "OTRO", label: "Otras tareas", bg: "bg-gray-600" },
+    { key: "OTRO", label: "📌 Actividades diarias", bg: "bg-gray-600" },
   ];
   const sortByDayHour = (a: Task, b: Task) => {
     // Si alguna tarea tiene orden manual (>0), priorizarlo para respetar el reordenamiento
@@ -641,15 +639,13 @@ export default function TareasPage() {
   // Orden de fase
   const phasePriority = (t: Task) => {
     if (t.category === "PRE_EVENTO") return 0;
-    if (t.category === "EVENTO") return 1;
-    if (t.category === "POST_EVENTO") return 2;
-    return 3;
+    if (t.category === "POST_EVENTO") return 1;
+    return 2;
   };
   const phaseDefs = [
     { key: "PRE_EVENTO", label: "🎪 Pre Evento", bg: "bg-blue-500" },
-    { key: "EVENTO", label: "🚀 Evento", bg: "bg-purple-500" },
     { key: "POST_EVENTO", label: "🏁 Post Evento", bg: "bg-emerald-500" },
-    { key: "OTRO", label: "Otras tareas", bg: "bg-gray-500" },
+    { key: "OTRO", label: "📌 Actividades diarias", bg: "bg-gray-500" },
   ];
   function buildHierarchicalGroups(): SheetSection[] {
     const sections: SheetSection[] = [];
@@ -678,7 +674,7 @@ export default function TareasPage() {
       // Para cada fase (Pre, Evento, Post, Otras) en este día
       for (const phase of phaseDefs) {
         const phaseTasks = dayTasks.filter((t) =>
-          phase.key === "OTRO" ? !["PRE_EVENTO", "EVENTO", "POST_EVENTO"].includes(t.category) : t.category === phase.key
+          phase.key === "OTRO" ? !["PRE_EVENTO", "POST_EVENTO"].includes(t.category) : t.category === phase.key
         );
         if (phaseTasks.length === 0) continue;
         sections.push({ key: `${day}-${phase.key}`, label: phase.label, bg: phase.bg, level: 1, tasks: [], insertCategory: phase.key === "OTRO" ? "OTRO" : phase.key, insertDayOfWeek: dow });
@@ -867,7 +863,6 @@ export default function TareasPage() {
         {[
           { value: "", label: "Todas" },
           { value: "PRE_EVENTO", label: "🎪 Pre Evento", color: "border-blue-300 text-blue-700 bg-blue-50" },
-          { value: "EVENTO", label: "🚀 Evento", color: "border-purple-300 text-purple-700 bg-purple-50" },
           { value: "POST_EVENTO", label: "🏁 Post Evento", color: "border-green-300 text-green-700 bg-green-50" },
         ].map((chip) => (
           <button
@@ -1086,8 +1081,7 @@ export default function TareasPage() {
                         className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 text-xs text-gray-900 dark:text-white"
                       >
                         <option value="PRE_EVENTO">🎪 Pre Evento</option>
-                        <option value="EVENTO">🚀 Evento</option>
-                        <option value="POST_EVENTO">🏁 Post Evento</option>
+                                                <option value="POST_EVENTO">🏁 Post Evento</option>
                         <option value="COTIZACION">Cotización</option>
                         <option value="INVENTARIO">Inventario</option>
                         <option value="VEHICULO">Vehículo</option>
@@ -1223,7 +1217,6 @@ export default function TareasPage() {
                                 {task.title}
                               </span>
                               {task.category === "PRE_EVENTO" && <span className="shrink-0 text-[9px]" title="Pre Evento">🎪</span>}
-                              {task.category === "EVENTO" && <span className="shrink-0 text-[9px]" title="Evento">🚀</span>}
                               {task.category === "POST_EVENTO" && <span className="shrink-0 text-[9px]" title="Post Evento">🏁</span>}
                               {task.type === "FIJA" && (
                                 <span className="shrink-0 text-[9px] px-1 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 font-semibold">🔁</span>
@@ -1811,8 +1804,7 @@ function CreateTaskModal({
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="PRE_EVENTO">🎪 Pre Evento</option>
-            <option value="EVENTO">🚀 Evento</option>
-            <option value="POST_EVENTO">🏁 Post Evento</option>
+                        <option value="POST_EVENTO">🏁 Post Evento</option>
             <option value="COTIZACION">Cotización</option>
             <option value="COBRO">Cobro</option>
             <option value="INVENTARIO">Inventario</option>
@@ -2075,8 +2067,7 @@ function EditTaskModal({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoría</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
               <option value="PRE_EVENTO">🎪 Pre Evento</option>
-              <option value="EVENTO">🚀 Evento</option>
-              <option value="POST_EVENTO">🏁 Post Evento</option>
+                            <option value="POST_EVENTO">🏁 Post Evento</option>
               <option value="COTIZACION">Cotización</option>
               <option value="COBRO">Cobro</option>
               <option value="INVENTARIO">Inventario</option>

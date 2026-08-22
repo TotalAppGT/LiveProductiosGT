@@ -181,6 +181,27 @@ export async function carryOverUncompletedTasks() {
       continue;
     }
 
+    // VARIABLES (dinámicas de Actividades Diarias): si no se cumplen en la semana,
+    // pasan a la SIGUIENTE semana (mismo día de la semana), no a hoy.
+    if (task.type === "DINAMICA" && task.dueDate) {
+      const wd = getGuatemalaWallClock(new Date(task.dueDate));
+      const tw = getGuatemalaWallClock();
+      let delta = (wd.weekday - tw.weekday + 7) % 7;
+      if (delta === 0) delta = 7;
+      const nextWeekDay = guatemalaDate(tw.year, tw.month, tw.day + delta);
+      const newDue = applyGuatemalaTime(nextWeekDay, wd.hour, wd.minute);
+      await prisma.task.update({
+        where: { id: task.id },
+        data: {
+          dueDate: newDue,
+          postponeReason: "No completada - pasó a la siguiente semana",
+          postponeCount: { increment: 1 },
+        },
+      });
+      carried++;
+      continue;
+    }
+
     if (task.type === "FIJA") {
       const nextOccurrence = await prisma.task.findFirst({
         where: {

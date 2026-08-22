@@ -114,12 +114,12 @@ export default function CicloEventosPage() {
       {phaseTasks.length > 0 && (
         <Card className="p-5 mt-6">
           <h3 className="font-bold flex items-center gap-2 mb-3"><ClipboardList className="w-5 h-5 text-gray-500" /> Tareas de fase sin evento asignado ({phaseTasks.length})</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {["PRE_EVENTO", "EVENTO", "POST_EVENTO"].map((cat) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {["PRE_EVENTO", "POST_EVENTO"].map((cat) => {
               const tasks = phaseTasks.filter((t: any) => t.category === cat);
               return (
                 <div key={cat} className="border rounded-lg p-3 bg-gray-50/50">
-                  <p className="text-sm font-bold text-gray-600 mb-2">{cat === "PRE_EVENTO" ? "Pre Evento" : cat === "EVENTO" ? "Evento" : "Post Evento"} ({tasks.length})</p>
+                  <p className="text-sm font-bold text-gray-600 mb-2">{cat === "PRE_EVENTO" ? "Pre Evento" : "Post Evento"} ({tasks.length})</p>
                   {renderTasks(tasks)}
                 </div>
               );

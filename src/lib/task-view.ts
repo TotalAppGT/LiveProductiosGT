@@ -1,8 +1,7 @@
 export function taskPhasePriority(t: { category?: string }): number {
   if (t.category === "PRE_EVENTO") return 0;
-  if (t.category === "EVENTO") return 1;
-  if (t.category === "POST_EVENTO") return 2;
-  return 3;
+  if (t.category === "POST_EVENTO") return 1;
+  return 2; // Actividades diarias (OTRO / resto)
 }
 
 export function orderTasksByDayHour(tasks: any[]): any[] {

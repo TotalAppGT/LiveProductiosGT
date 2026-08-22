@@ -859,32 +859,40 @@ export async function sendBihourlyReminders(): Promise<{
       // Las de HOY (por fecha o por día fijo de la semana) — mismo criterio que "tareas de hoy"
       const todayTasks = allPending.filter((t) => isTaskDueOnDate(t, todayStart));
       // Vencidas de otros días (no reprogramadas a hoy)
-      const overdueOtherDays = allPending.filter(
+      const overdueTasks = allPending.filter(
         (t) => t.dueDate && new Date(t.dueDate) < todayStart && !isTaskDueOnDate(t, todayStart)
-      ).length;
+      );
+      const overdueOtherDays = overdueTasks.length;
       const upcoming = allPending.length - todayTasks.length - overdueOtherDays;
 
       let digest = "";
       try {
         const { orderTasksByDayHour, formatTaskLine } = await import("@/lib/task-view");
+        // Primero las VENCIDAS, luego las de hoy
+        if (overdueTasks.length > 0) {
+          const od = orderTasksByDayHour(overdueTasks);
+          digest += `\n\n⚠️ *Vencidas (${od.length})*\n${od.slice(0, 8).map((t: any, i: number) => formatTaskLine(t, i + 1)).join("\n")}`;
+        }
         const ordered = orderTasksByDayHour(todayTasks);
         if (ordered.length > 0) {
-          digest = `\n\n${ordered.slice(0, 15).map((t: any, i: number) => formatTaskLine(t, i + 1)).join("\n")}`;
+          const start = overdueTasks.length > 0 ? Math.min(8, overdueTasks.length) + 1 : 1;
+          digest += `\n\n${ordered.slice(0, 15).map((t: any, i: number) => formatTaskLine(t, start + i)).join("\n")}`;
         }
       } catch {
         // silencioso
       }
 
       let message: string;
-      if (todayTasks.length > 0) {
-        message = `🔔 *Tus tareas de HOY*\n\nTienes ${todayTasks.length} tarea${todayTasks.length > 1 ? "s" : ""} para hoy`;
-        if (overdueOtherDays > 0) message += ` (${overdueOtherDays} vencida${overdueOtherDays > 1 ? "s" : ""} de otros días)`;
-        message += `.`;
+      if (todayTasks.length > 0 || overdueTasks.length > 0) {
+        message = `🔔 *Tus tareas*\n\n`;
+        if (overdueTasks.length > 0) {
+          message += `⚠️ Tienes ${overdueTasks.length} vencida${overdueTasks.length > 1 ? "s" : ""} que atender primero. `;
+        }
+        message += `${todayTasks.length} tarea${todayTasks.length === 1 ? "" : "s"} para hoy.`;
         if (digest) message += digest;
       } else {
         message = `🔔 *Tus tareas*\n\nNo tienes tareas programadas para HOY, pero tienes ${allPending.length} pendiente${allPending.length > 1 ? "s" : ""} en total`;
-        if (overdueOtherDays > 0) message += ` (${overdueOtherDays} vencida${overdueOtherDays > 1 ? "s" : ""} de otros días)`;
-        if (upcoming > 0) message += ` y ${upcoming} próxima${upcoming > 1 ? "s" : ""}`;
+        if (upcoming > 0) message += ` (${upcoming} próxima${upcoming > 1 ? "s" : ""})`;
         message += `.\n\n📅 Escribí *tareas* para ver toda la semana.`;
       }
       message += `\n\n⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.\n📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.`;
