@@ -6,8 +6,13 @@ import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate } from "@/lib/task-utils";
 import { sendLUNAUpdateBroadcast } from "@/lib/broadcast";
+import { runDataFix } from "@/lib/data-fix";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
+
+// Marcador: handleCommand ya envió su respuesta directamente (botones, etc.)
+// y el flujo principal NO debe re-enviar ni caer al chat IA.
+const COMMAND_SENT = "__SENT__";
 
 function normalizeGuatemalaDate(input: string): Date {
   const trimmed = input.trim();
@@ -430,7 +435,12 @@ async function formatTasksForUser(userId: string, period?: string) {
   }
   if (orderedForView.length > 0) saveTaskView(userId, orderedForView);
 
-  output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`tareas mes\` | \`ayuda\``;
+  // Si no hay ninguna tarea que mostrar
+  if (orderedForView.length === 0 && !hasFixed) {
+    return `👋 ¡Hola! Soy *LUNA* 🌙\n\nNo tienes tareas pendientes. ¡Todo al día! 🎉\n\n_Podés crear una: *crea tarea [qué] [día] [hora]*\nO ver la próxima semana: *tareas semana 2*_`;
+  }
+
+  output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas semana\` | \`tareas semana 2\` | \`ayuda\``;
   return output;
 }
 
@@ -1046,13 +1056,13 @@ async function handleCommand(
   // 🧭 Menú principal con botones interactivos
   if (cmd === "menu" || cmd === "menú" || cmd === "inicio" || cmd === "opciones") {
     if (fromNumber) {
-      await sendInteractiveButtons(fromNumber, `👋 *¡Hola ${user.name}!* Soy LUNA 🌙\n¿Qué querés hacer hoy?`, [
+      await sendInteractiveButtons(fromNumber, `👋 *¡Hola ${user.name}!*\nSoy *LUNA* 🌙 · Asistente de Live Productions\n\n¿Qué querés hacer hoy?`, [
         { id: "menu_reminder", title: "⏰ Recordatorio" },
         { id: "menu_task", title: "📝 Tarea" },
         { id: "menu_message", title: "💬 Mensaje" },
       ]);
     }
-    return null;
+    return COMMAND_SENT;
   }
 
   // Respuestas de botones del menú
@@ -1084,13 +1094,13 @@ async function handleCommand(
 
   if (command.trim() === "📋 Menú") {
     if (fromNumber) {
-      await sendInteractiveButtons(fromNumber, `👋 *¡Hola ${user.name}!* Soy *LUNA* 🌙 · Asistente de Live Productions\n¿Qué querés hacer hoy?`, [
+      await sendInteractiveButtons(fromNumber, `👋 *¡Hola ${user.name}!*\nSoy *LUNA* 🌙 · Asistente de Live Productions\n\n¿Qué querés hacer hoy?`, [
         { id: "menu_reminder", title: "⏰ Recordatorio" },
         { id: "menu_task", title: "📝 Tarea" },
         { id: "menu_message", title: "💬 Mensaje" },
       ]);
     }
-    return null;
+    return COMMAND_SENT;
   }
 
   if (cmd.startsWith("completar ") || cmd.startsWith("hecho ") || cmd.startsWith("completado ") || cmd.startsWith("hechos ") || cmd.startsWith("completadas ")) {
@@ -1494,7 +1504,7 @@ async function handleCommand(
         { id: "act_postpone", title: "⏰ Posponer" },
         { id: "act_menu", title: "📋 Menú" },
       ]);
-      return null;
+      return COMMAND_SENT;
     }
     return tasks;
   }
@@ -1915,6 +1925,16 @@ Escribí *menu* y tocá un botón (Recordatorio / Tarea / Mensaje).
     const result = await sendLUNAUpdateBroadcast(user.id);
     const meetingStr = result.meetingTime.toLocaleString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
     return `📢 *Broadcast enviado*\n\n✅ Mensaje entregado a ${result.sent} ${result.sent === 1 ? "persona" : "personas"}${result.failed > 0 ? ` (${result.failed} fallidos)` : ""}.\n⏰ Se crearon ${result.remindersCreated} recordatorios de la reunión.\n\n📅 *Reunión: ${meetingStr}*`;
+  }
+
+  // Corrección de datos (solo Dueño/Admin/Jefe): normaliza fijas, elimina duplicados,
+  // ancla variables y renombra la cuenta del administrador a "Daniel"
+  if (
+    (user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE") &&
+    /corregir\s+datos|arreglar\s+datos|limpiar\s+duplicados|fix\s+data|reparar\s+datos/.test(cmd)
+  ) {
+    const r = await runDataFix();
+    return `✅ *Corrección completada*\n\n• ${r.fixedNormalized} fijas sin fecha concreta\n• ${r.duplicatesDeleted} duplicados eliminados\n• ${r.variablesAnchored} variables ancladas a su día\n${r.renamedAdmin ? "• Cuenta renombrada a *Daniel* ✅" : ""}\n\n_Todo listo. Escribí *tareas* para ver el esquema._`;
   }
 
   return null;
@@ -2361,6 +2381,7 @@ function isKnownCommand(text: string): boolean {
     "mandale", "mándale", "manda", "envia", "enviale", "envíale", "mensaje",
     "eliminar", "borrar", "elimina", "borra", "limpiar", "recordatorios",
     "enviar actualizacion", "enviar actualización", "enviar detalle", "enviar mejoras", "enviar aviso", "broadcast", "enviar a todos",
+    "corregir datos", "arreglar datos", "limpiar duplicados", "reparar datos",
     "menu", "menú", "inicio", "opciones",
     "✅ completar", "⏰ posponer", "📋 menú", "⏰ recordatorio", "📝 tarea", "💬 mensaje",
   ];
@@ -2551,7 +2572,9 @@ export async function POST(request: NextRequest) {
 
                   const commandResponse = await handleCommand(text, user, fromNumber);
 
-                  if (commandResponse) {
+                  if (commandResponse === COMMAND_SENT) {
+                    // handleCommand ya envió su respuesta (botones/menú) — no duplicar
+                  } else if (commandResponse) {
                     const sendResult = await sendMessage(fromNumber, commandResponse);
 
                     await prisma.whatsAppMessage.create({

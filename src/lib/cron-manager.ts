@@ -543,10 +543,17 @@ async function endOfDayTaskCheck() {
 
     const [completedToday, pendingCount] = await Promise.all([
       prisma.task.count({ where: { status: "COMPLETADA", updatedAt: { gte: startOfDay } } }),
-      prisma.task.count({ where: { status: { in: ["PENDIENTE", "EN_PROCESO"] } } }),
+      prisma.task.count({ where: { status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } } }),
     ]);
 
-    const msg = `🌙 *Cierre de Jornada - 5:00 PM*\n\n✅ Completadas hoy: ${completedToday}\n📋 Pendientes: ${pendingCount}\n🔄 Reprogramadas: ${endResult.tasksRescheduled}\n📋 Usuarios con pendientes: ${endResult.usersWithPending}\n\nLas tareas no completadas fueron reprogramadas para mañana automáticamente.`;
+    const msg = `🌙 *Cierre de Jornada - 5:00 PM*
+
+✅ *Completadas hoy:* ${completedToday}
+🔄 *Pendientes de hoy pasadas a mañana:* ${endResult.tasksRescheduled}
+📋 *Pendientes en general (seguimiento):* ${pendingCount}
+
+Las tareas de hoy que no se completaron fueron reprogramadas automáticamente para mañana.`;
+
 
     const admins = await getAdminUsers();
     for (const admin of admins) {
