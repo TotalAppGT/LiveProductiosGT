@@ -93,18 +93,25 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
   <h2>🚀 CÓMO FUNCIONA (LEER PRIMERO)</h2>
   <p style="font-size:13px;margin:6px 0;">
     LUNA es tu asistente por WhatsApp. Cada tarea aparece <strong>numerada</strong> (ej: <code>1.</code>) y todas las
-    acciones se hacen con ese número. La semana laboral es de <strong>lunes a sábado</strong> (domingo descanso).
+    acciones se hacen con ese número. La semana va de <strong>lunes a domingo</strong>: la principal es de lunes a sábado
+    y el <strong>domingo</strong> se incluye al final si hay tareas ese día.
+    LUNA <strong>siempre sabe el día y la hora actual</strong> de Guatemala y lo usa para contestarte con exactitud.
   </p>
   <ul>
-    <li><strong>📌 Tareas Fijas (🔁)</strong> = actividades repetitivas que forman parte del esquema semanal (ej: "revisar chat de pagos"). Se repiten diaria o semanalmente y <strong>si no se completan el día, pasan automáticamente al siguiente</strong>, y así hasta que se cumplan o las modifiques.</li>
-    <li><strong>⚡ Tareas Variables</strong> = pendientes puntuales (ej: "llamar al proveedor el viernes"). Se quedan en su día y si no se hacen también pasan al siguiente.</li>
+    <li><strong>📌 Tareas Fijas (🔁)</strong> = repetitivas del esquema semanal.
+      <ul>
+        <li><strong>Diarias</strong>: aparecen todos los días; al completarlas vuelven al día siguiente.</li>
+        <li><strong>Semanales</strong>: aparecen su día (ej. "cada lunes") y <strong>persisten hasta el sábado</strong> si no las completás; al completarlas vuelven la próxima semana en su día. Las de <strong>domingo</strong> aparecen solo el domingo.</li>
+      </ul>
+    </li>
+    <li><strong>⚡ Tareas Variables</strong> = pendientes puntuales. Si las <strong>completás se borran</strong> (las volvés a agregar si las necesitás); si <strong>no</strong> las completás, siguen como <strong>prioridad día a día</strong> hasta que las hagas.</li>
     <li>Los <strong>recordatorios</strong> son avisos puntuales (te suenan 10 min antes y a la hora exacta).</li>
     <li>Las <strong>compras</strong> son pendientes de mercado/bodega que se marcan como "comprado".</li>
   </ul>
   <div class="example">✅ Ejemplo de la lista que te llega:
 📋 *Tus Tareas*
 
-📅 *ESTA SEMANA* (lunes 24 - sábado 29)
+📅 *ESTA SEMANA* (lunes 24 - domingo 30)
 
 📅 *lunes, 24 de agosto*
 1. 🔴 🔁 Revisar chat de pagos 📌 08:00 a. m.
@@ -140,9 +147,9 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
   </p>
   <div class="note">
     📌 <strong>Sobre las tareas fijas (esquema):</strong> las fijas semanales <strong>no tienen fecha concreta</strong>;
-    se repiten <strong>todos los días de la semana indicado</strong> (ej: "todos los viernes"). Por eso aparecen en
-    <code>tareas de hoy</code> solo el día que toca, y el esquema se consulta con <code>tareas</code> (bloque
-    "Actividades Fijas") o con <code>tareas viernes</code>. No se muestran con fechas futuras de otros meses.
+    aparecen su día de la semana (ej: "cada viernes") y <strong>persisten hasta el sábado</strong> si no se completan.
+    Las de <strong>domingo</strong> aparecen solo el domingo (domingo es opcional, al final de la semana).
+    Se consultan con <code>tareas</code> (bloque "Actividades Fijas") o con <code>tareas viernes</code>.
   </div>
   <div class="note">
     ⚡ <strong>Sobre las variables (Actividades diarias):</strong> son tareas de <strong>esta semana</strong>.
@@ -228,21 +235,27 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
 <!-- ══════════════════════════════════════════════ -->
 <div class="section">
   <h2>⏰ RECORDATORIOS</h2>
-  <h3>Para ti</h3>
+  <h3>Para TI (a vos mismo)</h3>
   <ul>
-    <li><code>recuérdame llamar a Juan a las 3pm</code></li>
-    <li><code>mándame un mensaje a las 8am mañana</code></li>
-    <li><code>mándame un mensaje a las 2pm para la reunión</code></li>
-    <li><code>avísame mañana a las 9am revisar bodega</code></li>
-    <li><code>notifícame el viernes a las 4pm enviar reporte</code></li>
-    <li><code>hazme un recordatorio para el 20 de agosto a las 9am</code></li>
+    <li><code>recuérdame llamar a Juan a las 3pm</code> → te avisa a <strong>vos</strong></li>
+    <li><code>mándame un mensaje a las 8am mañana</code> → a <strong>vos</strong></li>
+    <li><code>mándame un mensaje a las 2pm para la reunión</code> → a <strong>vos</strong></li>
+    <li><code>avísame mañana a las 9am revisar bodega</code> → a <strong>vos</strong></li>
+    <li><code>notifícame el viernes a las 4pm enviar reporte</code> → a <strong>vos</strong></li>
+    <li><code>hazme un recordatorio para el 20 de agosto a las 9am</code> → a <strong>vos</strong></li>
   </ul>
-  <h3>Para otra persona <span class="tag t-admin">ADMIN</span></h3>
+  <h3>Para OTRA PERSONA (le avisa a esa persona) <span class="tag t-admin">ADMIN</span></h3>
   <ul>
-    <li><code>recuédale a Diana llamar a proveedor a las 3pm</code></li>
-    <li><code>mándale un mensaje a Abel a las 2pm para la bodega</code></li>
-    <li><code>para Brenda recordatorio de cobros mañana 9am</code></li>
+    <li><code>recuérdale a Diana llamar a proveedor a las 3pm</code> → le avisa a <strong>Diana</strong></li>
+    <li><code>mándale un mensaje a Abel a las 2pm para la bodega</code> → le avisa a <strong>Abel</strong></li>
+    <li><code>para Brenda recordatorio de cobros mañana 9am</code> → le avisa a <strong>Brenda</strong></li>
   </ul>
+  <div class="note">
+    💡 <strong>Regla fácil:</strong> la palabra clave decide quién lo recibe.<br>
+    • <strong>recuérdame / mándame / avísame</strong> → para <strong>VOS</strong>.<br>
+    • <strong>recuérdale a [nombre] / mándale a [nombre] / para [nombre]</strong> → para esa <strong>persona</strong> (recibe notificación).<br>
+    • El nombre dentro de la frase (ej: "llamar a Juan") NO es quien recibe el recordatorio.
+  </div>
   <h3>Ver y eliminar recordatorios</h3>
   <ul>
     <li><code>recordatorios</code> → los de hoy (numerados)</li>
@@ -376,6 +389,15 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
 
 <!-- ══════════════════════════════════════════════ -->
 <div class="section">
+  <h2>🛠️ COMANDOS DE ADMINISTRACIÓN <span class="tag t-admin">ADMIN</span></h2>
+  <table>
+    <tr><td><code>corregir datos</code></td><td>Normaliza el esquema: quita fechas malas de fijas, elimina duplicados, ancla variables a su día y renombra la cuenta del administrador a <strong>Daniel</strong>. Ejecutalo una vez tras cada actualización importante.</td></tr>
+    <tr><td><code>enviar actualización al equipo</code> / <code>broadcast</code></td><td>Envía a todos los usuarios un mensaje con el detalle de las mejoras del sistema.</td></tr>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<div class="section">
   <h2>🧹 ELIMINACIÓN MASIVA</h2>
   <table>
     <tr><td><code>eliminar todo</code></td><td>Eliminar todas MIS tareas pendientes</td></tr>
@@ -496,6 +518,7 @@ Ej: `recuérdame llamar a Jorge mañana 9am`</div>
     <li><strong>Toma nota</strong>: si le contás algo que hay que hacer ("mañana tengo que llamar a X"), te ofrece agendarlo como tarea o recordatorio.</li>
     <li><strong>Ve patrones</strong>: si algo se pospone mucho, hay incumplimiento recurrente o accesos bajos, te lo señala con tacto y te sugiere un plan.</li>
     <li><strong>Pregunta si no entiende</strong>: si un día, hora o persona no está clara, te hace <strong>una</strong> pregunta corta para confirmar antes de agendar (ej: "¿mañana a las 9am o 3pm?").</li>
+    <li><strong>Sabe el día y la hora</strong>: LUNA conoce la fecha y hora actual de Guatemala y la usa para responder (ej: "hoy es viernes", "ahora son las 2pm").</li>
   </ul>
   <div class="note">
     💡 <strong>Ejemplo:</strong> si le escribís "el jueves llamo al proveedor", LUNA responderá algo como:

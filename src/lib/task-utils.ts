@@ -135,9 +135,9 @@ export function isTaskDueOnDate(
       const target = WEEKDAY_MAP[String(task.dayOfWeek).toUpperCase()];
       if (target !== undefined) {
         if (!task.dueDate) {
-          // Domingo = descanso. Las fijas de la semana laboral (lun-sab)
-          // persisten desde su día hasta el sábado.
-          if (target === 0) return false;
+          // Semana laboral principal = lun-sáb (las fijas persisten desde su día hasta el sábado).
+          // Domingo (descanso) se incluye al final: las fijas de domingo aparecen SOLO el domingo.
+          if (target === 0) return w.weekday === 0;
           return w.weekday !== 0 && w.weekday >= target;
         }
         return target === w.weekday;

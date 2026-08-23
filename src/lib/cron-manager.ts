@@ -84,10 +84,10 @@ async function morningBriefing() {
       const startOfToday = gtStartOfToday();
       const endOfToday = gtEndOfToday();
 
-      // Semana laboral: LUNES a SÁBADO (fecha de Guatemala)
+      // Semana: LUNES a DOMINGO (domingo al final, opcional). La principal es lun-sáb.
       const dayOfWeek = wNow.weekday; // 0=domingo
       const monday = new Date(startOfToday.getTime() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 24 * 60 * 60 * 1000);
-      const saturday = new Date(monday.getTime() + 5 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
+      const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
       const tasks = await prisma.task.findMany({
         where: {
@@ -115,11 +115,11 @@ async function morningBriefing() {
 
       // Organizar por semana (desde el lunes):
       // 1) Vencidas: tareas anteriores al lunes de esta semana (no completadas)
-      // 2) Esta semana: lunes → sábado (incluye hoy), ordenadas por día y hora
-      // 3) Próximas: después del sábado
       const overdue = tasks.filter((t) => t.dueDate && new Date(t.dueDate) < monday);
-      const thisWeek = tasks.filter((t) => t.dueDate && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= saturday);
-      const upcoming = tasks.filter((t) => t.dueDate && new Date(t.dueDate) > saturday);
+      // 2) Esta semana: lunes → domingo (incluye hoy), ordenadas por día y hora
+      // 3) Próximas: después del domingo
+      const thisWeek = tasks.filter((t) => t.dueDate && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= sunday);
+      const upcoming = tasks.filter((t) => t.dueDate && new Date(t.dueDate) > sunday);
 
       // Fijas recurrentes sin fecha concreta (el esquema): se muestran por día de la semana
       const DAY_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
@@ -156,7 +156,7 @@ async function morningBriefing() {
         taskLines += `⚠️ *Vencidas / No completadas (${overdue.length})*\n${groupTasksByDayText(orderTasksByDayHour(overdue))}\n\n`;
       }
       if (thisWeek.length > 0) {
-        taskLines += `📅 *Esta Semana — lunes ${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} a sábado ${saturday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} (${thisWeek.length})*\n${groupTasksByDayText(orderTasksByDayHour(thisWeek))}\n\n`;
+        taskLines += `📅 *Esta Semana — lunes ${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} a domingo ${sunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} (${thisWeek.length})*\n${groupTasksByDayText(orderTasksByDayHour(thisWeek))}\n\n`;
       }
       if (upcoming.length > 0) {
         taskLines += `📅 *Próximas semanas (${upcoming.length})*\n${groupTasksByDayText(orderTasksByDayHour(upcoming))}\n\n`;

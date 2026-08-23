@@ -320,17 +320,17 @@ async function formatTasksForUser(userId: string, period?: string) {
   const todayStart = gtStartOfToday();
   const todayEnd = gtEndOfToday();
 
-  // Semana laboral (LUNES a SÁBADO) en hora de Guatemala
+  // Semana: LUNES a DOMINGO (domingo al final, opcional). La principal es lun-sáb.
   const dayOfWeek = w.weekday; // 0=domingo
   const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   const monday = new Date(todayStart.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
-  const saturday = new Date(monday.getTime() + 5 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
+  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
   const nextMonday = new Date(monday.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const nextSaturday = new Date(saturday.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const nextSunday = new Date(sunday.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   const thirdMonday = new Date(monday.getTime() + 14 * 24 * 60 * 60 * 1000);
-  const thirdSaturday = new Date(saturday.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const thirdSunday = new Date(sunday.getTime() + 14 * 24 * 60 * 60 * 1000);
 
   const allTasks = await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
@@ -339,9 +339,9 @@ async function formatTasksForUser(userId: string, period?: string) {
   });
 
   const todayTasks = allTasks.filter(t => isTaskDueOnDate(t, todayStart));
-  const thisWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) > todayEnd && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= saturday);
-  const nextWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= nextMonday && new Date(t.dueDate) <= nextSaturday);
-  const thirdWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= thirdMonday && new Date(t.dueDate) <= thirdSaturday);
+  const thisWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) > todayEnd && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= sunday);
+  const nextWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= nextMonday && new Date(t.dueDate) <= nextSunday);
+  const thirdWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= thirdMonday && new Date(t.dueDate) <= thirdSunday);
 
   const fixedTasks = allTasks.filter(t => t.type === "FIJA");
   const dayNames = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
@@ -375,18 +375,18 @@ async function formatTasksForUser(userId: string, period?: string) {
     const weekAll = [...thisWeekTasks, ...todayTasks].filter((t, i, arr) => arr.indexOf(t) === i);
     if (weekAll.length === 0) {
       if (nextWeekTasks.length > 0) {
-        return `📅 *Esta semana no tienes tareas pendientes.* 🎉\n\nEstas son las de la *próxima semana* (${nextMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${nextSaturday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })}):\n${groupTasksByDay(orderTasksForDisplay(nextWeekTasks), 1)}`;
+        return `📅 *Esta semana no tienes tareas pendientes.* 🎉\n\nEstas son las de la *próxima semana* (${nextMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })}):\n${groupTasksByDay(orderTasksForDisplay(nextWeekTasks), 1)}`;
       }
       return "📅 No tienes tareas para esta semana. ¡Todo al día! 🎉";
     }
-    output = `📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })} - ${saturday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })})\n\n`;
+    output = `📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })})\n\n`;
     output += groupTasksByDay(weekAll);
     output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output;
   }
 
   if (period === "semana2") {
-    output = `📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })} - ${nextSaturday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })})\n\n`;
+    output = `📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })})\n\n`;
     if (nextWeekTasks.length > 0) output += groupTasksByDay(nextWeekTasks);
     output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output || "No hay tareas para la próxima semana.";
@@ -398,10 +398,10 @@ async function formatTasksForUser(userId: string, period?: string) {
   // Números continuos para que los comandos (#) coincidan con lo mostrado
   const thisWeekAll = [...todayTasks, ...thisWeekTasks].filter((t, i, arr) => arr.indexOf(t) === i);
   const weekBlocks: { label: string; tasks: any[] }[] = [];
-  if (thisWeekAll.length > 0) weekBlocks.push({ label: `ESTA SEMANA (${monday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${saturday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: thisWeekAll });
+  if (thisWeekAll.length > 0) weekBlocks.push({ label: `ESTA SEMANA (${monday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: thisWeekAll });
   else if (nextWeekTasks.length > 0) output += `⚠️ *No tienes tareas pendientes para esta semana.*\nEstas son las de la *próxima semana*:\n\n`;
-  if (nextWeekTasks.length > 0) weekBlocks.push({ label: `PRÓXIMA SEMANA (${nextMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${nextSaturday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: nextWeekTasks });
-  if (thirdWeekTasks.length > 0) weekBlocks.push({ label: `SIGUIENTE SEMANA (${thirdMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${thirdSaturday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: thirdWeekTasks });
+  if (nextWeekTasks.length > 0) weekBlocks.push({ label: `PRÓXIMA SEMANA (${nextMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: nextWeekTasks });
+  if (thirdWeekTasks.length > 0) weekBlocks.push({ label: `SIGUIENTE SEMANA (${thirdMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${thirdSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: thirdWeekTasks });
 
   const blocks: string[] = [];
   let runningNum = 1;
@@ -1329,7 +1329,7 @@ async function handleCommand(
     const dayOfWeek = w.weekday; // 0=domingo (fecha de Guatemala)
     const monday = new Date(today.getTime() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 24 * 60 * 60 * 1000);
     const nextMonday = new Date(monday.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const nextSaturday = new Date(nextMonday.getTime() + 5 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
+    const nextSunday = new Date(nextMonday.getTime() + 6 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
     const dayMap: Record<string, number> = {
       lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4, viernes: 5,
@@ -1349,7 +1349,7 @@ async function handleCommand(
     if (/la proxima semana|la semana que viene|la siguiente semana|proxima semana/i.test(cmd)) {
       title = "PRÓXIMA SEMANA";
       dateFrom = nextMonday;
-      dateTo = nextSaturday;
+      dateTo = nextSunday;
     }
     // 2) Pasado mañana
     else if (/pasado mañana|pasado manana/i.test(cmd)) {
@@ -1702,7 +1702,7 @@ async function handleCommand(
     const wNow = getGuatemalaWallClock();
     const mondayOffset = wNow.weekday === 0 ? 6 : wNow.weekday - 1;
     const monday = new Date(today.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
-    const endOfWeek = new Date(monday.getTime() + 5 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
+    const endOfWeek = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
     let where: any = { assignedToId: user.id, isCompleted: false };
     let title = "RECORDATORIOS DE HOY";
