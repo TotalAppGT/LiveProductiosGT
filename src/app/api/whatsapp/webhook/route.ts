@@ -1319,8 +1319,8 @@ async function handleCommand(
 
   // Consulta dinámica de tareas por fechas (lunes-sábado semana laboral)
   const dynamicTaskMatch =
-    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?(?:la proxima semana|la semana que viene|la siguiente semana|proxima semana|el proximo mes|el mes que viene|el siguiente mes|siguiente mes)/i.test(cmd) ||
-    /(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame|ver)\b.*?\b(pasado mañana|pasado manana|para mañana|para manana|mañana|manana|hoy|el lunes|lunes|el martes|martes|el miercoles|el miércoles|miercoles|miércoles|el jueves|jueves|el viernes|viernes|el sabado|el sábado|sabado|sábado|el domingo|domingo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|\d{1,2})\b/i.test(cmd) ||
+    /\b(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?(?:la proxima semana|la semana que viene|la siguiente semana|proxima semana|el proximo mes|el mes que viene|el siguiente mes|siguiente mes)/i.test(cmd) ||
+    /\b(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame|ver)\b.*?\b(pasado mañana|pasado manana|para mañana|para manana|mañana|manana|hoy|el lunes|lunes|el martes|martes|el miercoles|el miércoles|miercoles|miércoles|el jueves|jueves|el viernes|viernes|el sabado|el sábado|sabado|sábado|el domingo|domingo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|\d{1,2})\b/i.test(cmd) ||
     /\b(\d{1,2})\s*(de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(cmd);
 
   if (dynamicTaskMatch) {
