@@ -1301,6 +1301,37 @@ async function handleCommand(
     return tasks;
   }
 
+  // 📌 TODAS las actividades fijas (diarias/semanales) agrupadas por día
+  if (cmd === "tareas fijas" || cmd === "tareas fija" || cmd === "mis fijas" || cmd === "actividades fijas") {
+    const fixed = await prisma.task.findMany({
+      where: { assignedToId: user.id, type: "FIJA", status: { in: ["PENDIENTE", "EN_PROCESO"] } },
+      orderBy: [{ frequency: "asc" }, { priority: "desc" }],
+      take: 60,
+    });
+    if (fixed.length === 0) return "No tienes actividades fijas. ¡Todo al día! 🎉";
+    const DAY_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
+    const byDay: Record<string, any[]> = { DIARIA: [] };
+    for (const t of fixed) {
+      if (t.frequency === "DIARIA") byDay["DIARIA"].push(t);
+      else if (t.dayOfWeek) {
+        const k = String(t.dayOfWeek).toUpperCase();
+        (byDay[k] = byDay[k] || []).push(t);
+      }
+    }
+    let out = `📌 *Actividades Fijas (${fixed.length})*\n\n`;
+    if (byDay["DIARIA"].length > 0) {
+      out += `📅 *Todos los días (${byDay["DIARIA"].length})*\n${byDay["DIARIA"].map((t, i) => formatTaskLine(t, i + 1)).join("\n")}\n\n`;
+    }
+    let num = byDay["DIARIA"].length + 1;
+    for (const d of DAY_ORDER) {
+      if (byDay[d]?.length) {
+        out += `📅 *${d.charAt(0) + d.slice(1).toLowerCase()} (${byDay[d].length})*\n${byDay[d].map((t) => formatTaskLine(t, num++)).join("\n")}\n\n`;
+      }
+    }
+    out += `⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 posponer 1 → Posponer\n#3 transferir 1 a Diana → Transferir`;
+    return out.trim();
+  }
+
   const fixedDayMatch = cmd.match(/^fijas?\s+(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)$/i);
   if (fixedDayMatch) {
     const dayMap: Record<string, string> = {
