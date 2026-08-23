@@ -9,6 +9,9 @@ interface CronJob {
   schedule: { hour: number; minute: number };
   timezone: string;
   handler: () => Promise<void>;
+  // Los mensajes AUTOMÁTICOS (briefings, bihorarios, cierres, accesos) se
+  // desactivan el DOMINGO. Los recordatorios explícitos del usuario siguen.
+  skipOnSunday?: boolean;
 }
 
 interface JobState {
@@ -580,15 +583,15 @@ async function bihourlyReminder(hour: number) {
 }
 
 const jobs: CronJob[] = [
-  { name: "morningBriefing", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing },
-  { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck },
-  { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck },
-  { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck },
-  { name: "bihourly9", schedule: { hour: 9, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(9) },
-  { name: "bihourly11", schedule: { hour: 11, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(11) },
-  { name: "bihourly13", schedule: { hour: 13, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(13) },
-  { name: "bihourly15", schedule: { hour: 15, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(15) },
-  { name: "bihourly17", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(17) },
+  { name: "morningBriefing", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing, skipOnSunday: true },
+  { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck, skipOnSunday: true },
+  { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck, skipOnSunday: true },
+  { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck, skipOnSunday: true },
+  { name: "bihourly9", schedule: { hour: 9, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(9), skipOnSunday: true },
+  { name: "bihourly11", schedule: { hour: 11, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(11), skipOnSunday: true },
+  { name: "bihourly13", schedule: { hour: 13, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(13), skipOnSunday: true },
+  { name: "bihourly15", schedule: { hour: 15, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(15), skipOnSunday: true },
+  { name: "bihourly17", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(17), skipOnSunday: true },
 ];
 
 // Usar globalThis para que el cron sea UN SOLO singleton entre todas las instancias del módulo
@@ -621,6 +624,14 @@ async function runJobIfScheduled(job: CronJob) {
   if (state.lastRun && Date.now() - state.lastRun.getTime() < 10 * 60 * 1000) return;
 
   const w = getGuatemalaWallClock();
+
+  // DOMINGO: los mensajes automáticos están desactivados (solo corren los
+  // recordatorios/alertas/mensajes explícitos que pidió el usuario).
+  if (w.weekday === 0 && job.skipOnSunday) {
+    console.log(`[Cron] ${job.name}: domingo, mensaje automático desactivado.`);
+    return;
+  }
+
   const hourDiff = w.hour - job.schedule.hour;
 
   // Future jobs: skip. Past jobs beyond 1 hour: skip.
