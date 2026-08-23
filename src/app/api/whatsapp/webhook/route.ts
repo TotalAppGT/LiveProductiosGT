@@ -2354,7 +2354,7 @@ function suggestCommand(text: string): string | null {
   }
 
   if (/(tarea|tareas|pendiente)/.test(lower) && !/qué\s+tal|como\s+est[áa]s|hola|buenas|gracias/.test(lower)) {
-    return "📋 *Para ver tareas* escribí:\n\n• `tareas` → las de hoy\n• `tareas mañana` → las de mañana\n• `tareas semana` / `tareas mes`\n• `resumen` → todo junto\n\nEj: `tareas del lunes`, `tareas de la próxima semana`.";
+    return "📋 *Para ver tareas* escribí:\n\n• `tareas` → la semana actual\n• `tareas hoy` → solo hoy\n• `tareas mañana` → las de mañana\n• `tareas semana 2` → la próxima semana\n• `resumen` → todo junto\n\nEj: `tareas del lunes`, `tareas de la próxima semana`.";
   }
 
   if (/(a\s+las\s+\d|:\d{2}\s*(am|pm)|mañana\s+a\s+las|el\s+\d{1,2}\s+de)/.test(lower) && !/hola|qué\s+tal|gracias|buenas/.test(lower)) {

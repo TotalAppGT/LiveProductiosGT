@@ -135,7 +135,9 @@ export function isTaskDueOnDate(
       const target = WEEKDAY_MAP[String(task.dayOfWeek).toUpperCase()];
       if (target !== undefined) {
         if (!task.dueDate) {
-          // Sin fecha concreta: persiste durante la semana desde su día (domingo = descanso)
+          // Domingo = descanso. Las fijas de la semana laboral (lun-sab)
+          // persisten desde su día hasta el sábado.
+          if (target === 0) return false;
           return w.weekday !== 0 && w.weekday >= target;
         }
         return target === w.weekday;
