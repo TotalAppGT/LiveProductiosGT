@@ -444,6 +444,112 @@ async function formatTasksForUser(userId: string, period?: string) {
   return output;
 }
 
+// Vista del ESQUEMA semana a semana (como el sistema):
+// - Semana de LUNES a DOMINGO (hoy resaltado)
+// - Dentro de cada día: 🔁 Fijas → 🎪 Pre Evento → 🏁 Post Evento → 📌 Actividades diarias (con variables)
+// - Las tareas vencidas se muestran PRIMERO como prioridad
+async function formatTaskSchemeView(userId: string): Promise<string> {
+  const w = getGuatemalaWallClock();
+  const today = gtStartOfToday();
+
+  const tasks = await prisma.task.findMany({
+    where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
+    orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+    take: 200,
+  });
+
+  if (tasks.length === 0) {
+    return `👋 ¡Hola! Soy *LUNA* 🌙\n\nNo tienes tareas pendientes. ¡Todo al día! 🎉\n\n_Podés crear una: *crea tarea [qué] [día] [hora]*\nO ver la próxima semana: *tareas semana 2*_`;
+  }
+
+  const WEEK: Record<string, number> = { DOMINGO: 0, LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6 };
+
+  // Día "hogar" de cada tarea
+  const dayOf = (t: any): number | null => {
+    if (t.type === "FIJA" && t.dayOfWeek) {
+      const k = WEEK[String(t.dayOfWeek).toUpperCase()];
+      if (k !== undefined) return k;
+    }
+    if (t.type === "FIJA" && t.frequency === "DIARIA" && !t.dueDate) return w.weekday; // diarias → hoy
+    if (t.dueDate) return getGuatemalaWallClock(new Date(t.dueDate)).weekday;
+    return null;
+  };
+
+  const mondayOffset = w.weekday === 0 ? 6 : w.weekday - 1;
+  const monday = new Date(today.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
+
+  // Vencidas / prioridad (con fecha anterior a hoy)
+  const overdue = tasks.filter((t) => t.dueDate && new Date(t.dueDate) < today);
+  const rest = tasks.filter((t) => !(t.dueDate && new Date(t.dueDate) < today));
+
+  const byDay: Record<number, any[]> = {};
+  const noDay: any[] = [];
+  for (const t of rest) {
+    const d = dayOf(t);
+    if (d === null) { noDay.push(t); continue; }
+    (byDay[d] = byDay[d] || []).push(t);
+  }
+
+  let num = 1;
+  const displayed: any[] = [];
+  let out = `📋 *Tus Tareas*\n\n`;
+
+  if (overdue.length > 0) {
+    out += `⚠️ *Vencidas / Prioridad (${overdue.length})*\n`;
+    for (const t of orderTasksForDisplay(overdue)) {
+      out += `${formatTaskLine(t, num++)}\n`;
+      displayed.push(t);
+    }
+    out += `\n`;
+  }
+
+  // Lunes → domingo
+  const dayOrder = [1, 2, 3, 4, 5, 6, 0];
+  for (const wd of dayOrder) {
+    const list = byDay[wd];
+    if (!list || list.length === 0) continue;
+    const dayDate = new Date(monday.getTime() + ((wd + 6) % 7) * 24 * 60 * 60 * 1000);
+    const isToday = wd === w.weekday;
+    const label = dayDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
+    out += `${isToday ? "📌" : "📅"} *${label}*${isToday ? " — hoy*" : "*"}\n`;
+
+    const fijas = list.filter((t: any) => t.type === "FIJA");
+    const pre = list.filter((t: any) => t.category === "PRE_EVENTO" && t.type !== "FIJA");
+    const post = list.filter((t: any) => t.category === "POST_EVENTO" && t.type !== "FIJA");
+    const act = list.filter((t: any) => t.type !== "FIJA" && t.category !== "PRE_EVENTO" && t.category !== "POST_EVENTO");
+
+    const sections: [string, any[]][] = [
+      ["🔁 Fijas", fijas],
+      ["🎪 Pre Evento", pre],
+      ["🏁 Post Evento", post],
+      ["📌 Actividades diarias", act],
+    ];
+    for (const [secLabel, secTasks] of sections) {
+      if (secTasks.length === 0) continue;
+      out += `  ${secLabel} (${secTasks.length})\n`;
+      for (const t of orderTasksForDisplay(secTasks)) {
+        out += `  ${formatTaskLine(t, num++)}\n`;
+        displayed.push(t);
+      }
+    }
+    out += `\n`;
+  }
+
+  if (noDay.length > 0) {
+    out += `📅 *Sin día asignado*\n`;
+    for (const t of noDay) {
+      out += `${formatTaskLine(t, num++)}\n`;
+      displayed.push(t);
+    }
+    out += `\n`;
+  }
+
+  if (displayed.length > 0) saveTaskView(userId, displayed);
+
+  out += `⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas fijas\` | \`ayuda\``;
+  return out.trim();
+}
+
 function orderTasksForDisplay(tasks: any[]): any[] {
   return orderTasksByDayHour(tasks);
 }
@@ -1526,7 +1632,7 @@ async function handleCommand(
     /^(ver|mostrar|muestra|muéstrame|dame|consultar|listar|revisar)\s+(mis\s+)?tareas/.test(cmd) ||
     (cmd.includes("tarea") && !cmd.startsWith("tareas hoy") && !cmd.startsWith("tareas semana") && !cmd.includes("crea") && !cmd.includes("crear") && !cmd.includes("nueva") && !cmd.includes("asigna") && !cmd.includes("asignar") && !cmd.includes("agrega") && !cmd.includes("agregar") && !cmd.includes("ponle") && !cmd.includes("deja"))
   ) {
-    const tasks = await formatTasksForUser(user.id);
+    const tasks = await formatTaskSchemeView(user.id);
     if (!tasks) return `👋 *¡Hola ${user.name}!* Soy *LUNA* 🌙\n\nNo tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
     if (fromNumber) {
       await sendMessage(fromNumber, tasks);
