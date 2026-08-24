@@ -1454,13 +1454,18 @@ async function handleCommand(
     return `📌 *Actividades Fijas ${day}*\n\n${formatTaskList(tasks)}`;
   }
 
-  // Consulta dinámica de tareas por fechas (lunes-sábado semana laboral)
+  // Consulta dinámica de tareas por fechas (semana laboral)
   const dynamicTaskMatch =
     /\b(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame)\b.*?(?:la proxima semana|la semana que viene|la siguiente semana|proxima semana|el proximo mes|el mes que viene|el siguiente mes|siguiente mes)/i.test(cmd) ||
     /\b(?:tareas|mis tareas|ver tareas|que tengo|que hay|que tengo para|dame|ver)\b.*?\b(pasado mañana|pasado manana|para mañana|para manana|mañana|manana|hoy|el lunes|lunes|el martes|martes|el miercoles|el miércoles|miercoles|miércoles|el jueves|jueves|el viernes|viernes|el sabado|el sábado|sabado|sábado|el domingo|domingo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|\d{1,2})\b/i.test(cmd) ||
     /\b(\d{1,2})\s*(de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(cmd);
 
-  if (dynamicTaskMatch) {
+  // Si el usuario está CREANDO (recordatorio, tarea, mensaje, reunión, compra, aviso),
+  // no es una consulta: evitar que la consulta dinámica se lo trague.
+  const isCreateAction =
+    /^(recu[ée]rdame|recu[ée]rdale|m[aá]ndame|m[aá]ndale|crea|crear|asigna|asignar|agrega|agregar|nueva tarea|ponle|pon|hacer reunión|hacer reunion|hazme|h[aá]zme|ag[ée]ndame|av[íi]same|notif[íi]came|compra|comprar|env[íi]ame|env[íi]ale)/i.test(cmd);
+
+  if (dynamicTaskMatch && !isCreateAction) {
     const w = getGuatemalaWallClock();
     const today = gtStartOfToday(); // medianoche real de Guatemala
     const dayOfWeek = w.weekday; // 0=domingo (fecha de Guatemala)
@@ -1736,22 +1741,13 @@ async function handleCommand(
     const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
     const targetName = targetUser ? targetUser.name : "ti";
 
-    // Notificar a la persona asignada si no es el creador
-    if (targetUser && targetUser.id !== user.id) {
-      const to = targetUser.whatsappNumber || targetUser.phone;
-      if (to) {
-        const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
-        await sendMessage(
-          to,
-          `⏰ *Recordatorio asignado*\n\n${user.name} te dejó un recordatorio:\n*${parsed.title}*\n${parsed.description ? `📝 ${parsed.description}\n` : ""}📅 ${dateStr}\n\nTe avisaré 10 minutos antes y a la hora exacta.`
-        ).catch(() => {});
-      }
-    }
+    // NO se notifica al instante al asignado: el recordatorio avisará a su hora
+    // dentro del horario de notificación (desde las 7am).
 
     const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
 
     return targetUser && targetUser.id !== user.id
-      ? `⏰ Recordatorio creado para *${targetName}*: *${parsed.title}*\n📅 ${dateStr}\n🔔 Notificación enviada a *${targetName}*.\n_Te avisará 10 minutos antes y a la hora exacta._`
+      ? `⏰ Recordatorio creado para *${targetName}*: *${parsed.title}*\n📅 ${dateStr}\n🔔 Avisará a *${targetName}* a esa hora (dentro del horario de avisos).`
       : `⏰ Recordatorio creado para ti: *${parsed.title}*\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
   }
 
@@ -2343,17 +2339,10 @@ async function handleConversationStep(
     const targetName = targetUser ? targetUser.name : "ti";
     const dateStr = `${remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
 
-    if (targetUser && targetUser.id !== user.id) {
-      const to = targetUser.whatsappNumber || targetUser.phone;
-      if (to) {
-        await sendMessage(
-          to,
-          `⏰ *Recordatorio asignado*\n\n${user.name} te dejó un recordatorio:\n*${data.title}*\n📅 ${dateStr}\n\nTe avisaré 10 minutos antes y a la hora exacta.`
-        ).catch(() => {});
-      }
-      return `✅ Recordatorio creado para *${targetName}*: *${data.title}*\n📅 ${dateStr}\n🔔 Le avisé a *${targetName}*.`;
-    }
-    return `✅ Recordatorio creado para ti: *${data.title}*\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
+    // Sin notificación inmediata: el recordatorio avisará a su hora (desde las 7am).
+    return targetUser && targetUser.id !== user.id
+      ? `✅ Recordatorio creado para *${targetName}*: *${data.title}*\n📅 ${dateStr}\n🔔 Avisará a *${targetName}* a esa hora (dentro del horario de avisos).`
+      : `✅ Recordatorio creado para ti: *${data.title}*\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
   }
 
   // ── Wizard: Mensaje programado (botón 💬) ────────────────────────

@@ -12,6 +12,8 @@ interface CronJob {
   // Los mensajes AUTOMÁTICOS (briefings, bihorarios, cierres, accesos) se
   // desactivan el DOMINGO. Los recordatorios explícitos del usuario siguen.
   skipOnSunday?: boolean;
+  // Días de la semana (0=domingo ... 6=sábado) en los que NO corre este job.
+  skipWeekdays?: number[];
 }
 
 interface JobState {
@@ -587,11 +589,8 @@ const jobs: CronJob[] = [
   { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck, skipOnSunday: true },
   { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck, skipOnSunday: true },
   { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck, skipOnSunday: true },
-  { name: "bihourly9", schedule: { hour: 9, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(9), skipOnSunday: true },
   { name: "bihourly11", schedule: { hour: 11, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(11), skipOnSunday: true },
-  { name: "bihourly13", schedule: { hour: 13, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(13), skipOnSunday: true },
-  { name: "bihourly15", schedule: { hour: 15, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(15), skipOnSunday: true },
-  { name: "bihourly17", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(17), skipOnSunday: true },
+  { name: "bihourly14", schedule: { hour: 14, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(14), skipOnSunday: true, skipWeekdays: [6] },
 ];
 
 // Usar globalThis para que el cron sea UN SOLO singleton entre todas las instancias del módulo
@@ -629,6 +628,12 @@ async function runJobIfScheduled(job: CronJob) {
   // recordatorios/alertas/mensajes explícitos que pidió el usuario).
   if (w.weekday === 0 && job.skipOnSunday) {
     console.log(`[Cron] ${job.name}: domingo, mensaje automático desactivado.`);
+    return;
+  }
+
+  // Días específicos a saltar (ej: el 14h no corre sábado)
+  if (job.skipWeekdays?.includes(w.weekday)) {
+    console.log(`[Cron] ${job.name}: día ${w.weekday} desactivado.`);
     return;
   }
 

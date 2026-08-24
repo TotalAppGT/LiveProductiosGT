@@ -11,9 +11,14 @@ async function logActivity(
   details: string,
   userId: string = "system"
 ) {
-  await prisma.activity.create({
-    data: { userId, action, resource, resourceId, details },
-  });
+  try {
+    // "system" no es un usuario real; se registra con un id de usuario válido o se omite.
+    await prisma.activity.create({
+      data: { userId, action, resource, resourceId, details },
+    });
+  } catch (error) {
+    console.error(`[logActivity ${action}]`, error);
+  }
 }
 
 async function getAdmins() {
@@ -1013,6 +1018,11 @@ export async function fireDueReminders(): Promise<{ fired: number; advanced: num
   let advanced = 0;
   try {
     const now = new Date();
+    // Los recordatorios solo avisan dentro del horario de notificación:
+    // de 7:00 a.m. en adelante. Los de madrugada no suenan a esa hora;
+    // se envían cuando el reloj llegue a las 7:00 a.m.
+    const w = getGuatemalaWallClock(now);
+    if (w.hour < 7) return { fired: 0, advanced: 0 };
     const tenMinFromNow = new Date(now.getTime() + 10 * 60000);
 
     // 1) Advance notice: remindAt within next 10 minutes, not yet notified
