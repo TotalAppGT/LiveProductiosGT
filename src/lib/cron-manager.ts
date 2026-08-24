@@ -604,12 +604,15 @@ async function shouldRunJob(job: CronJob): Promise<boolean> {
   const now = new Date();
   const key = `cron:${job.name}:${w.year}-${String(w.month).padStart(2,'0')}-${String(w.day).padStart(2,'0')}-${job.schedule.hour}`;
   try {
+    // Chequea antes de crear para evitar el spam de errores P2002 (dedup silencioso)
+    const existing = await prisma.systemConfig.findUnique({ where: { key } });
+    if (existing) return false; // ya se ejecutó en esta hora
     await prisma.systemConfig.create({
       data: { key, value: now.toISOString(), description: `Last run of ${job.name}` },
     });
     return true;
-  } catch (e: any) {
-    if (e?.code === 'P2002') return false;
+  } catch (error) {
+    console.error(`[Cron] shouldRunJob ${job.name}:`, error);
     return false;
   }
 }
