@@ -108,23 +108,43 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
     <li>Los <strong>recordatorios</strong> son avisos puntuales (te suenan 10 min antes y a la hora exacta).</li>
     <li>Las <strong>compras</strong> son pendientes de mercado/bodega que se marcan como "comprado".</li>
   </ul>
-  <div class="example">✅ Ejemplo de la lista que te llega:
+  <div class="example">✅ Ejemplo de la lista que te llega con <code>tareas</code>:
 📋 *Tus Tareas*
 
-📅 *ESTA SEMANA* (lunes 24 - domingo 30)
+⚠️ *Vencidas / Prioridad (1)*
+1. 🔴 Pendiente de ayer
 
-📅 *lunes, 24 de agosto*
-1. 🔴 🔁 Revisar chat de pagos 📌 08:00 a. m.
-2. 🟡 Confirmar staff evento 📌 09:00 a. m.
-3. 🟢 Verificar caja chica 📌 11:00 a. m.
+📌 *lunes, 24 de agosto — hoy*
+  🔁 Fijas (2)
+    2. Revisar chat de pagos
+    3. Revisar caja chica
+  🎪 Pre Evento (1)
+    4. Confirmar staff
+  🏁 Post Evento
+  📌 Actividades diarias (1)
+    5. Llamar a Jorge (variable)
 
 📅 *martes, 25 de agosto*
-4. 🔴 Llamar a proveedor de luces 📌 10:00 a. m.
-...</div>
+  📌 Actividades diarias (1)
+    6. Cotización
+
+...
+⚡ Acciones (usa el #): *hecho 1*, *proceso 2*, *posponer 3*, *transferir 1 a Diana*</div>
   <div class="note">
     💡 <strong>Regla de oro:</strong> primero ves tus tareas (con <code>tareas</code>), LUNA te las numera,
     y luego usás esos números para <code>hecho 1</code>, <code>posponer 2</code>, etc.
   </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<div class="section">
+  <h2>📅 SEMANA Y HORARIOS DE LUNA</h2>
+  <table>
+    <tr><td>📅 <strong>Semana</strong></td><td>De <strong>lunes a domingo</strong>. La principal es lun-sáb; el domingo se agrega al final si hay tareas ese día.</td></tr>
+    <tr><td>🕖 <strong>Mensajes de tareas</strong></td><td><strong>Lun-Sáb:</strong> 7am y 11am · <strong>Lun-Vie:</strong> además 2pm. Domingo: silencioso.</td></tr>
+    <tr><td>⏰ <strong>Recordatorios</strong></td><td>Solo avisan <strong>desde las 7am</strong>. Un recordatorio de madrugada espera a las 7am. Al crearlo para alguien no se manda aviso inmediato; avisa a su hora.</td></tr>
+    <tr><td>🕐 <strong>Hora de Guatemala</strong></td><td>LUNA siempre sabe el <strong>día y la hora actual</strong> (UTC-6) y lo usa para responder con exactitud.</td></tr>
+  </table>
 </div>
 
 <!-- ══════════════════════════════════════════════ -->
@@ -142,8 +162,9 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
     <tr><td><code>fijas lunes</code> / <code>fija sábado</code></td><td>Actividades fijas de un día específico</td></tr>
   </table>
   <p style="font-size:12px;color:#666;">
-    Orden dentro de cada día: <strong>🎪 Pre Evento → 🏁 Post Evento → 📌 Actividades diarias</strong>, luego <strong>🔁 Fijas</strong>
-    antes que <strong>⚡ Variables</strong>, y de la hora más temprana a la más tarde.
+    <strong>En el chat</strong>, cada día se ordena así: 🔁 Fijas → 🎪 Pre Evento → 🏁 Post Evento → 📌 Actividades diarias
+    (con las ⚡ variables). En la <strong>web</strong> el orden es: 🎪 Pre → 🏁 Post → 📌 Actividades, con 🔁 Fijas primero
+    y ⚡ Variables después, todo por hora.
   </p>
   <div class="note">
     📌 <strong>Sobre las tareas fijas (esquema):</strong> las fijas semanales <strong>no tienen fecha concreta</strong>;
@@ -226,9 +247,9 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
   </ul>
 
   <p style="font-size:12px;color:#666;">
-    <strong>Fija (🔁)</strong> = se repite (diaria/semanal/mensual) y al completarla se regenera sola para su próximo día.
-    Si no se completa, <strong>pasa al día siguiente automáticamente</strong>. La semana cierra el sábado y continúa hasta
-    que la completes o la modifiques manualmente. <strong>Variable</strong> = tarea puntual.
+    <strong>Fija (🔁)</strong> = se repite: <strong>diaria</strong> aparece todos los días, <strong>semanal</strong> aparece
+    su día y persiste hasta el sábado; al completarla se regenera para la próxima semana. <strong>Variable (⚡)</strong> =
+    tarea puntual: al completarla se borra; si no se hace, sigue como prioridad día a día.
   </p>
 </div>
 
@@ -312,14 +333,6 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
       <tr><td style="border:1px solid #eee; padding:6px;"><code>hoy / mañana / pasado mañana</code></td><td style="border:1px solid #eee; padding:6px;">hoy a las 5pm</td><td style="border:1px solid #eee; padding:6px;">Hoy 5:00 PM</td></tr>
     </table>
     <p style="margin-top:6px;">⚠️ <strong>Importante:</strong> los minutos se redondean a 5 (8:07 → 8:05, 9:13 → 9:15). Si NO escribís hora, se usa la hora por defecto. Todo se guarda y se muestra en <strong>hora de Guatemala (UTC-6)</strong>, sin desfases.</p>
-  </div>
-
-<div class="note">
-    💡 <strong>Diferencia clave:</strong><br>
-    • "recuérdame / mándame / avísame" → para <strong>ti</strong><br>
-    • "recuérdale a [nombre] / mándale a [nombre] / para [nombre]" → para esa <strong>persona</strong> (recibe notificación)<br>
-    • El nombre dentro de la frase (ej: "llamar a Juan") NO es quien recibe el recordatorio.<br>
-    • Cada recordatorio genera además una tarea 📌 en el sistema para que no se pierda.
   </div>
 </div>
 
