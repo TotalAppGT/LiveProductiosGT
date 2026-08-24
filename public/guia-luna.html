@@ -253,8 +253,16 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
   <div class="note">
     💡 <strong>Regla fácil:</strong> la palabra clave decide quién lo recibe.<br>
     • <strong>recuérdame / mándame / avísame</strong> → para <strong>VOS</strong>.<br>
-    • <strong>recuérdale a [nombre] / mándale a [nombre] / para [nombre]</strong> → para esa <strong>persona</strong> (recibe notificación).<br>
-    • El nombre dentro de la frase (ej: "llamar a Juan") NO es quien recibe el recordatorio.
+    • <strong>recuérdale a [nombre] / mándale a [nombre] / para [nombre]</strong> → para esa <strong>persona</strong>.<br>
+    • El nombre dentro de la frase (ej: "llamar a Juan") NO es quien recibe el recordatorio.<br>
+    • 🔔 <strong>Sin aviso inmediato:</strong> al crear un recordatorio para otra persona no se le manda mensaje al momento;
+    se le avisa <strong>a la hora del recordatorio</strong> (desde las 7am).
+  </div>
+  <div class="note">
+    📅 <strong>Fechas específicas:</strong> LUNA entiende días y meses concretos.<br>
+    • <code>recuérdame el jueves 1 de octubre tener llamada</code> → recordatorio para el 1 de octubre.<br>
+    • <code>recuérdame el jueves de septiembre tener llamada</code> → el primer jueves de septiembre.<br>
+    • <code>recuérdame en 15 días pagar factura</code> / <code>en 2 semanas revisar bodega</code>.
   </div>
   <h3>Ver y eliminar recordatorios</h3>
   <ul>
@@ -458,31 +466,38 @@ LUNA: ✅ Recordatorio creado. Te avisaré 10 min antes y a la hora.</div>
 <div class="section">
   <h2>🔔 NOTIFICACIONES AUTOMÁTICAS (lunes a sábado)</h2>
   <table>
-    <tr><td>🕖 07:00</td><td><strong>Briefing matutino</strong>: vencidas, tareas de esta semana, próximas, + se reprograman solas las no hechas</td></tr>
-    <tr><td>🕘 09:00</td><td>Recordatorio: tus tareas de HOY (por hora)</td></tr>
-    <tr><td>🕚 11:00</td><td>Recordatorio: tus tareas de HOY</td></tr>
-    <tr><td>🕐 13:00</td><td>Recordatorio: tus tareas de HOY</td></tr>
-    <tr><td>🕒 15:00</td><td>Recordatorio: tus tareas de HOY</td></tr>
-    <tr><td>🕔 17:00</td><td>Recordatorio: tus tareas de HOY + cierre del día</td></tr>
-    <tr><td>⏰ <em>a la hora</em></td><td>Cada recordatorio suena 10 minutos antes y a la hora exacta</td></tr>
-    <tr><td>📋 <em>al momento</em></td><td>Cuando te asignan una tarea, recordatorio o compra, llega notificación inmediata</td></tr>
+    <tr><td>🕖 07:00</td><td><strong>Briefing matutino</strong>: vencidas + tareas del día, semana a semana (lunes a sábado)</td></tr>
+    <tr><td>🕚 11:00</td><td>Recordatorio: tus tareas de HOY (lunes a sábado)</td></tr>
+    <tr><td>🕑 14:00</td><td>Recordatorio: tus tareas de HOY (solo lunes a viernes)</td></tr>
+    <tr><td>⏰ <em>a la hora</em></td><td>Cada recordatorio suena 10 minutos antes y a la hora exacta, <strong>desde las 7am</strong></td></tr>
+    <tr><td>📋 <em>al momento</em></td><td>Cuando te asignan una <strong>tarea</strong> o compra, llega notificación inmediata</td></tr>
   </table>
   <div class="note">
-    🌙 <strong>Domingo = día silencioso:</strong> los mensajes automáticos (briefing, recordatorios bi-horarios, cierres)
-    <strong>no se envían el domingo</strong>. Si pedís o asignás un recordatorio explícito para el domingo a una hora,
-    ese <strong>sí</strong> se envía a la hora que indicaste.
+    🌙 <strong>Domingo = día silencioso:</strong> los mensajes automáticos (briefing, recordatorios de tareas, cierres)
+    <strong>no se envían el domingo</strong>.
   </div>
-  <div class="example">🔔 Ejemplo de mensaje de las 09:00:
-🔔 *Tus tareas de HOY*
+  <div class="note">
+    ⏰ <strong>Horario de recordatorios:</strong> los recordatorios (los que pedís vos o le asignás a alguien) solo avisan
+    <strong>desde las 7:00 a.m.</strong> en adelante. Si un recordatorio es de madrugada (ej. 5am), no suena a esa hora:
+    espera a las 7am. Tampoco se manda una notificación inmediata al crearlo; avisa a su hora.
+  </div>
+  <div class="example">🔔 Ejemplo de mensaje de las 11:00:
+🔔 *Tus tareas*
 
-Tienes 8 tareas pendientes hoy.
+⚠️ Tienes 2 vencidas que atender primero.
+3 tareas para hoy.
 
-1. 🔴 🔁 Revisar chat de pagos 📌 08:00 a. m.
-2. 🟡 Confirmar staff 📌 09:00 a. m.
-...
+⚠️ *Vencidas (2)*
+1. 🔴 Pendiente de ayer
 
-⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.
-📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.</div>
+📌 *lunes, 24 de agosto — hoy*
+  🔁 Fijas (2)
+    2. Revisar chat de pagos
+  🎪 Pre Evento (1)
+    3. Confirmar staff
+
+⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3*), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.
+📅 Escribí *tareas* para ver toda la semana.</div>
 </div>
 
 <!-- ══════════════════════════════════════════════ -->
@@ -548,14 +563,35 @@ Ej: `recuérdame llamar a Jorge mañana 9am`</div>
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════ -->
+<div class="section">
+  <h2>✅ VERIFICACIÓN RÁPIDA (para probar LUNA)</h2>
+  <table>
+    <tr><td>1</td><td><code>menu</code> → aparecen 3 botones (Recordatorio / Tarea / Mensaje)</td></tr>
+    <tr><td>2</td><td><code>tareas</code> → esquema por día: 🔁 Fijas → 🎪 Pre → 🏁 Post → 📌 Actividades diarias + vencidas primero</td></tr>
+    <tr><td>3</td><td><code>recuérdame llamar a Jorge mañana 9am</code> → crea recordatorio para <strong>vos</strong></td></tr>
+    <tr><td>4</td><td><code>recuérdame el jueves 1 de octubre tener llamada</code> → crea recordatorio (no consulta)</td></tr>
+    <tr><td>5</td><td><code>recuérdale a Diana revisar cotizaciones el viernes 3pm</code> → crea recordatorio para Diana (le avisará a esa hora)</td></tr>
+    <tr><td>6</td><td><code>hecho 1</code> / <code>hecho 1 2 3</code> → completa tarea(s) numeradas</td></tr>
+    <tr><td>7</td><td><code>crea tarea revisar cotizaciones viernes 3pm</code> → crea tarea</td></tr>
+    <tr><td>8</td><td><code>tareas mañana</code> / <code>tareas del lunes</code> / <code>tareas 25 agosto</code> → consultas por fecha</td></tr>
+    <tr><td>9</td><td><code>compra pilas AA para Abel mañana</code> / <code>hacer reunión con Diana y Abel mañana 8am</code></td></tr>
+    <tr><td>10</td><td><code>ayuda</code> → menú completo de comandos</td></tr>
+  </table>
+  <div class="note">
+    ⏰ <strong>Recordá:</strong> los recordatorios solo avisan <strong>desde las 7am</strong>. Si ponés uno para las 5am,
+    no suena a esa hora: espera a las 7am.
+  </div>
+</div>
+
 <div class="tip">
   💡 <strong>Tips rápidos:</strong><br>
   • Cada tarea sale numerada; usá el número para las acciones. Para completar varias: <code>hecho 1 2 3</code>.<br>
   • Las tareas pueden llevar hora o solo fecha (sin horario).<br>
-  • Las tareas no hechas <strong>pasan solas al día siguiente</strong> hasta completarse (la semana cierra sábado).<br>
-  • Si asignás algo a alguien, esa persona recibe notificación inmediata.<br>
+  • Las <strong>variables</strong> no hechas pasan al día siguiente como prioridad hasta completarlas; las <strong>fijas</strong> persisten su semana.<br>
+  • Al asignar una <strong>tarea</strong> a alguien, esa persona recibe notificación inmediata (los recordatorios avisan a su hora).<br>
   • En la web: vista Excel con + para insertar filas, ↑↓ para reordenar, ✏️ para editar y filtros por fase/tipo.<br>
-  • Si no sabés qué escribir, escribí <code>ayuda</code>.
+  • Si no sabés qué escribir, escribí <code>ayuda</code> o <code>menu</code>.
 </div>
 
 <div class="footer">Documento generado automáticamente · Live Productions GT · Guía de uso de LUNA</div>
