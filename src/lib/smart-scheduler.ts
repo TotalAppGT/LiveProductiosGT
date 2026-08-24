@@ -859,7 +859,22 @@ export async function sendBihourlyReminders(): Promise<{
         take: 200,
       });
 
-      if (allPending.length === 0) continue;
+      if (allPending.length === 0) {
+        // Aunque no tenga tareas, se le avisa (así el usuario sabe que LUNA está activa)
+        const emptyMsg = `🔔 *Tus tareas*\n\n✅ No tienes tareas pendientes. ¡Todo al día! 🎉\n\n📅 Escribí *tareas* para ver todo, o *crea tarea [qué] [día] [hora]* para agregar una.`;
+        await sendMessage(to, emptyMsg).catch(() => {});
+        await prisma.whatsAppMessage.create({
+          data: {
+            userId: user.id,
+            toNumber: to,
+            message: `[BIHOURLY] ${emptyMsg}`,
+            type: "BIHOURLY_REMINDER",
+            status: "SENT",
+          },
+        });
+        usersReminded++;
+        continue;
+      }
 
       // Las de HOY (por fecha o por día fijo de la semana) — mismo criterio que "tareas de hoy"
       const todayTasks = allPending.filter((t) => isTaskDueOnDate(t, todayStart));

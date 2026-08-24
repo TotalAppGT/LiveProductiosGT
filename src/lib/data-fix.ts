@@ -7,6 +7,8 @@ export interface DataFixResult {
   variablesAnchored: number;
   renamedAdmin: boolean;
   adminName: string;
+  adminPendingTasks: number;
+  adminWhatsapp: string | null;
 }
 
 // Corrección de datos existentes desde la raíz:
@@ -84,12 +86,18 @@ export async function runDataFix(): Promise<DataFixResult> {
     },
   });
   let renamed = false;
+  let adminPendingTasks = 0;
   if (adminUser && adminUser.name !== "Daniel") {
     await prisma.user.update({
       where: { id: adminUser.id },
       data: { name: "Daniel" },
     });
     renamed = true;
+  }
+  if (adminUser) {
+    adminPendingTasks = await prisma.task.count({
+      where: { assignedToId: adminUser.id, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
+    });
   }
 
   return {
@@ -98,5 +106,7 @@ export async function runDataFix(): Promise<DataFixResult> {
     variablesAnchored: anchored,
     renamedAdmin: renamed,
     adminName: adminUser?.name || "no encontrado",
+    adminPendingTasks,
+    adminWhatsapp: adminUser?.whatsappNumber || adminUser?.phone || null,
   };
 }
