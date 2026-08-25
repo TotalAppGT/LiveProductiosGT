@@ -1167,8 +1167,8 @@ async function createReminderFromText(
   const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
 
   return targetUser && targetUser.id !== user.id
-    ? `⏰ *Recordatorio creado para ${targetName}*\n📌 ${parsed.title}\n📅 ${dateStr}\n🔔 Le avisará a esa hora (sin aviso inmediato).`
-    : `⏰ *Recordatorio creado*\n📌 ${parsed.title}\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
+    ? `✅ *Todo listo — Recordatorio confirmado*\n\n📌 ${parsed.title}\n👤 Para: *${targetName}*\n📅 ${dateStr}\n🔔 Le avisará 10 minutos antes y a la hora exacta.`
+    : `✅ *Todo listo — Recordatorio confirmado*\n\n📌 ${parsed.title}\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
 }
 
 async function handleCommand(
@@ -2182,23 +2182,23 @@ async function handleConversationStep(
 
   if (conv.state === "task_create_title") {
     setConversation(fromNumber, "task_create_person", { title: text });
-    return `📝 *Nueva Tarea* - Paso 2/5\n¿Para quién es la tarea? (Ej: Diana, Jorge, Abel...)\nO escribe *para mi* si es para ti.`;
+    return `📝 *Nueva Tarea* - Paso 2/4\n¿Para quién es la tarea? (Ej: Diana, Jorge, Abel...)\nO escribe *para mi* si es para ti.`;
   }
 
   if (conv.state === "task_create_person") {
     const assignToName = /^para\s+mi$/i.test(cmdLower) ? user.name : text;
     setConversation(fromNumber, "task_create_date", { ...conv.data, assignToName });
-    return `📝 *Nueva Tarea* - Paso 3/5\n¿Para qué fecha? (Ej: *mañana*, *viernes*, *lunes próximo*)\n_La hora por defecto será 9:00 AM._`;
+    return `📝 *Nueva Tarea* - Paso 3/4\n¿Para qué fecha? (Ej: *mañana*, *viernes*, *lunes próximo*)\n_La hora por defecto será 9:00 AM._`;
   }
 
   if (conv.state === "task_create_date") {
     const now = new Date();
     const date = parseRelativeDate(text, now);
     if (!date) {
-      return "No entendí la fecha. Usa: *mañana*, *viernes*, *lunes próximo*, *el 15 de agosto*, etc.\n\n📝 *Nueva Tarea* - Paso 3/5\n¿Para qué fecha?";
+      return "No entendí la fecha. Usa: *mañana*, *viernes*, *lunes próximo*, *el 15 de agosto*, etc.\n\n📝 *Nueva Tarea* - Paso 3/4\n¿Para qué fecha?";
     }
     setConversation(fromNumber, "task_create_time", { ...conv.data, dueDate: date.toISOString() });
-    return `📝 *Nueva Tarea* - Paso 4/5\n¿A qué hora? (Ej: *9am*, *3pm*, *en la tarde*)\nO responde *default* para 9:00 AM.`;
+    return `📝 *Nueva Tarea* - Paso 4/4\n¿A qué hora? (Ej: *9am*, *3pm*, *en la tarde*)\nO responde *default* para 9:00 AM.`;
   }
 
   if (conv.state === "task_create_time") {
@@ -2207,17 +2207,60 @@ async function handleConversationStep(
       time = { hours: 9, minutes: 0 };
     }
     if (!time) {
-      return "No entendí la hora. Usa: *9am*, *3pm*, *en la mañana*, *en la tarde*, *15:00*, o escribe *default*.\n\n📝 *Nueva Tarea* - Paso 4/5\n¿A qué hora?";
+      return "No entendí la hora. Usa: *9am*, *3pm*, *en la mañana*, *en la tarde*, *15:00*, o escribe *default*.\n\n📝 *Nueva Tarea* - Paso 4/4\n¿A qué hora?";
     }
 
     const dueDate = applyGuatemalaTime(new Date(conv.data.dueDate), time.hours, time.minutes);
+    const data = conv.data;
+    conversations.delete(fromNumber);
 
-    setConversation(fromNumber, "task_create_priority", {
-      ...conv.data,
-      dueDate: dueDate.toISOString(),
-      timeSet: true,
+    // Prioridad: por defecto MEDIA (las prioridades casi no se usan).
+    // Solo se usa si el título o la respuesta lo dice ("urgente", "alta", "baja").
+    let priority: string = "MEDIA";
+    const joined = `${data.title} ${text}`.toLowerCase();
+    if (/\b(urgente|urgentisimo)\b/.test(joined)) priority = "URGENTE";
+    else if (/\balta\b|\bimportante\b/.test(joined)) priority = "ALTA";
+    else if (/\bbaja\b/.test(joined)) priority = "BAJA";
+
+    let assignToId: string | undefined;
+    if (data.assignToName && data.assignToName !== user.name) {
+      const target = await prisma.user.findFirst({
+        where: { name: { contains: data.assignToName, mode: "insensitive" }, active: true },
+      });
+      assignToId = target?.id;
+    }
+    if (!assignToId) assignToId = user.id;
+
+    const task = await prisma.task.create({
+      data: {
+        title: data.title,
+        description: "",
+        assignedToId: assignToId,
+        assignedById: user.id,
+        dueDate,
+        priority: priority as "BAJA" | "MEDIA" | "ALTA" | "URGENTE",
+        category: "OTRO",
+        type: "DINAMICA",
+        frequency: "DIARIA",
+        status: "PENDIENTE",
+      },
     });
-    return `📝 *Nueva Tarea* - Paso 5/5\n¿Prioridad? (ALTA, MEDIA, BAJA)\n_Default: MEDIA_\n\nResponde la prioridad o *crear* para usar MEDIA.`;
+
+    const targetUser = assignToId !== user.id ? await prisma.user.findUnique({ where: { id: assignToId } }) : null;
+    const targetName = targetUser ? targetUser.name : user.name;
+    const dateStr = `${dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+
+    if (targetUser && targetUser.id !== user.id) {
+      const to = targetUser.whatsappNumber || targetUser.phone;
+      if (to) {
+        await sendMessage(
+          to,
+          `📋 *Nueva Tarea Asignada*\n\n*${data.title}*\n👤 Asignada por: ${user.name}\n📅 ${dateStr}\n\nEscribí *tareas* para verlas todas.`
+        ).catch(() => {});
+      }
+    }
+
+    return `✅ Tarea creada para *${targetName}*: "${data.title}"\n📅 ${dateStr}\n🔔 ${targetUser && targetUser.id !== user.id ? `Notificación enviada a *${targetName}*` : "Todo listo"}`;
   }
 
   if (conv.state === "task_create_priority") {
@@ -2321,8 +2364,8 @@ async function handleConversationStep(
 
     // Sin notificación inmediata: el recordatorio avisará a su hora (desde las 7am).
     return targetUser && targetUser.id !== user.id
-      ? `✅ Recordatorio creado para *${targetName}*: *${data.title}*\n📅 ${dateStr}\n🔔 Avisará a *${targetName}* a esa hora (dentro del horario de avisos).`
-      : `✅ Recordatorio creado para ti: *${data.title}*\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
+      ? `✅ *Todo listo — Recordatorio confirmado*\n\n📌 ${data.title}\n👤 Para: *${targetName}*\n📅 ${dateStr}\n🔔 Le avisará 10 minutos antes y a la hora exacta.`
+      : `✅ *Todo listo — Recordatorio confirmado*\n\n📌 ${data.title}\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
   }
 
   // ── Wizard: Mensaje programado (botón 💬) ────────────────────────
