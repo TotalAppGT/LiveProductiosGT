@@ -94,14 +94,14 @@ async function morningBriefing() {
       const monday = new Date(startOfToday.getTime() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 24 * 60 * 60 * 1000);
       const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
 
-      const tasks = await prisma.task.findMany({
+      const tasks = (await prisma.task.findMany({
         where: {
           assignedToId: user.id,
           status: { in: ["PENDIENTE", "EN_PROCESO"] },
         },
         orderBy: [{ dueDate: "asc" }],
         take: 100,
-      });
+      })).filter((t) => !t.title.startsWith("🔔"));
 
       const events = await prisma.event.findMany({
         where: {

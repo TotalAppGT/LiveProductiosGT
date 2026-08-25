@@ -195,13 +195,13 @@ export async function carryOverUncompletedTasks() {
   // Mover a HOY todas las tareas vencidas no completadas (siguen corriendo hasta que se hagan)
   const today = guatemalaToday();
 
-  const overdue = await prisma.task.findMany({
+  const overdue = (await prisma.task.findMany({
     where: {
       dueDate: { lt: today },
       status: { in: ["PENDIENTE", "EN_PROCESO"] },
       OR: [{ type: "DINAMICA" }, { type: "FIJA" }],
     },
-  });
+  })).filter((t) => !t.title.startsWith("🔔")); // los recordatorios no son tareas
 
   let carried = 0;
   for (const task of overdue) {

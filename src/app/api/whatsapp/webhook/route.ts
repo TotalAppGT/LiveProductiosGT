@@ -332,11 +332,11 @@ async function formatTasksForUser(userId: string, period?: string) {
   const thirdMonday = new Date(monday.getTime() + 14 * 24 * 60 * 60 * 1000);
   const thirdSunday = new Date(sunday.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-  const allTasks = await prisma.task.findMany({
+  const allTasks = (await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
     take: 200,
-  });
+  })).filter((t) => !t.title.startsWith("🔔"));
 
   const todayTasks = allTasks.filter(t => isTaskDueOnDate(t, todayStart));
   const thisWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) > todayEnd && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= sunday);
@@ -452,11 +452,11 @@ async function formatTaskSchemeView(userId: string): Promise<string> {
   const w = getGuatemalaWallClock();
   const today = gtStartOfToday();
 
-  const tasks = await prisma.task.findMany({
+  const tasks = (await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
     take: 200,
-  });
+  })).filter((t) => !t.title.startsWith("🔔")); // recordatorios no son tareas
 
   if (tasks.length === 0) {
     return `👋 ¡Hola! Soy *LUNA* 🌙\n\nNo tienes tareas pendientes. ¡Todo al día! 🎉\n\n_Podés crear una: *crea tarea [qué] [día] [hora]*\nO ver la próxima semana: *tareas semana 2*_`;
@@ -768,11 +768,12 @@ async function formatEventsForUser(userId: string) {
 }
 
 async function getPendingTasks(userId: string) {
-  return prisma.task.findMany({
+  const tasks = await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
     take: 30,
   });
+  return tasks.filter((t) => !t.title.startsWith("🔔"));
 }
 
 // Guardar la lista que el usuario vio por última vez para que los comandos por # funcionen bien
@@ -786,7 +787,7 @@ function saveTaskView(userId: string, tasks: { id: string }[]) {
 async function getOrderedTaskDigest(userId: string): Promise<string> {
   const today = gtStartOfToday();
   const end = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
-  const tasks = await prisma.task.findMany({
+  const tasks = (await prisma.task.findMany({
     where: {
       assignedToId: userId,
       status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
@@ -794,7 +795,7 @@ async function getOrderedTaskDigest(userId: string): Promise<string> {
     },
     orderBy: { dueDate: "asc" },
     take: 15,
-  });
+  })).filter((t) => !t.title.startsWith("🔔"));
   if (tasks.length === 0) return "";
   return formatTaskDigest(tasks);
 }
@@ -1115,7 +1116,7 @@ async function handleMeetingCommand(cmd: string, user: { id: string; name: strin
 
   const created: string[] = [];
   for (const target of targets) {
-    // Recordatorio para cada involucrado
+    // Recordatorio para cada involucrado (independiente de las tareas)
     await prisma.reminder.create({
       data: {
         title,
@@ -1123,20 +1124,6 @@ async function handleMeetingCommand(cmd: string, user: { id: string; name: strin
         remindAt: meetDate,
         createdById: user.id,
         assignedToId: target.id,
-      },
-    });
-    await prisma.task.create({
-      data: {
-        title: `🔔 ${title}`,
-        description: `Reunión agendada por ${user.name} para ${dateStr}.`,
-        assignedToId: target.id,
-        assignedById: user.id,
-        dueDate: meetDate,
-        priority: "ALTA",
-        category: "OTRO",
-        type: "DINAMICA",
-        frequency: "DIARIA",
-        status: "PENDIENTE",
       },
     });
     // Notificar a cada persona
@@ -1150,6 +1137,38 @@ async function handleMeetingCommand(cmd: string, user: { id: string; name: strin
   }
 
   return `📅 *Reunión agendada*\n\n${title}\n🕐 ${dateStr}\n\n👥 Involucrados (${created.length}): ${created.join(", ")}\n🔔 Se les envió notificación a cada uno.\n_Te avisaré a todos 10 minutos antes._`;
+}
+
+// ⏰ CREAR RECORDATORIO (independiente de tareas y reuniones)
+// Los recordatorios son avisos puntuales aparte: NO generan tarea 🔔 y NO notifican
+// al instante (el aviso sale a la hora, dentro del horario de notificación desde las 7am).
+async function createReminderFromText(
+  text: string,
+  user: { id: string; name: string }
+): Promise<string> {
+  const parsed = await parseReminderFromText(text, user);
+  if (!parsed || !parsed.remindAt) {
+    return "🤔 No pude entender la fecha/hora. Ejemplos:\n• *recordatorio para Diana revisar cotizaciones el viernes 3pm*\n• *recuérdame llamar a Juan mañana a las 3pm*\n• *recordatorio Jorge reunión con Tania el 8 a las 7pm*";
+  }
+
+  await prisma.reminder.create({
+    data: {
+      title: parsed.title,
+      description: parsed.description || "",
+      remindAt: parsed.remindAt,
+      createdById: user.id,
+      assignedToId: parsed.assignToId || user.id,
+    },
+  });
+
+  const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
+  const targetName = targetUser ? targetUser.name : "ti";
+
+  const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
+
+  return targetUser && targetUser.id !== user.id
+    ? `⏰ *Recordatorio creado para ${targetName}*\n📌 ${parsed.title}\n📅 ${dateStr}\n🔔 Le avisará a esa hora (sin aviso inmediato).`
+    : `⏰ *Recordatorio creado*\n📌 ${parsed.title}\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
 }
 
 async function handleCommand(
@@ -1207,6 +1226,18 @@ async function handleCommand(
       ]);
     }
     return COMMAND_SENT;
+  }
+
+  // ⏰ RECORDATORIOS tienen PRIORIDAD: "recordatorio"/"recuérdame"/"recuérdale" siempre
+  // crean un RECORDATORIO (separado de tareas y reuniones), aunque el texto mencione
+  // "reunión", "tarea", "compra", etc. Solo "recordatorios" (plural) = ver la lista.
+  const reminderCreateIntent =
+    /(^|\s)(recu[ée]rdame|recu[ée]rdale|recordar|av[íi]same|notif[íi]came|m[aá]ndame\s+un\s+recordatorio|m[aá]ndale\s+un\s+recordatorio)\b/i.test(command) ||
+    (/\brecordatorio\b/i.test(command) &&
+      !/^(eliminar|borrar|ver|mis)\s+recordatorio/i.test(command) &&
+      !/^recordatorios\b/.test(command));
+  if (reminderCreateIntent) {
+    return await createReminderFromText(cmd, user);
   }
 
   if (cmd.startsWith("completar ") || cmd.startsWith("hecho ") || cmd.startsWith("completado ") || cmd.startsWith("hechos ") || cmd.startsWith("completadas ")) {
@@ -1573,7 +1604,7 @@ async function handleCommand(
       return "No entendí bien la fecha. Prueba: *tareas para mañana*, *tareas del lunes*, *tareas de la próxima semana*";
     }
 
-    const tasks = await prisma.task.findMany({
+    const tasks = (await prisma.task.findMany({
       where: {
         assignedToId: user.id,
         status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
@@ -1586,7 +1617,7 @@ async function handleCommand(
       },
       orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
       take: 20,
-    });
+    })).filter((t) => !t.title.startsWith("🔔"));
 
     if (tasks.length === 0) {
       return `${user.name}, no tienes tareas para *${title}*. ¡Bien! 🎉`;
@@ -1709,46 +1740,8 @@ async function handleCommand(
       /(avisame|avisame|notifícame|notificame|avísame|avísame|av[íi]same)\b/i.test(cmd) ||
       /\b(ponme|pon|manda|mandame|env[íi]a|env[íi]ame)\s+(una|un)\s+(alerta|aviso|recordatorio|mensaje)\b/i.test(cmd)) &&
       !/\b(masivo|a los que no han completado|a todos)\b/.test(cmd)) {
-    const parsed = await parseReminderFromText(cmd, user);
-    if (!parsed) return "No pude entender la fecha/hora. Ejemplo: *recuérdame llamar a Juan mañana a las 3pm*";
-
-    const reminder = await prisma.reminder.create({
-      data: {
-        title: parsed.title,
-        description: parsed.description || "",
-        remindAt: parsed.remindAt,
-        createdById: user.id,
-        assignedToId: parsed.assignToId || user.id,
-      },
-    });
-
-    // Also create as a task so it appears in the system
-    await prisma.task.create({
-      data: {
-        title: `🔔 ${parsed.title}`,
-        description: parsed.description || `Recordatorio programado para ${parsed.remindAt.toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`,
-        assignedToId: parsed.assignToId || user.id,
-        assignedById: user.id,
-        dueDate: parsed.remindAt,
-        priority: "ALTA",
-        category: "OTRO",
-        type: "DINAMICA",
-        frequency: "DIARIA",
-        status: "PENDIENTE",
-      },
-    });
-
-    const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
-    const targetName = targetUser ? targetUser.name : "ti";
-
-    // NO se notifica al instante al asignado: el recordatorio avisará a su hora
-    // dentro del horario de notificación (desde las 7am).
-
-    const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
-
-    return targetUser && targetUser.id !== user.id
-      ? `⏰ Recordatorio creado para *${targetName}*: *${parsed.title}*\n📅 ${dateStr}\n🔔 Avisará a *${targetName}* a esa hora (dentro del horario de avisos).`
-      : `⏰ Recordatorio creado para ti: *${parsed.title}*\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
+    // Crea SOLO el recordatorio (sin tarea 🔔, sin aviso inmediato)
+    return await createReminderFromText(cmd, user);
   }
 
   if (cmd === "eventos") {
@@ -2067,7 +2060,7 @@ Escribí *menu* y tocá un botón (Recordatorio / Tarea / Mensaje).
     /corregir\s+datos|arreglar\s+datos|limpiar\s+duplicados|fix\s+data|reparar\s+datos/.test(cmd)
   ) {
     const r = await runDataFix();
-    return `✅ *Corrección completada*\n\n• ${r.fixedNormalized} fijas sin fecha concreta\n• ${r.duplicatesDeleted} duplicados eliminados\n• ${r.variablesAnchored} variables ancladas a su día\n${r.renamedAdmin ? "• Cuenta renombrada a *Daniel* ✅\n" : ""}• Cuenta: *${r.adminName}* (📞 ${r.adminWhatsapp || "sin número"})\n• Tareas pendientes: *${r.adminPendingTasks}*\n\n_Todo listo. Escribí *tareas* para ver el esquema._`;
+    return `✅ *Corrección completada*\n\n• ${r.fixedNormalized} fijas sin fecha concreta\n• ${r.duplicatesDeleted} duplicados eliminados\n• ${r.variablesAnchored} variables ancladas a su día\n• ${r.reminderTasksDeleted} tareas de recordatorio (🔔) eliminadas\n${r.renamedAdmin ? "• Cuenta renombrada a *Daniel* ✅\n" : ""}• Cuenta: *${r.adminName}* (📞 ${r.adminWhatsapp || "sin número"})\n• Tareas pendientes: *${r.adminPendingTasks}*\n\n_Todo listo. Escribí *tareas* para ver el esquema._`;
   }
 
   return null;
@@ -2320,20 +2313,7 @@ async function handleConversationStep(
     await prisma.reminder.create({
       data: { title: data.title, description: "", remindAt, createdById: user.id, assignedToId: assignToId },
     });
-    await prisma.task.create({
-      data: {
-        title: `🔔 ${data.title}`,
-        description: "",
-        assignedToId: assignToId,
-        assignedById: user.id,
-        dueDate: remindAt,
-        priority: "ALTA",
-        category: "OTRO",
-        type: "DINAMICA",
-        frequency: "DIARIA",
-        status: "PENDIENTE",
-      },
-    });
+    // Sin tarea 🔔: el recordatorio es independiente de las tareas.
 
     const targetUser = assignToId !== user.id ? await prisma.user.findUnique({ where: { id: assignToId } }) : null;
     const targetName = targetUser ? targetUser.name : "ti";

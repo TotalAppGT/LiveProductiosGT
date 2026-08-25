@@ -5,6 +5,7 @@ export interface DataFixResult {
   fixedNormalized: number;
   duplicatesDeleted: number;
   variablesAnchored: number;
+  reminderTasksDeleted: number;
   renamedAdmin: boolean;
   adminName: string;
   adminPendingTasks: number;
@@ -76,7 +77,12 @@ export async function runDataFix(): Promise<DataFixResult> {
     anchored++;
   }
 
-  // 4) Renombrar la cuenta de Daniel (número 35187153)
+  // 4) Eliminar tareas 🔔 (recordatorios viejos): los recordatorios son independientes de las tareas
+  const bellDeleted = await prisma.task.deleteMany({
+    where: { title: { startsWith: "🔔" } },
+  });
+
+  // 5) Renombrar la cuenta de Daniel (número 35187153)
   const adminUser = await prisma.user.findFirst({
     where: {
       OR: [
@@ -104,6 +110,7 @@ export async function runDataFix(): Promise<DataFixResult> {
     fixedNormalized: normalized.count,
     duplicatesDeleted: deleted,
     variablesAnchored: anchored,
+    reminderTasksDeleted: bellDeleted.count,
     renamedAdmin: renamed,
     adminName: adminUser?.name || "no encontrado",
     adminPendingTasks,

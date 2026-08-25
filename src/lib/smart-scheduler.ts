@@ -850,14 +850,14 @@ export async function sendBihourlyReminders(): Promise<{
       const todayStart = gtStartOfToday();
 
       // Todas las pendientes del usuario (para contar y clasificar)
-      const allPending = await prisma.task.findMany({
+      const allPending = (await prisma.task.findMany({
         where: {
           assignedToId: user.id,
           status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
         },
         orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
         take: 200,
-      });
+      })).filter((t) => !t.title.startsWith("🔔")); // los recordatorios no son tareas
 
       if (allPending.length === 0) {
         // Aunque no tenga tareas, se le avisa (así el usuario sabe que LUNA está activa)
