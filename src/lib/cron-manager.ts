@@ -188,8 +188,30 @@ async function morningBriefing() {
         .map((e) => `🎪 ${e.name} - ${new Date(e.date).toLocaleDateString("es-GT")}`)
         .join("\n");
 
+      // ⏰ Recordatorios de HOY (se muestran en el mensaje del día; avisan a su hora)
+      let remindersLines = "";
+      try {
+        const todayReminders = await prisma.reminder.findMany({
+          where: {
+            assignedToId: user.id,
+            isCompleted: false,
+            remindAt: { gte: startOfToday, lte: endOfToday },
+          },
+          orderBy: { remindAt: "asc" },
+          take: 8,
+        });
+        if (todayReminders.length > 0) {
+          remindersLines = `\n\n⏰ *Recordatorios de hoy (${todayReminders.length})*\n${todayReminders
+            .map((r) => `• ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
+            .join("\n")}`;
+        }
+      } catch {
+        // silencioso
+      }
+
       let fullMessage = `👋 *¡Hola ${user.name}!*\nSoy *LUNA* 🌙 · Asistente de Live Productions\n📅 ${dayName}\n\n☀️ ${aiMessage}`;
       if (taskLines) fullMessage += `\n\n${taskLines}`;
+      if (remindersLines) fullMessage += remindersLines;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
       fullMessage += `\n\n_Escribí *menu* para ver las opciones con botones, o *tareas* para actuar._`;
 

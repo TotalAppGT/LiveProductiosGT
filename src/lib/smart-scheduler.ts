@@ -848,6 +848,29 @@ export async function sendBihourlyReminders(): Promise<{
       if (lastReminder) continue;
 
       const todayStart = gtStartOfToday();
+      const todayEnd = gtEndOfToday();
+
+      // ⏰ Recordatorios de HOY: avisan a su hora, pero se muestran en el mensaje
+      // del día para que la persona sepa que los tiene programados.
+      let remindersBlock = "";
+      try {
+        const todayReminders = await prisma.reminder.findMany({
+          where: {
+            assignedToId: user.id,
+            isCompleted: false,
+            remindAt: { gte: todayStart, lte: todayEnd },
+          },
+          orderBy: { remindAt: "asc" },
+          take: 8,
+        });
+        if (todayReminders.length > 0) {
+          remindersBlock = `\n\n⏰ *Recordatorios de hoy (${todayReminders.length})*\n${todayReminders
+            .map((r) => `• ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
+            .join("\n")}`;
+        }
+      } catch {
+        // silencioso
+      }
 
       // Todas las pendientes del usuario (para contar y clasificar)
       const allPending = (await prisma.task.findMany({
@@ -861,7 +884,9 @@ export async function sendBihourlyReminders(): Promise<{
 
       if (allPending.length === 0) {
         // Aunque no tenga tareas, se le avisa (así el usuario sabe que LUNA está activa)
-        const emptyMsg = `🔔 *Tus tareas*\n\n✅ No tienes tareas pendientes. ¡Todo al día! 🎉\n\n📅 Escribí *tareas* para ver todo, o *crea tarea [qué] [día] [hora]* para agregar una.`;
+        let emptyMsg = `🔔 *Tus tareas*\n\n✅ No tienes tareas pendientes. ¡Todo al día! 🎉`;
+        emptyMsg += remindersBlock;
+        emptyMsg += `\n\n📅 Escribí *tareas* para ver todo, o *crea tarea [qué] [día] [hora]* para agregar una.`;
         await sendMessage(to, emptyMsg).catch(() => {});
         await prisma.whatsAppMessage.create({
           data: {
@@ -915,6 +940,7 @@ export async function sendBihourlyReminders(): Promise<{
         if (upcoming > 0) message += ` (${upcoming} próxima${upcoming > 1 ? "s" : ""})`;
         message += `.\n\n📅 Escribí *tareas* para ver toda la semana.`;
       }
+      message += remindersBlock;
       message += `\n\n⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.\n📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.`;
 
       await sendMessage(to, message).catch(() => {});

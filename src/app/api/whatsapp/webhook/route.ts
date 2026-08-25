@@ -546,7 +546,27 @@ async function formatTaskSchemeView(userId: string): Promise<string> {
 
   if (displayed.length > 0) saveTaskView(userId, displayed);
 
-  out += `⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas fijas\` | \`ayuda\``;
+  // ⏰ Recordatorios de HOY (avisos aparte; se muestran para que la persona sepa)
+  try {
+    const todayReminders = await prisma.reminder.findMany({
+      where: {
+        assignedToId: userId,
+        isCompleted: false,
+        remindAt: { gte: today, lte: gtEndOfToday() },
+      },
+      orderBy: { remindAt: "asc" },
+      take: 8,
+    });
+    if (todayReminders.length > 0) {
+      out += `\n⏰ *Recordatorios de hoy (${todayReminders.length})*\n${todayReminders
+        .map((r) => `• ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
+        .join("\n")}\n`;
+    }
+  } catch {
+    // silencioso
+  }
+
+  out += `⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas fijas\` | \`recordatorios\` | \`ayuda\``;
   return out.trim();
 }
 
