@@ -2060,7 +2060,7 @@ Escribí *menu* y tocá un botón (Recordatorio / Tarea / Mensaje).
     /corregir\s+datos|arreglar\s+datos|limpiar\s+duplicados|fix\s+data|reparar\s+datos/.test(cmd)
   ) {
     const r = await runDataFix();
-    return `✅ *Corrección completada*\n\n• ${r.fixedNormalized} fijas sin fecha concreta\n• ${r.duplicatesDeleted} duplicados eliminados\n• ${r.variablesAnchored} variables ancladas a su día\n• ${r.reminderTasksDeleted} tareas de recordatorio (🔔) eliminadas\n${r.renamedAdmin ? "• Cuenta renombrada a *Daniel* ✅\n" : ""}• Cuenta: *${r.adminName}* (📞 ${r.adminWhatsapp || "sin número"})\n• Tareas pendientes: *${r.adminPendingTasks}*\n\n_Todo listo. Escribí *tareas* para ver el esquema._`;
+    return `✅ *Corrección completada*\n\n• ${r.fixedNormalized} fijas sin fecha concreta\n• ${r.duplicatesDeleted} duplicados eliminados\n• ${r.variablesAnchored} variables ancladas a su día\n${r.renamedAdmin ? "• Cuenta renombrada a *Daniel* ✅\n" : ""}• Cuenta: *${r.adminName}* (📞 ${r.adminWhatsapp || "sin número"})\n• Tareas pendientes: *${r.adminPendingTasks}*\n\n_Todo listo. Escribí *tareas* para ver el esquema._`;
   }
 
   return null;
