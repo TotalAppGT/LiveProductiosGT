@@ -94,6 +94,7 @@ export default function TareasPage() {
   const [reminders, setReminders] = useState<any[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [groupMode, setGroupMode] = useState<"fase" | "dia">("fase");
+  const [dayFilter, setDayFilter] = useState("");
   const [createPrefill, setCreatePrefill] = useState<{ category?: string; type?: string; dayOfWeek?: string }>({});
 
   const isAdminOrJefe = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
@@ -610,18 +611,18 @@ export default function TareasPage() {
   // Agrupación por DÍA (Lunes, Martes...) como en el chat
   function buildDayGroups(): SheetSection[] {
     const byDay = new Map<string, Task[]>();
-    visibleTasks.forEach((t) => {
+    visibleTasks.filter((t) => !dayFilter || taskDayLabel(t) === dayFilter).forEach((t) => {
       const dayLabel = taskDayLabel(t);
       if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
       byDay.get(dayLabel)!.push(t);
     });
-    const orderedKeys = [...dayGroupOrder, "Sin fecha"].filter((d) => byDay.has(d));
+    const orderedKeys = [...dayGroupOrder, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
     return orderedKeys.map((d) => ({
       key: `dia-${d}`,
       label: d,
       bg: dayBgMap[d] || "bg-gray-600",
       level: 1,
-      tasks: byDay.get(d)!.sort(sortByDayHour),
+      tasks: byDay.get(d) || [],
     }));
   }
 
@@ -650,14 +651,14 @@ export default function TareasPage() {
   function buildHierarchicalGroups(): SheetSection[] {
     const sections: SheetSection[] = [];
     const byDay = new Map<string, Task[]>();
-    visibleTasks.forEach((t) => {
+    visibleTasks.filter((t) => !dayFilter || taskDayLabel(t) === dayFilter).forEach((t) => {
       const day = taskDayLabel(t);
       if (!byDay.has(day)) byDay.set(day, []);
       byDay.get(day)!.push(t);
     });
-    const orderedDays = [...dayGroupOrder, "Sin fecha"].filter((d) => byDay.has(d));
+    const orderedDays = [...dayGroupOrder, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
     for (const day of orderedDays) {
-      const dayTasks = byDay.get(day)!;
+      const dayTasks = byDay.get(day) || [];
       const dow = dayToDayOfWeek[day];
       sections.push({ key: `day-${day}`, label: day, bg: dayBgMap[day] || "bg-gray-600", level: 0, tasks: [], insertDayOfWeek: dow });
 
@@ -781,6 +782,38 @@ export default function TareasPage() {
             />
           </label>
         </div>
+      </div>
+
+      {/* Filtro por día de la semana (empieza con HOY) */}
+      <div className="flex flex-wrap gap-1.5 items-center">
+        {(() => {
+          const todayName = new Date().toLocaleDateString("es-GT", { weekday: "long" });
+          const ordered = [
+            todayName.charAt(0).toUpperCase() + todayName.slice(1),
+            ...dayGroupOrder.filter((d) => d !== todayName.charAt(0).toUpperCase() + todayName.slice(1)),
+          ];
+          return ordered.map((d) => {
+            const active = dayFilter === d;
+            return (
+              <button
+                key={d}
+                onClick={() => setDayFilter(active ? "" : d)}
+                className={`text-xs font-medium rounded-full px-3 py-1 border transition-colors ${
+                  active
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                }`}
+              >
+                {d === todayName.charAt(0).toUpperCase() + todayName.slice(1) ? "📌 Hoy" : d}
+              </button>
+            );
+          });
+        })()}
+        {dayFilter && (
+          <button onClick={() => setDayFilter("")} className="text-xs text-red-500 hover:underline ml-1">
+            ✕ Quitar filtro
+          </button>
+        )}
       </div>
 
       {selectedTasks.size > 0 && (

@@ -1049,7 +1049,7 @@ async function getComplianceSummary(userId: string) {
     prisma.task.count({ where: { assignedToId: userId, status: "COMPLETADA", updatedAt: { gte: thirtyDaysAgo } } }),
   ]);
 
-  const rate = assignedCount > 0 ? Math.round((completedCount / assignedCount) * 100) : 0;
+  const rate = assignedCount > 0 ? Math.min(100, Math.round((completedCount / assignedCount) * 100)) : 0;
   return `${completedCount} de ${assignedCount} tareas completadas (${rate}%) en los últimos 30 días`;
 }
 

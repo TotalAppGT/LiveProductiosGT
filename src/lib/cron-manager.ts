@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
 import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
-import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow } from "@/lib/task-utils";
+import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate } from "@/lib/task-utils";
 
 interface CronJob {
   name: string;
@@ -80,6 +80,15 @@ async function getAdminUsers() {
 
 async function morningBriefing() {
   console.log("[Cron] Ejecutando morning briefing (7:00 AM)");
+
+  // Primero migrar las tareas vencidas a HOY (para que el mensaje las muestre
+  // como pendientes de hoy, no con fechas viejas).
+  try {
+    const carried = await carryOverUncompletedTasks();
+    if (carried > 0) console.log(`[Cron] Tareas vencidas migradas a hoy: ${carried}`);
+  } catch (err) {
+    console.error("[Cron] Error migrando tareas vencidas:", err);
+  }
 
   const users = await getActiveUsersWithWhatsApp();
 
@@ -168,7 +177,9 @@ async function morningBriefing() {
       }
       taskLines = (taskLines + fixedLines).trim();
 
-      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un mensaje corto de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Tiene ${tasks.length} tareas pendientes (${overdue.length} vencidas, ${thisWeek.length} esta semana, ${upcoming.length} próximas), ${events.length} eventos próximos. Sé cálida y motivadora, mencioná por dónde empezar (las vencidas o la más urgente). Máximo 2 oraciones. Español de Guatemala. NO te presentes (ya hay un encabezado).`;
+      const todayCount = tasks.filter((t) => isTaskDueOnDate(t, startOfToday)).length;
+
+      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un mensaje corto de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Para HOY tiene ${todayCount} tareas${overdue.length > 0 ? ` y ${overdue.length} vencidas de días anteriores que se migraron a hoy` : ""} (${thisWeek.length} esta semana, ${upcoming.length} próximas), ${events.length} eventos próximos. Sé cálida y motivadora, mencioná por dónde empezar (las vencidas o la más urgente). Máximo 2 oraciones. Español de Guatemala. NO te presentes (ya hay un encabezado).`;
 
       let aiMessage = "";
       try {
@@ -210,8 +221,8 @@ async function morningBriefing() {
       }
 
       let fullMessage = `👋 *¡Hola ${user.name}!*\nSoy *LUNA* 🌙 · Asistente de Live Productions\n📅 ${dayName}\n\n☀️ ${aiMessage}`;
+      if (remindersLines) fullMessage += `\n\n${remindersLines}`;
       if (taskLines) fullMessage += `\n\n${taskLines}`;
-      if (remindersLines) fullMessage += remindersLines;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
       fullMessage += `\n\n_Escribí *menu* para ver las opciones con botones, o *tareas* para actuar._`;
 
@@ -223,14 +234,6 @@ async function morningBriefing() {
     } catch (error) {
       console.error(`[Cron] Error morning briefing for ${user.name}:`, error);
     }
-  }
-
-  // Después de informar, arrastrar las tareas vencidas no completadas a hoy
-  try {
-    const carried = await carryOverUncompletedTasks();
-    if (carried > 0) console.log(`[Cron] Tareas vencidas arrastradas a hoy: ${carried}`);
-  } catch (err) {
-    console.error("[Cron] Error cargando tareas vencidas:", err);
   }
 }
 

@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
         const assignedToday = tasksAssigned.length;
         const completionRate =
           assignedToday > 0
-            ? Math.round((completedToday / assignedToday) * 100)
+            ? Math.min(100, Math.round((completedToday / assignedToday) * 100))
             : 0;
 
         return {

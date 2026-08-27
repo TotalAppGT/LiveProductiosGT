@@ -784,7 +784,7 @@ export async function getAIAssistantContext(userId: string): Promise<string> {
       prisma.activity.count({ where: { userId, createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } } }),
     ]);
 
-    const complianceRate = assignedCount > 0 ? Math.round((completedCount / assignedCount) * 100) : 0;
+    const complianceRate = assignedCount > 0 ? Math.min(100, Math.round((completedCount / assignedCount) * 100)) : 0;
     const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
 
     let ctx = `USUARIO: ${user.name} (${user.role})
@@ -1160,7 +1160,7 @@ export async function getUserContext(userId: string) {
 
   if (!user) return null;
 
-  const complianceRate = assignedCount > 0 ? Math.round((completedCount / assignedCount) * 100) : 0;
+  const complianceRate = assignedCount > 0 ? Math.min(100, Math.round((completedCount / assignedCount) * 100)) : 0;
 
   return {
     ...user,

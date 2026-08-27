@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
 
         const completionRate =
           tasksAssigned > 0
-            ? Math.round((tasksCompleted / tasksAssigned) * 100)
+            ? Math.min(100, Math.round((tasksCompleted / tasksAssigned) * 100))
             : 0;
 
         return {

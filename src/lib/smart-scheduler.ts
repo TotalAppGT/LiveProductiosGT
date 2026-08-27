@@ -934,13 +934,15 @@ export async function sendBihourlyReminders(): Promise<{
           message += `⚠️ Tienes ${overdueTasks.length} vencida${overdueTasks.length > 1 ? "s" : ""} que atender primero. `;
         }
         message += `${todayTasks.length} tarea${todayTasks.length === 1 ? "" : "s"} para hoy.`;
+        if (remindersBlock) message += remindersBlock;
         if (digest) message += digest;
       } else {
         message = `🔔 *Tus tareas*\n\nNo tienes tareas programadas para HOY, pero tienes ${allPending.length} pendiente${allPending.length > 1 ? "s" : ""} en total`;
         if (upcoming > 0) message += ` (${upcoming} próxima${upcoming > 1 ? "s" : ""})`;
-        message += `.\n\n📅 Escribí *tareas* para ver toda la semana.`;
+        message += `.`;
+        if (remindersBlock) message += remindersBlock;
+        message += `\n\n📅 Escribí *tareas* para ver toda la semana.`;
       }
-      message += remindersBlock;
       message += `\n\n⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.\n📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.`;
 
       await sendMessage(to, message).catch(() => {});
