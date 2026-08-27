@@ -1238,17 +1238,22 @@ export default function TareasPage() {
                           >
                             <div className="col-span-1 text-center text-[11px] text-gray-400 font-mono">{idx + 1}</div>
                             <div className="col-span-5 flex items-center gap-1.5 min-w-0">
-                              <button
-                                onClick={() => updateTaskStatus(task.id, task.status === "COMPLETADA" ? "PENDIENTE" : "COMPLETADA")}
-                                className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
-                                  task.status === "COMPLETADA"
-                                    ? "bg-green-500 border-green-500 text-white"
-                                    : "border-gray-300 hover:border-green-400 hover:bg-green-50"
-                                }`}
-                                title={task.status === "COMPLETADA" ? "Desmarcar (volver a pendiente)" : "Marcar realizado"}
-                              >
-                                {task.status === "COMPLETADA" && <CheckCircle2 className="w-2.5 h-2.5" />}
-                              </button>
+                              <input
+                                type="checkbox"
+                                checked={selectedTasks.has(task.id)}
+                                onChange={() => toggleSelect(task.id)}
+                                className="rounded border-gray-300 dark:border-gray-600 w-3.5 h-3.5 shrink-0 cursor-pointer"
+                                title="Seleccionar (para completar/eliminar en masa)"
+                              />
+                              {task.status !== "COMPLETADA" && (
+                                <button
+                                  onClick={() => updateTaskStatus(task.id, "COMPLETADA")}
+                                  className="w-4 h-4 rounded-full border-2 border-green-400 hover:bg-green-100 flex items-center justify-center text-green-500 shrink-0"
+                                  title="Marcar realizado"
+                                >
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                </button>
+                              )}
                               <span className={`truncate ${task.status === "COMPLETADA" ? "line-through text-gray-400" : "text-gray-900 dark:text-white"}`}>
                                 {task.title}
                               </span>
@@ -1517,14 +1522,13 @@ export default function TareasPage() {
                   <Card key={task.id} variant="bordered" className="overflow-visible">
                     <div className="p-4">
                       <div className="flex items-start gap-3">
-                        {selectedTasks.size > 0 && (
-                          <input
-                            type="checkbox"
-                            checked={selectedTasks.has(task.id)}
-                            onChange={() => toggleSelect(task.id)}
-                            className="mt-1 rounded border-gray-300"
-                          />
-                        )}
+                        <input
+                          type="checkbox"
+                          checked={selectedTasks.has(task.id)}
+                          onChange={() => toggleSelect(task.id)}
+                          className="mt-1 rounded border-gray-300 dark:border-gray-600 cursor-pointer"
+                          title="Seleccionar (para completar/eliminar en masa)"
+                        />
                         {task.status !== "COMPLETADA" && (
                           <button
                             onClick={(e) => { e.stopPropagation(); updateTaskStatus(task.id, "COMPLETADA"); }}
