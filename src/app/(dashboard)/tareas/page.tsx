@@ -822,14 +822,17 @@ export default function TareasPage() {
             {selectedTasks.size} seleccionada{selectedTasks.size > 1 ? "s" : ""}
           </span>
           <div className="flex gap-1 ml-auto">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedTasks(new Set(visibleTasks.map((t) => t.id)))}>
+              Seleccionar todo
+            </Button>
             <Button variant="success" size="sm" onClick={() => batchUpdateStatus("COMPLETADA")}>
               Completar
             </Button>
             <Button variant="outline" size="sm" onClick={() => batchUpdateStatus("PENDIENTE")}>
               Pendiente
             </Button>
-            <Button variant="outline" size="sm" onClick={batchDeleteTasks} className="text-red-600">
-              Eliminar
+            <Button variant="outline" size="sm" onClick={batchDeleteTasks} className="text-red-600 border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20">
+              Eliminar ({selectedTasks.size})
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setSelectedTasks(new Set())}>
               <X className="h-4 w-4" />
