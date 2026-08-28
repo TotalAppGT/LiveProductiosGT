@@ -695,12 +695,12 @@ export async function sendEndOfDayAlerts(): Promise<{
         await prisma.taskHistory.create({
           data: {
             taskId: task.id,
-            userId: "system",
+            userId: task.assignedToId || "system",
             action: "REPROGRAMACIÓN_AUTOMATICA",
             previousStatus: task.status,
             newStatus: "REPROGRAMADA",
           },
-        });
+        }).catch((e) => console.error("[sendEndOfDayAlerts] history:", e?.message));
 
         tasksRescheduled++;
       }
@@ -944,6 +944,11 @@ export async function sendBihourlyReminders(): Promise<{
         message += `\n\n📅 Escribí *tareas* para ver toda la semana.`;
       }
       message += `\n\n⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.\n📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.`;
+
+      // WhatsApp limita a 4096 caracteres
+      if (message.length > 3950) {
+        message = message.slice(0, 3950) + "\n… (recortado — escribí *tareas* para ver todo)";
+      }
 
       await sendMessage(to, message).catch(() => {});
 

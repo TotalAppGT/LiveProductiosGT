@@ -173,7 +173,10 @@ async function morningBriefing() {
         taskLines += `📅 *Esta Semana — lunes ${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} a domingo ${sunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} (${thisWeek.length})*\n${groupTasksByDayText(orderTasksByDayHour(thisWeek))}\n\n`;
       }
       if (upcoming.length > 0) {
-        taskLines += `📅 *Próximas semanas (${upcoming.length})*\n${groupTasksByDayText(orderTasksByDayHour(upcoming))}\n\n`;
+        // Solo las primeras próximas (para que el mensaje no supere el límite de WhatsApp)
+        const upcomingTop = orderTasksByDayHour(upcoming).slice(0, 10);
+        const extra = upcoming.length - upcomingTop.length;
+        taskLines += `📅 *Próximas semanas (${upcoming.length})*\n${groupTasksByDayText(upcomingTop)}${extra > 0 ? `\n_… y ${extra} más. Escribí *tareas* para verlas todas._` : ""}\n\n`;
       }
       taskLines = (taskLines + fixedLines).trim();
 
@@ -225,6 +228,11 @@ async function morningBriefing() {
       if (taskLines) fullMessage += `\n\n${taskLines}`;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
       fullMessage += `\n\n_Escribí *menu* para ver las opciones con botones, o *tareas* para actuar._`;
+
+      // WhatsApp limita a 4096 caracteres: si el mensaje es muy largo, se recorta.
+      if (fullMessage.length > 3950) {
+        fullMessage = fullMessage.slice(0, 3950) + "\n… (recortado — escribí *tareas* para ver todo)";
+      }
 
       const to = user.whatsappNumber || user.phone;
       if (to) {
