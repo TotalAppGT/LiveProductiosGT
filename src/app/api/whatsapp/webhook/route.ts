@@ -803,6 +803,13 @@ function saveTaskView(userId: string, tasks: { id: string }[]) {
   lastViewTasks.set(userId, { ids: tasks.map((t) => t.id), expires: Date.now() + 30 * 60 * 1000 });
 }
 
+// Vista de recordatorios que el usuario vio por última vez (para que los # coincidan)
+const lastViewReminders = new Map<string, { ids: string[]; expires: number }>();
+
+function saveReminderView(userId: string, reminders: { id: string }[]) {
+  lastViewReminders.set(userId, { ids: reminders.map((r) => r.id), expires: Date.now() + 30 * 60 * 1000 });
+}
+
 // Digest ordenado de tareas próximas de un usuario (para notificaciones)
 async function getOrderedTaskDigest(userId: string): Promise<string> {
   const today = gtStartOfToday();
@@ -1882,6 +1889,8 @@ async function handleCommand(
     });
     if (reminders.length === 0) return period ? `No tienes recordatorios para "${period}".` : "No tienes recordatorios para hoy.";
 
+    saveReminderView(user.id, reminders);
+
     const lines = reminders.map((r, i) => {
       const d = r.remindAt;
       const day = d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" });
@@ -1895,12 +1904,24 @@ async function handleCommand(
   if (cmd.startsWith("eliminar recordatorio") || cmd.startsWith("borrar recordatorio") || cmd.startsWith("eliminar recordatorios") || cmd.startsWith("borrar recordatorios")) {
     const numStr = cmd.replace(/^(eliminar|borrar)\s+recordatorios?\s*/i, "").trim();
     const nums = extractNumbers(numStr);
-    if (nums.length === 0) return "¿Cuál recordatorio? Ejemplo: *eliminar recordatorio 2* o *eliminar recordatorios 1 2 3*";
-    const reminders = await prisma.reminder.findMany({
+    if (nums.length === 0) return "¿Cuál recordatorio? Ejemplo: *eliminar recordatorio 2* o *eliminar recordatorios 1 2 3*\n\nPrimero escribí *recordatorios* para verlos numerados.";
+
+    // Usa la vista que el usuario vio por última vez (los # coinciden)
+    let reminders = await prisma.reminder.findMany({
       where: { assignedToId: user.id, isCompleted: false },
       orderBy: { remindAt: "asc" },
       take: 30,
     });
+    const view = lastViewReminders.get(user.id);
+    if (view && Date.now() < view.expires) {
+      const mapped: typeof reminders = [];
+      for (const id of view.ids) {
+        const r = reminders.find((x) => x.id === id);
+        if (r) mapped.push(r);
+      }
+      if (mapped.length > 0) reminders = mapped;
+    }
+
     const deleted: string[] = [];
     const failed: string[] = [];
     for (const num of nums) {
