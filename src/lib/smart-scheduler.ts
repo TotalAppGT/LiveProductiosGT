@@ -929,17 +929,15 @@ export async function sendBihourlyReminders(): Promise<{
 
       let message: string;
       if (todayTasks.length > 0 || overdueTasks.length > 0) {
-        message = `🔔 *Tus tareas*\n\n`;
+        message = `🔔 *Tus tareas de HOY*\n\n`;
         if (overdueTasks.length > 0) {
           message += `⚠️ Tienes ${overdueTasks.length} vencida${overdueTasks.length > 1 ? "s" : ""} que atender primero. `;
         }
         message += `${todayTasks.length} tarea${todayTasks.length === 1 ? "" : "s"} para hoy.`;
-        if (remindersBlock) message += remindersBlock;
         if (digest) message += digest;
+        if (remindersBlock) message += remindersBlock;
       } else {
-        message = `🔔 *Tus tareas*\n\nNo tienes tareas programadas para HOY, pero tienes ${allPending.length} pendiente${allPending.length > 1 ? "s" : ""} en total`;
-        if (upcoming > 0) message += ` (${upcoming} próxima${upcoming > 1 ? "s" : ""})`;
-        message += `.`;
+        message = `🔔 *Tus tareas de HOY*\n\nNo tienes tareas pendientes para hoy.`;
         if (remindersBlock) message += remindersBlock;
         message += `\n\n📅 Escribí *tareas* para ver toda la semana.`;
       }

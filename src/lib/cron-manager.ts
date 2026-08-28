@@ -98,11 +98,6 @@ async function morningBriefing() {
       const startOfToday = gtStartOfToday();
       const endOfToday = gtEndOfToday();
 
-      // Semana: LUNES a DOMINGO (domingo al final, opcional). La principal es lun-sáb.
-      const dayOfWeek = wNow.weekday; // 0=domingo
-      const monday = new Date(startOfToday.getTime() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 24 * 60 * 60 * 1000);
-      const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000 + (23 * 60 + 59) * 60 * 1000 + 999);
-
       const tasks = (await prisma.task.findMany({
         where: {
           assignedToId: user.id,
@@ -127,62 +122,23 @@ async function morningBriefing() {
 
       const { orderTasksByDayHour, groupTasksByDayText } = await import("@/lib/task-view");
 
-      // Organizar por semana (desde el lunes):
-      // 1) Vencidas: tareas anteriores al lunes de esta semana (no completadas)
-      const overdue = tasks.filter((t) => t.dueDate && new Date(t.dueDate) < monday);
-      // 2) Esta semana: lunes → domingo (incluye hoy), ordenadas por día y hora
-      // 3) Próximas: después del domingo
-      const thisWeek = tasks.filter((t) => t.dueDate && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= sunday);
-      const upcoming = tasks.filter((t) => t.dueDate && new Date(t.dueDate) > sunday);
-
-      // Fijas recurrentes sin fecha concreta (el esquema): se muestran por día de la semana
-      const DAY_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
-      const DAY_LABEL: Record<string, string> = {
-        LUNES: "lunes", MARTES: "martes", MIERCOLES: "miércoles", JUEVES: "jueves",
-        VIERNES: "viernes", SABADO: "sábado", DOMINGO: "domingo",
-      };
-      const fixedByDay: Record<string, any[]> = {};
-      for (const t of tasks) {
-        if (t.type !== "FIJA" || t.dueDate) continue;
-        if (t.frequency === "DIARIA") {
-          (fixedByDay["DIARIA"] = fixedByDay["DIARIA"] || []).push(t);
-        } else if (t.dayOfWeek) {
-          const k = String(t.dayOfWeek).toUpperCase();
-          (fixedByDay[k] = fixedByDay[k] || []).push(t);
-        }
-      }
-      let fixedLines = "";
-      const fixedBlocks: string[] = [];
-      for (const d of DAY_ORDER) {
-        if (fixedByDay[d]?.length) {
-          fixedBlocks.push(`📅 *${DAY_LABEL[d]}*\n${fixedByDay[d].map((t: any) => `• 🔁 ${t.title}`).join("\n")}`);
-        }
-      }
-      if (fixedByDay["DIARIA"]?.length) {
-        fixedBlocks.push(`📅 *todos los días*\n${fixedByDay["DIARIA"].map((t: any) => `• 🔁 ${t.title}`).join("\n")}`);
-      }
-      if (fixedBlocks.length > 0) {
-        fixedLines = `📌 *FIJAS DE LA SEMANA (recurrentes)*\n\n${fixedBlocks.join("\n\n")}\n\n`;
-      }
-
+      // Mensaje diario = SOLO lo de HOY: primero pendientes/vencidas, luego tareas de hoy.
+      // La semana y próximas semanas se ven con `tareas`.
+      const todayTasks = tasks.filter((t) => isTaskDueOnDate(t, startOfToday));
+      const stillOverdue = tasks.filter((t) => t.dueDate && new Date(t.dueDate) < startOfToday && !isTaskDueOnDate(t, startOfToday));
       let taskLines = "";
-      if (overdue.length > 0) {
-        taskLines += `⚠️ *Vencidas / No completadas (${overdue.length})*\n${groupTasksByDayText(orderTasksByDayHour(overdue))}\n\n`;
+      if (stillOverdue.length > 0) {
+        taskLines += `⚠️ *Vencidas / Prioridad (${stillOverdue.length})*\n${groupTasksByDayText(orderTasksByDayHour(stillOverdue))}\n\n`;
       }
-      if (thisWeek.length > 0) {
-        taskLines += `📅 *Esta Semana — lunes ${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} a domingo ${sunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} (${thisWeek.length})*\n${groupTasksByDayText(orderTasksByDayHour(thisWeek))}\n\n`;
+      if (todayTasks.length > 0) {
+        const todayLabel = startOfToday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
+        taskLines += `📌 *HOY — ${todayLabel}*\n${groupTasksByDayText(orderTasksByDayHour(todayTasks))}\n\n`;
       }
-      if (upcoming.length > 0) {
-        // Solo las primeras próximas (para que el mensaje no supere el límite de WhatsApp)
-        const upcomingTop = orderTasksByDayHour(upcoming).slice(0, 10);
-        const extra = upcoming.length - upcomingTop.length;
-        taskLines += `📅 *Próximas semanas (${upcoming.length})*\n${groupTasksByDayText(upcomingTop)}${extra > 0 ? `\n_… y ${extra} más. Escribí *tareas* para verlas todas._` : ""}\n\n`;
-      }
-      taskLines = (taskLines + fixedLines).trim();
+      taskLines = taskLines.trim();
 
-      const todayCount = tasks.filter((t) => isTaskDueOnDate(t, startOfToday)).length;
+      const todayCount = todayTasks.length;
 
-      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un mensaje corto de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Para HOY tiene ${todayCount} tareas${overdue.length > 0 ? ` y ${overdue.length} vencidas de días anteriores que se migraron a hoy` : ""} (${thisWeek.length} esta semana, ${upcoming.length} próximas), ${events.length} eventos próximos. Sé cálida y motivadora, mencioná por dónde empezar (las vencidas o la más urgente). Máximo 2 oraciones. Español de Guatemala. NO te presentes (ya hay un encabezado).`;
+      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un mensaje corto de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Para HOY tiene ${todayCount} tareas${stillOverdue.length > 0 ? ` y ${stillOverdue.length} vencidas que atender primero` : ""}, ${events.length} eventos próximos. Sé cálida y motivadora, mencioná por dónde empezar (las vencidas o la más urgente). Máximo 2 oraciones. Español de Guatemala. NO te presentes (ya hay un encabezado).`;
 
       let aiMessage = "";
       try {
@@ -194,7 +150,7 @@ async function morningBriefing() {
         aiMessage = "";
       }
       if (!aiSucceeded(aiMessage)) {
-        aiMessage = `Esta semana tienes ${thisWeek.length} tareas${overdue.length ? ` y ${overdue.length} vencidas que debemos atender primero` : ""}. ¡A darle con todo! 💪`;
+        aiMessage = `Hoy tienes ${todayCount} tareas${stillOverdue.length ? ` y ${stillOverdue.length} vencidas que debemos atender primero` : ""}. ¡A darle con todo! 💪`;
       }
 
       const eventLines = events
@@ -224,8 +180,8 @@ async function morningBriefing() {
       }
 
       let fullMessage = `👋 *¡Hola ${user.name}!*\nSoy *LUNA* 🌙 · Asistente de Live Productions\n📅 ${dayName}\n\n☀️ ${aiMessage}`;
-      if (remindersLines) fullMessage += `\n\n${remindersLines}`;
       if (taskLines) fullMessage += `\n\n${taskLines}`;
+      if (remindersLines) fullMessage += `\n\n${remindersLines}`;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
       fullMessage += `\n\n_Escribí *menu* para ver las opciones con botones, o *tareas* para actuar._`;
 
