@@ -872,6 +872,27 @@ export async function sendBihourlyReminders(): Promise<{
         // silencioso
       }
 
+      // 🛒 Compras de HOY
+      let purchasesBlock = "";
+      try {
+        const todayPurchases = await prisma.purchase.findMany({
+          where: {
+            assignedToId: user.id,
+            status: "PENDIENTE",
+            dueDate: { gte: todayStart, lte: todayEnd },
+          },
+          orderBy: { dueDate: "asc" },
+          take: 8,
+        });
+        if (todayPurchases.length > 0) {
+          purchasesBlock = `\n\n🛒 *Compras de hoy (${todayPurchases.length})*\n${todayPurchases
+            .map((p) => `• ${p.title}${p.amount ? ` — Q${Number(p.amount).toFixed(2)}` : ""}`)
+            .join("\n")}`;
+        }
+      } catch {
+        // silencioso
+      }
+
       // Todas las pendientes del usuario (para contar y clasificar)
       const allPending = (await prisma.task.findMany({
         where: {
@@ -884,8 +905,9 @@ export async function sendBihourlyReminders(): Promise<{
 
       if (allPending.length === 0) {
         // Aunque no tenga tareas, se le avisa (así el usuario sabe que LUNA está activa)
-        let emptyMsg = `🔔 *Tus tareas*\n\n✅ No tienes tareas pendientes. ¡Todo al día! 🎉`;
+        let emptyMsg = `🔔 *Tus tareas de HOY*\n\n✅ No tienes tareas pendientes. ¡Todo al día! 🎉`;
         emptyMsg += remindersBlock;
+        emptyMsg += purchasesBlock;
         emptyMsg += `\n\n📅 Escribí *tareas* para ver todo, o *crea tarea [qué] [día] [hora]* para agregar una.`;
         await sendMessage(to, emptyMsg).catch(() => {});
         await prisma.whatsAppMessage.create({
@@ -936,9 +958,11 @@ export async function sendBihourlyReminders(): Promise<{
         message += `${todayTasks.length} tarea${todayTasks.length === 1 ? "" : "s"} para hoy.`;
         if (digest) message += digest;
         if (remindersBlock) message += remindersBlock;
+        if (purchasesBlock) message += purchasesBlock;
       } else {
         message = `🔔 *Tus tareas de HOY*\n\nNo tienes tareas pendientes para hoy.`;
         if (remindersBlock) message += remindersBlock;
+        if (purchasesBlock) message += purchasesBlock;
         message += `\n\n📅 Escribí *tareas* para ver toda la semana.`;
       }
       message += `\n\n⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.\n📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.`;

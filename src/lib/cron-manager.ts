@@ -179,9 +179,31 @@ async function morningBriefing() {
         // silencioso
       }
 
+      // 🛒 Compras de HOY
+      let purchasesLines = "";
+      try {
+        const todayPurchases = await prisma.purchase.findMany({
+          where: {
+            assignedToId: user.id,
+            status: "PENDIENTE",
+            dueDate: { gte: startOfToday, lte: endOfToday },
+          },
+          orderBy: { dueDate: "asc" },
+          take: 8,
+        });
+        if (todayPurchases.length > 0) {
+          purchasesLines = `\n\n🛒 *Compras de hoy (${todayPurchases.length})*\n${todayPurchases
+            .map((p) => `• ${p.title}${p.amount ? ` — Q${Number(p.amount).toFixed(2)}` : ""}`)
+            .join("\n")}`;
+        }
+      } catch {
+        // silencioso
+      }
+
       let fullMessage = `👋 *¡Hola ${user.name}!*\nSoy *LUNA* 🌙 · Asistente de Live Productions\n📅 ${dayName}\n\n☀️ ${aiMessage}`;
       if (taskLines) fullMessage += `\n\n${taskLines}`;
       if (remindersLines) fullMessage += `\n\n${remindersLines}`;
+      if (purchasesLines) fullMessage += `\n\n${purchasesLines}`;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
       fullMessage += `\n\n_Escribí *menu* para ver las opciones con botones, o *tareas* para actuar._`;
 
