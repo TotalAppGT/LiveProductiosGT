@@ -35,9 +35,7 @@ export function formatTaskLine(t: any, num: number): string {
   const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
   const status = t.status === "COMPLETADA" ? "✅" : t.status === "REPROGRAMADA" ? "🟣 Pospuesta" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌";
   const phaseTag = t.category === "PRE_EVENTO" ? "🎪" : t.category === "POST_EVENTO" ? "🏁" : "";
-  const typeTag = t.type === "FIJA"
-    ? ` 🔁${t.frequency === "SEMANAL" ? " Semanal" : t.frequency === "MENSUAL" ? " Mensual" : " Diaria"}`
-    : "";
+  const typeTag = t.type === "FIJA" ? " 🔁" : "";
   let due = "";
   if (t.dueDate) {
     const d = new Date(t.dueDate);
