@@ -448,7 +448,7 @@ async function formatTasksForUser(userId: string, period?: string) {
 // - Semana de LUNES a DOMINGO (hoy resaltado)
 // - Dentro de cada día: 🔁 Fijas → 🎪 Pre Evento → 🏁 Post Evento → 📌 Actividades diarias (con variables)
 // - Las tareas vencidas se muestran PRIMERO como prioridad
-async function formatTaskSchemeView(userId: string): Promise<string> {
+async function formatTaskSchemeView(userId: string, role?: string): Promise<string> {
   const w = getGuatemalaWallClock();
   const today = gtStartOfToday();
 
@@ -566,7 +566,45 @@ async function formatTaskSchemeView(userId: string): Promise<string> {
     // silencioso
   }
 
-  out += `⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas fijas\` | \`recordatorios\` | \`ayuda\``;
+  // 🛒 Compras de HOY (breve)
+  try {
+    const todayPurchases = await prisma.purchase.findMany({
+      where: {
+        assignedToId: userId,
+        status: "PENDIENTE",
+        dueDate: { gte: today, lte: gtEndOfToday() },
+      },
+      orderBy: { dueDate: "asc" },
+      take: 5,
+    });
+    if (todayPurchases.length > 0) {
+      out += `\n🛒 *Compras de hoy (${todayPurchases.length})*\n${todayPurchases
+        .map((p) => `• ${p.title}${p.amount ? ` — Q${Number(p.amount).toFixed(2)}` : ""}`)
+        .join("\n")}\n`;
+    }
+  } catch {
+    // silencioso
+  }
+
+  // 💼 Cobros pendientes (solo admin/jefe/dueño) — breve
+  if (role === "DUENO" || role === "ADMIN" || role === "JEFE") {
+    try {
+      const pendingCobros = await prisma.cobro.findMany({
+        where: { assignedToId: userId, status: "PENDIENTE" },
+        orderBy: { dueDate: "asc" },
+        take: 5,
+      });
+      if (pendingCobros.length > 0) {
+        out += `\n💼 *Cobros pendientes (${pendingCobros.length})*\n${pendingCobros
+          .map((c) => `• ${c.clientName}: Q${Number(c.amount).toFixed(2)}${c.dueDate ? ` → ${new Date(c.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })}` : ""}`)
+          .join("\n")}\n`;
+      }
+    } catch {
+      // silencioso
+    }
+  }
+
+  out += `⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar\n\n📋 *Ver:* \`tareas hoy\` | \`tareas fijas\` | \`recordatorios\` | \`compras\` | \`ayuda\``;
   return out.trim();
 }
 
@@ -1713,10 +1751,12 @@ async function handleCommand(
     /^(ver|mostrar|muestra|muéstrame|dame|consultar|listar|revisar)\s+(mis\s+)?tareas/.test(cmd) ||
     (cmd.includes("tarea") && !cmd.startsWith("tareas hoy") && !cmd.startsWith("tareas semana") && !cmd.includes("crea") && !cmd.includes("crear") && !cmd.includes("nueva") && !cmd.includes("asigna") && !cmd.includes("asignar") && !cmd.includes("agrega") && !cmd.includes("agregar") && !cmd.includes("ponle") && !cmd.includes("deja"))
   ) {
-    const tasks = await formatTaskSchemeView(user.id);
+    const tasks = await formatTaskSchemeView(user.id, user.role);
     if (!tasks) return `👋 *¡Hola ${user.name}!* Soy *LUNA* 🌙\n\nNo tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
     if (fromNumber) {
-      await sendMessage(fromNumber, tasks);
+      let msg = tasks;
+      if (msg.length > 3950) msg = msg.slice(0, 3950) + "\n… (recortado — consultá con *tareas hoy* o *compras*)";
+      await sendMessage(fromNumber, msg);
       await sendInteractiveButtons(fromNumber, "⚡ ¿Qué querés hacer con tus tareas?", [
         { id: "act_complete", title: "✅ Completar" },
         { id: "act_postpone", title: "⏰ Posponer" },
