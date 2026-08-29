@@ -826,7 +826,7 @@ export async function sendBihourlyReminders(): Promise<{
 
     const users = await prisma.user.findMany({
       where: { active: true },
-      select: { id: true, name: true, phone: true, whatsappNumber: true },
+      select: { id: true, name: true, role: true, phone: true, whatsappNumber: true },
     });
 
     let usersReminded = 0;
@@ -893,6 +893,25 @@ export async function sendBihourlyReminders(): Promise<{
         // silencioso
       }
 
+      // 💼 Pendientes administrativos (cobros) para roles admin/jefe/dueño
+      let cobrosBlock = "";
+      if (user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE") {
+        try {
+          const pendingCobros = await prisma.cobro.findMany({
+            where: { assignedToId: user.id, status: "PENDIENTE" },
+            orderBy: { dueDate: "asc" },
+            take: 5,
+          });
+          if (pendingCobros.length > 0) {
+            cobrosBlock = `\n\n💼 *Pendientes administrativos (${pendingCobros.length})*\n${pendingCobros
+              .map((c) => `• ${c.clientName}: Q${Number(c.amount).toFixed(2)}${c.dueDate ? ` → ${new Date(c.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })}` : ""}`)
+              .join("\n")}`;
+          }
+        } catch {
+          // silencioso
+        }
+      }
+
       // Todas las pendientes del usuario (para contar y clasificar)
       const allPending = (await prisma.task.findMany({
         where: {
@@ -908,6 +927,7 @@ export async function sendBihourlyReminders(): Promise<{
         let emptyMsg = `🔔 *Tus tareas de HOY*\n\n✅ No tienes tareas pendientes. ¡Todo al día! 🎉`;
         emptyMsg += remindersBlock;
         emptyMsg += purchasesBlock;
+        emptyMsg += cobrosBlock;
         emptyMsg += `\n\n📅 Escribí *tareas* para ver todo, o *crea tarea [qué] [día] [hora]* para agregar una.`;
         await sendMessage(to, emptyMsg).catch(() => {});
         await prisma.whatsAppMessage.create({
@@ -959,10 +979,12 @@ export async function sendBihourlyReminders(): Promise<{
         if (digest) message += digest;
         if (remindersBlock) message += remindersBlock;
         if (purchasesBlock) message += purchasesBlock;
+        if (cobrosBlock) message += cobrosBlock;
       } else {
         message = `🔔 *Tus tareas de HOY*\n\nNo tienes tareas pendientes para hoy.`;
         if (remindersBlock) message += remindersBlock;
         if (purchasesBlock) message += purchasesBlock;
+        if (cobrosBlock) message += cobrosBlock;
         message += `\n\n📅 Escribí *tareas* para ver toda la semana.`;
       }
       message += `\n\n⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.\n📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.`;

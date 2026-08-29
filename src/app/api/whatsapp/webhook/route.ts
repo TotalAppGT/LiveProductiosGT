@@ -1454,6 +1454,24 @@ async function handleCommand(
 
   if (cmd === "tareas hoy" || cmd === "hoy" || cmd === "tareas de hoy" || cmd === "tareas para hoy") {
     const tasks = await formatTasksForUser(user.id, "hoy");
+    // Si no tiene tareas y es admin/jefe/dueño, le recuerda sus pendientes administrativos (cobros)
+    if (/No tienes tareas para hoy/.test(tasks) && (user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE")) {
+      try {
+        const pendingCobros = await prisma.cobro.findMany({
+          where: { assignedToId: user.id, status: "PENDIENTE" },
+          orderBy: { dueDate: "asc" },
+          take: 5,
+        });
+        if (pendingCobros.length > 0) {
+          const cobros = pendingCobros
+            .map((c) => `• ${c.clientName}: Q${Number(c.amount).toFixed(2)}${c.dueDate ? ` → ${new Date(c.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })}` : ""}`)
+            .join("\n");
+          return `✅ No tienes tareas para hoy. ¡Todo al día! 🎉\n\n💼 *Pendientes administrativos (${pendingCobros.length})*\n${cobros}`;
+        }
+      } catch {
+        // silencioso
+      }
+    }
     return tasks;
   }
   if (cmd === "tareas semana" || cmd === "semana" || cmd === "tareas esta semana" || cmd === "esta semana" || cmd === "tareas de esta semana") {

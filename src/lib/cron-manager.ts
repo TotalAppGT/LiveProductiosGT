@@ -200,10 +200,30 @@ async function morningBriefing() {
         // silencioso
       }
 
+      // 💼 Pendientes administrativos (cobros) para roles admin/jefe/dueño
+      let cobrosLines = "";
+      if (user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE") {
+        try {
+          const pendingCobros = await prisma.cobro.findMany({
+            where: { assignedToId: user.id, status: "PENDIENTE" },
+            orderBy: { dueDate: "asc" },
+            take: 5,
+          });
+          if (pendingCobros.length > 0) {
+            cobrosLines = `\n\n💼 *Pendientes administrativos (${pendingCobros.length})*\n${pendingCobros
+              .map((c) => `• ${c.clientName}: Q${Number(c.amount).toFixed(2)}${c.dueDate ? ` → ${new Date(c.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })}` : ""}`)
+              .join("\n")}`;
+          }
+        } catch {
+          // silencioso
+        }
+      }
+
       let fullMessage = `👋 *¡Hola ${user.name}!*\nSoy *LUNA* 🌙 · Asistente de Live Productions\n📅 ${dayName}\n\n☀️ ${aiMessage}`;
       if (taskLines) fullMessage += `\n\n${taskLines}`;
       if (remindersLines) fullMessage += `\n\n${remindersLines}`;
       if (purchasesLines) fullMessage += `\n\n${purchasesLines}`;
+      if (cobrosLines) fullMessage += `\n\n${cobrosLines}`;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
       fullMessage += `\n\n_Escribí *menu* para ver las opciones con botones, o *tareas* para actuar._`;
 
