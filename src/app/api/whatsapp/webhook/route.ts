@@ -682,10 +682,11 @@ async function parseReminderFromText(text: string, user: { id: string; name: str
 Texto: "${text}"
 Usuario actual: ${user.name}
 
-Fecha y hora actual en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}
+HOY ES: ${new Date().toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", year: "numeric" })}
 
 Reglas IMPORTANTES:
 - La hora que dice el usuario ES la hora de Guatemala. NO la conviertas a UTC ni a otra zona.
+- Si NO se indica fecha, el recordatorio es para HOY (la fecha indicada arriba).
 - Si el usuario dice "9:15 am", remindAt debe tener "09:15", NUNCA "15:15".
 - "mañana" = día siguiente
 - "pasado mañana" = en 2 días
@@ -755,10 +756,11 @@ async function parseTaskCreation(text: string, user: { id: string; name: string 
 Texto: "${text}"
 Usuario actual: ${user.name}
 
-Fecha y hora actual en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}
+HOY ES: ${new Date().toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", year: "numeric" })}
 
 Reglas IMPORTANTES:
 - La hora que dice el usuario ES la hora de Guatemala. NO la conviertas a UTC ni a otra zona.
+- Si NO se indica fecha, la tarea es para HOY (la fecha indicada arriba).
 - "mañana" = día siguiente
 - "pasado mañana" = en 2 días
 - "el viernes" = próximo viernes
@@ -1214,6 +1216,14 @@ async function createReminderFromText(
   const parsed = await parseReminderFromText(text, user);
   if (!parsed || !parsed.remindAt) {
     return "🤔 No pude entender la fecha/hora. Ejemplos:\n• *recordatorio para Diana revisar cotizaciones el viernes 3pm*\n• *recuérdame llamar a Juan mañana a las 3pm*\n• *recordatorio Jorge reunión con Tania el 8 a las 7pm*";
+  }
+
+  // Guard: si la fecha quedó muy en el pasado (probable error de la IA, ej. "9 de enero"
+  // en vez de hoy), se corrige a HOY a la misma hora.
+  const now = new Date();
+  if (parsed.remindAt.getTime() < now.getTime() - 24 * 60 * 60 * 1000) {
+    const w = getGuatemalaWallClock(parsed.remindAt);
+    parsed.remindAt = applyGuatemalaTime(gtStartOfToday(), w.hour, w.minute);
   }
 
   await prisma.reminder.create({
@@ -2424,6 +2434,12 @@ async function handleConversationStep(
     const parsed = await parseReminderFromText(text, user);
     if (!parsed || !parsed.remindAt) {
       return "🤔 No pude leer el día y la hora. Escribilo de nuevo con día y hora.\nEj: *llamar al proveedor mañana 9am*";
+    }
+    // Guard: fecha muy en el pasado → corregir a hoy (misma hora)
+    const nowW = new Date();
+    if (parsed.remindAt.getTime() < nowW.getTime() - 24 * 60 * 60 * 1000) {
+      const ww = getGuatemalaWallClock(parsed.remindAt);
+      parsed.remindAt = applyGuatemalaTime(gtStartOfToday(), ww.hour, ww.minute);
     }
     setConversation(fromNumber, "menu_reminder_who", {
       title: parsed.title,
