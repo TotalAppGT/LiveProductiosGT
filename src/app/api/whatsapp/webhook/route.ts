@@ -10,6 +10,10 @@ import { runDataFix } from "@/lib/data-fix";
 
 const conversations = new Map<string, { state: string; data: any; expires: number }>();
 
+// Dedup de mensajes de WhatsApp: WhatsApp puede reenviar el mismo evento
+// (mismo message.id) si no recibe 200 rápido → evita crear duplicados.
+const processedMessageIds = new Set<string>();
+
 // Marcador: handleCommand ya envió su respuesta directamente (botones, etc.)
 // y el flujo principal NO debe re-enviar ni caer al chat IA.
 const COMMAND_SENT = "__SENT__";
@@ -767,6 +771,8 @@ Reglas IMPORTANTES:
 - Si no se especifica hora, usa 09:00
 - Si menciona un nombre de persona (Diana, Jorge, Abel, Selvin, Exequiel, Javier, Brenda, Daniel), asígnalo
 - Si dice "todos los lunes" o "cada martes", isFixed=true con frequency=SEMANAL
+- Si dice "fija" o "fija lunes" / "fija martes" (con un día de la semana) pero SIN fecha ni "cada/todos los", es FIJA: isFixed=true, frequency=SEMANAL, dayOfWeek=ese día, dueDate=null (no preguntar recurrencia)
+- Si dice solo "fija" sin día → isFixed=true, frequency=DIARIA, dayOfWeek=null, dueDate=null (diaria)
 - Solo es FIJA si explícitamente dice "fija" o "recurrente" o "todos los" o "cada"
 
 Responde SOLO el JSON, sin markdown.`
@@ -1226,24 +1232,50 @@ async function createReminderFromText(
     parsed.remindAt = applyGuatemalaTime(gtStartOfToday(), w.hour, w.minute);
   }
 
-  await prisma.reminder.create({
-    data: {
-      title: parsed.title,
-      description: parsed.description || "",
-      remindAt: parsed.remindAt,
-      createdById: user.id,
-      assignedToId: parsed.assignToId || user.id,
-    },
-  });
+  // ¿Para quién? Puede ser MÚLTIPLE (ej: "recordatorio de reunión Daniel y Diana")
+  // → se crea un recordatorio para cada persona mencionada.
+  let assignees: string[] = [];
+  const toMe = /(^|\s)(recu[ée]rdame|m[aá]ndame|av[íi]same|para\s+m[ií])(\s|$)/i.test(text);
+  if (toMe) {
+    assignees = [user.id];
+  } else {
+    const roster = await prisma.user.findMany({ where: { active: true }, select: { id: true, name: true } });
+    const mentioned = roster.filter((u) => {
+      const firstName = u.name.split(" ")[0].toLowerCase();
+      return new RegExp(`\\b${firstName}\\b`, "i").test(text);
+    });
+    if (mentioned.length > 0) {
+      assignees = mentioned.map((u) => u.id);
+    } else if (parsed.assignToId) {
+      assignees = [parsed.assignToId];
+    } else {
+      assignees = [user.id];
+    }
+  }
 
-  const targetUser = parsed.assignToId ? await prisma.user.findUnique({ where: { id: parsed.assignToId } }) : null;
-  const targetName = targetUser ? targetUser.name : "ti";
+  const title = parsed.title;
+  for (const aId of assignees) {
+    await prisma.reminder.create({
+      data: {
+        title,
+        description: parsed.description || "",
+        remindAt: parsed.remindAt,
+        createdById: user.id,
+        assignedToId: aId,
+      },
+    });
+  }
+
+  const names = (
+    await prisma.user.findMany({ where: { id: { in: assignees } }, select: { name: true } })
+  ).map((u) => u.name);
+  const who = assignees.length > 1 ? names.join(", ") : names[0] || "ti";
 
   const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
 
-  return targetUser && targetUser.id !== user.id
-    ? `✅ *Todo listo — Recordatorio confirmado*\n\n📌 ${parsed.title}\n👤 Para: *${targetName}*\n📅 ${dateStr}\n🔔 Le avisará 10 minutos antes y a la hora exacta.`
-    : `✅ *Todo listo — Recordatorio confirmado*\n\n📌 ${parsed.title}\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
+  return assignees.length > 1 || who !== "ti"
+    ? `✅ *Todo listo — Recordatorio confirmado*\n\n📌 ${title}\n👤 Para: *${who}*\n📅 ${dateStr}\n🔔 Avisará a cada uno 10 minutos antes y a la hora exacta.`
+    : `✅ *Todo listo — Recordatorio confirmado*\n\n📌 ${title}\n📅 ${dateStr}\n🔔 Te avisaré 10 minutos antes y a la hora exacta.`;
 }
 
 async function handleCommand(
@@ -2676,6 +2708,16 @@ export async function POST(request: NextRequest) {
 
             for (const message of messages) {
               const fromNumber = message.from;
+              // Dedup: si este mensaje ya se procesó (reintento de WhatsApp), se omite
+              if (message.id) {
+                if (processedMessageIds.has(message.id)) {
+                  console.log(`[WhatsApp] Mensaje duplicado omitido: ${message.id}`);
+                  continue;
+                }
+                processedMessageIds.add(message.id);
+                // Evitar que la lista crezca sin límite
+                if (processedMessageIds.size > 5000) processedMessageIds.clear();
+              }
               const contact = contacts.find(
                 (c: unknown) => (c as Record<string, unknown>).wa_id === fromNumber
               );

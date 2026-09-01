@@ -91,6 +91,8 @@ export default function TareasPage() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [purchases, setPurchases] = useState<any[]>([]);
   const [quickBuyTitle, setQuickBuyTitle] = useState("");
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [buyForm, setBuyForm] = useState({ title: "", amount: "", assignToId: "", dueDate: "", priority: "MEDIA" });
   const [reminders, setReminders] = useState<any[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [groupMode, setGroupMode] = useState<"fase" | "dia">("fase");
@@ -317,6 +319,36 @@ export default function TareasPage() {
       }
     } catch {
       toast.error("Error al agregar compra");
+    }
+  }
+
+  async function createPurchaseFull() {
+    const title = buyForm.title.trim();
+    if (!title) return toast.error("Escribí el nombre de la compra");
+    try {
+      const res = await fetch("/api/purchases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title,
+          amount: buyForm.amount ? Number(buyForm.amount) : null,
+          assignedToId: buyForm.assignToId || user?.id,
+          dueDate: buyForm.dueDate ? `${buyForm.dueDate}T23:59:00` : null,
+          priority: buyForm.priority || "MEDIA",
+          status: "PENDIENTE",
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Compra creada y asignada");
+        setShowPurchaseModal(false);
+        setBuyForm({ title: "", amount: "", assignToId: "", dueDate: "", priority: "MEDIA" });
+        fetchPurchases();
+      } else {
+        throw new Error(json.error || "Error");
+      }
+    } catch {
+      toast.error("Error al crear compra");
     }
   }
 
@@ -1496,6 +1528,9 @@ export default function TareasPage() {
                   <Button variant="primary" size="sm" onClick={quickAddPurchase} disabled={!quickBuyTitle.trim()}>
                     Agregar
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowPurchaseModal(true)}>
+                    + Nueva compra
+                  </Button>
                 </div>
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                   <div className="px-2 py-1 text-[11px] font-bold text-white bg-amber-600 flex items-center justify-between">
@@ -1768,6 +1803,68 @@ export default function TareasPage() {
               disabled={!commentText.trim()}
             >
               Enviar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showPurchaseModal}
+        onClose={() => setShowPurchaseModal(false)}
+        title="🛒 Nueva Compra"
+      >
+        <div className="space-y-4 p-1">
+          <Input
+            label="Qué se compra *"
+            placeholder="Ej: pilas AA, cinta ducto"
+            value={buyForm.title}
+            onChange={(e) => setBuyForm({ ...buyForm, title: e.target.value })}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Monto (Q)"
+              type="number"
+              placeholder="0.00"
+              value={buyForm.amount}
+              onChange={(e) => setBuyForm({ ...buyForm, amount: e.target.value })}
+            />
+            <Input
+              label="Fecha"
+              type="date"
+              value={buyForm.dueDate}
+              onChange={(e) => setBuyForm({ ...buyForm, dueDate: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Asignada a</label>
+            <select
+              value={buyForm.assignToId}
+              onChange={(e) => setBuyForm({ ...buyForm, assignToId: e.target.value })}
+              className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+            >
+              <option value="">Yo mismo</option>
+              {users.filter((u) => u.active !== false).map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Prioridad</label>
+            <select
+              value={buyForm.priority}
+              onChange={(e) => setBuyForm({ ...buyForm, priority: e.target.value })}
+              className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+            >
+              <option value="BAJA">🟢 Baja</option>
+              <option value="MEDIA">🟡 Media</option>
+              <option value="ALTA">🔴 Alta</option>
+              <option value="URGENTE">🔴 Urgente</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setShowPurchaseModal(false)}>Cancelar</Button>
+            <Button variant="primary" onClick={createPurchaseFull} disabled={!buyForm.title.trim()}>
+              Crear compra
             </Button>
           </div>
         </div>
