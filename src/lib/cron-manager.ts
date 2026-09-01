@@ -673,10 +673,10 @@ async function runJobIfScheduled(job: CronJob) {
 
   const hourDiff = w.hour - job.schedule.hour;
 
-  // Future jobs: skip. Past jobs beyond 1 hour: skip.
+  // Future jobs: skip. Past jobs beyond 1.5h: skip.
   if (hourDiff < 0 || hourDiff > 1) return;
-  // Catch-up from previous hour: only in first 10 minutes
-  if (hourDiff === 1 && w.minute >= 10) return;
+  // Catch-up desde la hora anterior: hasta el minuto 30 (para tolerar reinicios/deploys)
+  if (hourDiff === 1 && w.minute >= 30) return;
 
   if (!(await shouldRunJob(job))) {
     console.log(`[Cron] ${job.name}: ya se ejecutó en esta hora, saltando (DB dedup)`);

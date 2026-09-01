@@ -16,7 +16,9 @@ async function logActivity(
     await prisma.activity.create({
       data: { userId, action, resource, resourceId, details },
     });
-  } catch (error) {
+  } catch (error: any) {
+    // Silenciar el FK de "system" (no es un usuario real); loguear solo errores reales
+    if (error?.code === "P2003") return;
     console.error(`[logActivity ${action}]`, error);
   }
 }
