@@ -95,6 +95,7 @@ export default function TareasPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [groupMode, setGroupMode] = useState<"fase" | "dia">("fase");
   const [dayFilter, setDayFilter] = useState("");
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [createPrefill, setCreatePrefill] = useState<{ category?: string; type?: string; dayOfWeek?: string }>({});
 
   const isAdminOrJefe = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
@@ -608,6 +609,12 @@ export default function TareasPage() {
     return "Sin fecha";
   }
 
+  // Orden de días empezando por HOY (hoy primero, luego el resto de la semana)
+  const todayLabel = new Date().toLocaleDateString("es-GT", { weekday: "long" });
+  const todayCap = todayLabel.charAt(0).toUpperCase() + todayLabel.slice(1);
+  const todayIdx = dayGroupOrder.indexOf(todayCap);
+  const weekFromToday = [...dayGroupOrder.slice(todayIdx), ...dayGroupOrder.slice(0, todayIdx)];
+
   // Agrupación por DÍA (Lunes, Martes...) como en el chat
   function buildDayGroups(): SheetSection[] {
     const byDay = new Map<string, Task[]>();
@@ -616,7 +623,7 @@ export default function TareasPage() {
       if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
       byDay.get(dayLabel)!.push(t);
     });
-    const orderedKeys = [...dayGroupOrder, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
+    const orderedKeys = [...weekFromToday, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
     return orderedKeys.map((d) => ({
       key: `dia-${d}`,
       label: d,
@@ -656,7 +663,7 @@ export default function TareasPage() {
       if (!byDay.has(day)) byDay.set(day, []);
       byDay.get(day)!.push(t);
     });
-    const orderedDays = [...dayGroupOrder, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
+    const orderedDays = [...weekFromToday, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
     for (const day of orderedDays) {
       const dayTasks = byDay.get(day) || [];
       const dow = dayToDayOfWeek[day];
@@ -814,6 +821,20 @@ export default function TareasPage() {
             ✕ Quitar filtro
           </button>
         )}
+        <div className="ml-auto flex gap-1">
+          <button
+            onClick={() => setCollapsedDays(new Set())}
+            className="text-xs text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-full px-2.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            ▶ Expandir todo
+          </button>
+          <button
+            onClick={() => setCollapsedDays(new Set(weekFromToday))}
+            className="text-xs text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-full px-2.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            ▼ Solo hoy
+          </button>
+        </div>
       </div>
 
       {selectedTasks.size > 0 && (
@@ -1206,15 +1227,37 @@ export default function TareasPage() {
                 </div>
                 <div className="overflow-x-auto">
                   <div className="min-w-[720px]">
-                    {sheetGroups.map((group, gi) => (
+                    {sheetGroups.map((group, gi) => {
+                      // Si un día está colapsado, ocultar sus sub-secciones (fase/tipo)
+                      const parentDay = group.level > 0 ? group.key.split("-")[0] : null;
+                      if (parentDay && collapsedDays.has(parentDay)) return null;
+                      return (
                       <div key={group.key + gi}>
                         {/* Fila de encabezado: día / fase / tipo */}
                         <div className={`${group.bg} flex items-center justify-between ${
-                          group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white"
+                          group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white cursor-pointer select-none"
                           : group.level === 1 ? "px-3 py-1 text-[11px] font-semibold text-white"
                           : "px-4 py-0.5 text-[10px] font-semibold text-gray-700 dark:text-gray-200"
                         }`}>
-                          <span>{group.label}</span>
+                          <span className="flex items-center gap-1">
+                            {group.level === 0 && (
+                              <button
+                                onClick={() => {
+                                  const day = group.label;
+                                  setCollapsedDays((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(day)) next.delete(day); else next.add(day);
+                                    return next;
+                                  });
+                                }}
+                                className="text-white/80 hover:text-white mr-0.5"
+                                title={collapsedDays.has(group.label) ? "Mostrar día" : "Ocultar día"}
+                              >
+                                {collapsedDays.has(group.label) ? "▶" : "▼"}
+                              </button>
+                            )}
+                            <span>{group.label}</span>
+                          </span>
                           <div className="flex items-center gap-1">
                             <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{group.tasks.length}</span>
                             <button
@@ -1347,7 +1390,8 @@ export default function TareasPage() {
                           </div>
                         ))}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>

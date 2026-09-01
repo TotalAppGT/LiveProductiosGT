@@ -615,8 +615,19 @@ async function bihourlyReminder(hour: number) {
   }
 }
 
+// Diario (8am): correr las tareas no cumplidas al día siguiente (lunes→martes→miércoles...)
+async function dailyCarryOver() {
+  try {
+    const carried = await carryOverUncompletedTasks();
+    if (carried > 0) console.log(`[Cron] carryOver: ${carried} tareas migradas a hoy`);
+  } catch (error) {
+    console.error("[Cron] carryOver error:", error);
+  }
+}
+
 const jobs: CronJob[] = [
   { name: "morningBriefing", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing, skipOnSunday: true },
+  { name: "dailyCarryOver", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: dailyCarryOver, skipOnSunday: true },
   { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck, skipOnSunday: true },
   { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck, skipOnSunday: true },
   { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck, skipOnSunday: true },
