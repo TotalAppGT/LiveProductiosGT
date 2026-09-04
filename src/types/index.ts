@@ -126,6 +126,8 @@ export interface Task {
   rescheduledTo?: string | null;
   requiresConfirmation: boolean;
   confirmedAt?: string | null;
+  asReminder?: boolean;
+  reminderSentAt?: string | null;
   assignedToId?: string | null;
   assignedById?: string | null;
   eventId?: string | null;

@@ -24,6 +24,7 @@ export async function PATCH(
     if (body.description !== undefined) data.description = body.description;
     if (body.provider !== undefined) data.provider = body.provider;
     if (body.amount !== undefined) data.amount = body.amount === null ? null : Number(body.amount);
+    if (body.advance !== undefined) data.advance = body.advance === null ? null : Number(body.advance);
     if (body.status !== undefined) data.status = body.status;
     if (body.priority !== undefined) data.priority = body.priority;
     if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null;

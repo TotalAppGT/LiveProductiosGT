@@ -1107,6 +1107,50 @@ export function getSmartCronSchedule(): Record<string, string> {
   };
 }
 
+// 🔔 Recordatorios de TAREAS con el "reloj" activado (asReminder):
+// a la hora de la tarea se envía un WhatsApp al asignado (respetando inicio desde las 7am).
+export async function fireTaskReminders(): Promise<{ fired: number }> {
+  let fired = 0;
+  try {
+    const now = new Date();
+    const w = getGuatemalaWallClock(now);
+    if (w.hour < 7) return { fired: 0 }; // fuera de horario
+
+    const dueTasks = await prisma.task.findMany({
+      where: {
+        asReminder: true,
+        reminderSentAt: null,
+        status: { in: ["PENDIENTE", "EN_PROCESO"] },
+        dueDate: { lte: now },
+        assignedToId: { not: null },
+      },
+      include: {
+        assignedTo: { select: { id: true, name: true, whatsappNumber: true, phone: true } },
+      },
+      take: 20,
+    });
+
+    for (const task of dueTasks) {
+      const to = task.assignedTo?.whatsappNumber || task.assignedTo?.phone;
+      if (!to) continue;
+      const hora = task.dueDate
+        ? new Date(task.dueDate).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })
+        : "";
+      await sendMessage(
+        to,
+        `🔔 *Recordatorio (tarea)*\n\n${task.title}${hora ? `\n🕐 ${hora}` : ""}\n\n_Esta tarea también funciona como recordatorio._`
+      ).catch(() => {});
+      await prisma.task.update({ where: { id: task.id }, data: { reminderSentAt: now } });
+      fired++;
+    }
+
+    return { fired };
+  } catch (error) {
+    console.error("fireTaskReminders error:", error);
+    return { fired: 0 };
+  }
+}
+
 export async function fireDueReminders(): Promise<{ fired: number; advanced: number }> {
   let fired = 0;
   let advanced = 0;

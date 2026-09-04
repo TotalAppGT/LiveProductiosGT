@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage } from "@/lib/whatsapp";
-import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
+import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireTaskReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
 import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate } from "@/lib/task-utils";
 
 interface CronJob {
@@ -726,6 +726,7 @@ export function startCronManager(): void {
     try {
       await Promise.all(jobs.map((job) => runJobIfScheduled(job)));
       await fireDueReminders();
+      await fireTaskReminders();
       await fireScheduledAlerts();
       await fireScheduledMessages();
     } catch (error) {

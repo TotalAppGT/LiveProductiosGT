@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, amount, provider, status, dueDate, priority, assignedToId } = body;
+    const { title, description, amount, advance, provider, status, dueDate, priority, assignedToId } = body;
 
     if (!title || !title.trim()) {
       return NextResponse.json({ success: false, error: "El título es requerido" }, { status: 400 });
@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
         title: title.trim(),
         description: description || "",
         amount: amount ? Number(amount) : null,
+        advance: advance ? Number(advance) : null,
         provider: provider || null,
         status: status || "PENDIENTE",
         dueDate: dueDate ? new Date(dueDate) : null,

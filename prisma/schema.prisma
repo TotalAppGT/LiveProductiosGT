@@ -218,6 +218,8 @@ model Task {
   rescheduledTo        DateTime?
   requiresConfirmation Boolean        @default(false)
   confirmedAt          DateTime?
+  asReminder           Boolean        @default(false)
+  reminderSentAt       DateTime?
   assignedToId         String?
   assignedById         String?
   eventId              String?
@@ -572,6 +574,7 @@ model Purchase {
   title        String
   description  String?
   amount       Decimal?  @db.Decimal(10, 2)
+  advance      Decimal?  @db.Decimal(10, 2)
   provider     String?
   status       String    @default("PENDIENTE") // PENDIENTE | COMPRADO | CANCELADO
   dueDate      DateTime?

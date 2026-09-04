@@ -104,6 +104,7 @@ export async function PUT(
       assignedToId,
       eventId,
       requiresConfirmation,
+      asReminder,
       confirmedAt,
     } = body;
 
@@ -127,6 +128,7 @@ export async function PUT(
         assignedToId: assignedToId !== undefined ? assignedToId : undefined,
         eventId: eventId !== undefined ? eventId : undefined,
         requiresConfirmation: requiresConfirmation !== undefined ? requiresConfirmation : undefined,
+        asReminder: asReminder !== undefined ? asReminder : undefined,
         confirmedAt: confirmedAt !== undefined ? (confirmedAt ? new Date(confirmedAt) : null) : undefined,
       },
       include: {

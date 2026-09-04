@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Play,
   CalendarClock,
+  BellRing,
   MessageSquare,
   MoreHorizontal,
   LayoutList,
@@ -228,6 +229,27 @@ export default function TareasPage() {
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al actualizar");
+    }
+  }
+
+  // 🔔 Activar/desactivar una tarea para que funcione como recordatorio a la hora indicada
+  async function toggleTaskAsReminder(task: Task) {
+    try {
+      const next = !task.asReminder;
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ asReminder: next }),
+      });
+      const json: ApiResponse<Task> = await res.json();
+      if (json.success) {
+        toast.success(next ? "🔔 Recordatorio activado a la hora de la tarea" : "Recordatorio desactivado");
+        fetchTasks();
+      } else {
+        throw new Error(json.error || "Error");
+      }
+    } catch {
+      toast.error("Error al cambiar el recordatorio de la tarea");
     }
   }
 
@@ -1386,6 +1408,13 @@ export default function TareasPage() {
                                   <Play className="w-3 h-3" />
                                 </button>
                               )}
+                              <button
+                                onClick={() => toggleTaskAsReminder(task)}
+                                className={`p-0.5 rounded ${task.asReminder ? "text-orange-500 bg-orange-100 dark:bg-orange-900/30" : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"}`}
+                                title={task.asReminder ? "Activa como recordatorio (quitar)" : "🔔 Activar como recordatorio a la hora de la tarea"}
+                              >
+                                <BellRing className="w-3 h-3" />
+                              </button>
                               {task.status !== "COMPLETADA" && (
                                 <button
                                   onClick={() => updateTaskStatus(task.id, "REPROGRAMADA")}
