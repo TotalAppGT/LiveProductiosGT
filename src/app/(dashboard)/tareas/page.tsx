@@ -99,6 +99,8 @@ export default function TareasPage() {
   const [groupMode, setGroupMode] = useState<"fase" | "dia">("fase");
   const [dayFilter, setDayFilter] = useState("");
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
+  const [viewOffset, setViewOffset] = useState(0); // semanas desde la actual (0=esta semana)
+  const [jumpDate, setJumpDate] = useState("");
   const [createPrefill, setCreatePrefill] = useState<{ category?: string; type?: string; dayOfWeek?: string }>({});
 
   const isAdminOrJefe = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
@@ -663,16 +665,47 @@ export default function TareasPage() {
     return "Sin fecha";
   }
 
-  // Orden de días empezando por HOY (hoy primero, luego el resto de la semana)
+  // Orden de días de la SEMANA VISIBLE (navegable por semanas/fechas)
   const todayLabel = new Date().toLocaleDateString("es-GT", { weekday: "long" });
   const todayCap = todayLabel.charAt(0).toUpperCase() + todayLabel.slice(1);
   const todayIdx = dayGroupOrder.indexOf(todayCap);
-  const weekFromToday = [...dayGroupOrder.slice(todayIdx), ...dayGroupOrder.slice(0, todayIdx)];
+
+  // Lunes de la semana actual (hora de Guatemala)
+  const nowD = new Date();
+  const nowDay = nowD.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short" });
+  const weekdayNum: Record<string, number> = { lun: 0, mar: 1, mié: 2, jue: 3, vie: 4, sáb: 5, dom: 6 };
+  const todayNum = weekdayNum[nowDay.toLowerCase()] ?? 0;
+  const nowStart = new Date(nowD);
+  nowStart.setHours(0, 0, 0, 0);
+  const currentMonday = new Date(nowStart.getTime() - (todayNum) * 24 * 3600 * 1000);
+  const viewMonday = new Date(currentMonday.getTime() + viewOffset * 7 * 24 * 3600 * 1000);
+  const viewSunday = new Date(viewMonday.getTime() + 6 * 24 * 3600 * 1000);
+
+  // Etiquetas de la semana visible (hoy primero SOLO en la semana actual)
+  const weekFromToday = viewOffset === 0
+    ? [...dayGroupOrder.slice(todayIdx), ...dayGroupOrder.slice(0, todayIdx)]
+    : [...dayGroupOrder];
+
+  // Una tarea pertenece a la semana visible si su fecha está dentro, o es fija recurrente
+  const taskInViewWeek = (t: Task): boolean => {
+    if (t.dueDate) {
+      const dd = new Date(t.dueDate);
+      const wd = dd.toLocaleDateString("es-GT", { timeZone: "America/Guatemala" });
+      const ms = viewMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala" });
+      const se = viewSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala" });
+      // comparación de fecha (YYYY-MM-DD)
+      const toKey = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
+      return toKey(dd) >= toKey(viewMonday) && toKey(dd) <= toKey(viewSunday);
+    }
+    if (t.type === "FIJA") return true; // fijas recurrentes aparecen cada semana que se ve
+    return false;
+  };
+  const viewTasks = visibleTasks.filter((t) => !dayFilter || taskDayLabel(t) === dayFilter).filter(taskInViewWeek);
 
   // Agrupación por DÍA (Lunes, Martes...) como en el chat
   function buildDayGroups(): SheetSection[] {
     const byDay = new Map<string, Task[]>();
-    visibleTasks.filter((t) => !dayFilter || taskDayLabel(t) === dayFilter).forEach((t) => {
+    viewTasks.forEach((t) => {
       const dayLabel = taskDayLabel(t);
       if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
       byDay.get(dayLabel)!.push(t);
@@ -712,7 +745,7 @@ export default function TareasPage() {
   function buildHierarchicalGroups(): SheetSection[] {
     const sections: SheetSection[] = [];
     const byDay = new Map<string, Task[]>();
-    visibleTasks.filter((t) => !dayFilter || taskDayLabel(t) === dayFilter).forEach((t) => {
+    viewTasks.forEach((t) => {
       const day = taskDayLabel(t);
       if (!byDay.has(day)) byDay.set(day, []);
       byDay.get(day)!.push(t);
@@ -845,31 +878,72 @@ export default function TareasPage() {
         </div>
       </div>
 
-      {/* Filtro por día de la semana (empieza con HOY) */}
+      {/* Navegación por semana / fecha */}
+      <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setViewOffset((o) => o - 1)}
+          className="text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+          title="Semana anterior"
+        >
+          ◀
+        </button>
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 min-w-[150px] text-center">
+          {viewOffset === 0 ? "📌 Esta semana" : viewOffset === 1 ? "Próxima semana" : viewOffset === -1 ? "Semana pasada" : ""}{" "}
+          {viewMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })} –{" "}
+          {viewSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short", year: "numeric" })}
+        </span>
+        <button
+          onClick={() => setViewOffset((o) => o + 1)}
+          className="text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+          title="Semana siguiente"
+        >
+          ▶
+        </button>
+        <input
+          type="date"
+          value={jumpDate}
+          onChange={(e) => {
+            setJumpDate(e.target.value);
+            if (e.target.value) {
+              const d = new Date(e.target.value + "T12:00:00");
+              const day = d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short" });
+              const wn: Record<string, number> = { lun: 0, mar: 1, mié: 2, jue: 3, vie: 4, sáb: 5, dom: 6 };
+              const dStart = new Date(d); dStart.setHours(0, 0, 0, 0);
+              const deltaDays = dStart.getTime() - currentMonday.getTime();
+              const weeks = Math.round(deltaDays / (7 * 24 * 3600 * 1000));
+              setViewOffset(weeks);
+              setDayFilter("");
+            }
+          }}
+          className="text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-gray-700 dark:text-gray-200"
+          title="Ir a una fecha"
+        />
+        <button
+          onClick={() => { setViewOffset(0); setJumpDate(""); }}
+          className="text-xs text-gray-500 dark:text-gray-400 underline ml-auto"
+        >
+          Volver a hoy
+        </button>
+      </div>
+
+      {/* Filtro por día de la semana (de la semana visible) */}
       <div className="flex flex-wrap gap-1.5 items-center">
-        {(() => {
-          const todayName = new Date().toLocaleDateString("es-GT", { weekday: "long" });
-          const ordered = [
-            todayName.charAt(0).toUpperCase() + todayName.slice(1),
-            ...dayGroupOrder.filter((d) => d !== todayName.charAt(0).toUpperCase() + todayName.slice(1)),
-          ];
-          return ordered.map((d) => {
-            const active = dayFilter === d;
-            return (
-              <button
-                key={d}
-                onClick={() => setDayFilter(active ? "" : d)}
-                className={`text-xs font-medium rounded-full px-3 py-1 border transition-colors ${
-                  active
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-                }`}
-              >
-                {d === todayName.charAt(0).toUpperCase() + todayName.slice(1) ? "📌 Hoy" : d}
-              </button>
-            );
-          });
-        })()}
+        {weekFromToday.map((d) => {
+          const active = dayFilter === d;
+          return (
+            <button
+              key={d}
+              onClick={() => setDayFilter(active ? "" : d)}
+              className={`text-xs font-medium rounded-full px-3 py-1 border transition-colors ${
+                active
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              {viewOffset === 0 && d === todayCap ? "📌 Hoy" : d}
+            </button>
+          );
+        })}
         {dayFilter && (
           <button onClick={() => setDayFilter("")} className="text-xs text-red-500 hover:underline ml-1">
             ✕ Quitar filtro
@@ -882,12 +956,14 @@ export default function TareasPage() {
           >
             ▶ Expandir todo
           </button>
-          <button
-            onClick={() => setCollapsedDays(new Set(weekFromToday))}
-            className="text-xs text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-full px-2.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            ▼ Solo hoy
-          </button>
+          {viewOffset === 0 && (
+            <button
+              onClick={() => setCollapsedDays(new Set(weekFromToday))}
+              className="text-xs text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-full px-2.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              ▼ Solo hoy
+            </button>
+          )}
         </div>
       </div>
 
