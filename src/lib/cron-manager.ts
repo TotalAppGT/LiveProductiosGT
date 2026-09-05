@@ -117,9 +117,6 @@ async function morningBriefing() {
         take: 5,
       });
 
-      const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-      const dayName = dayNames[wNow.weekday];
-
       const { orderTasksByDayHour, groupTasksByDayText } = await import("@/lib/task-view");
 
       // Mensaje diario = SOLO lo de HOY: primero pendientes/vencidas, luego tareas de hoy.
@@ -137,21 +134,16 @@ async function morningBriefing() {
       taskLines = taskLines.trim();
 
       const todayCount = todayTasks.length;
+      const stillCount = stillOverdue.length;
 
-      const aiPrompt = `Eres LUNA de Live Productions GT. Genera un mensaje corto de buenos días para ${user.name} (${user.role}). Hoy es ${dayName}. Para HOY tiene ${todayCount} tareas${stillOverdue.length > 0 ? ` y ${stillOverdue.length} vencidas que atender primero` : ""}, ${events.length} eventos próximos. Sé cálida y motivadora, mencioná por dónde empezar (las vencidas o la más urgente). Máximo 2 oraciones. Español de Guatemala. NO te presentes (ya hay un encabezado).`;
-
-      let aiMessage = "";
-      try {
-        aiMessage = await askAI(
-          [{ role: "user", content: aiPrompt }],
-          { temperature: 0.7, maxTokens: 250 }
-        );
-      } catch {
-        aiMessage = "";
-      }
-      if (!aiSucceeded(aiMessage)) {
-        aiMessage = `Hoy tienes ${todayCount} tareas${stillOverdue.length ? ` y ${stillOverdue.length} vencidas que debemos atender primero` : ""}. ¡A darle con todo! 💪`;
-      }
+      // Saludo corto según la hora
+      const hNow = wNow.hour;
+      const saludo = hNow < 12 ? "Buenos días" : hNow < 18 ? "Buenas tardes" : "Buenas noches";
+      const intro = `Luna 🌙 · ${saludo}, ${user.name.split(" ")[0]}`;
+      let resumen = "";
+      if (stillCount > 0 && todayCount > 0) resumen = `Tienes ${stillCount} vencidas y ${todayCount} para hoy.`;
+      else if (stillCount > 0) resumen = `Tienes ${stillCount} vencidas que atender primero.`;
+      else if (todayCount > 0) resumen = `Tienes ${todayCount} para hoy.`;
 
       const eventLines = events
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -219,13 +211,20 @@ async function morningBriefing() {
         }
       }
 
-      let fullMessage = `👋 *¡Hola ${user.name}!*\nSoy *LUNA* 🌙 · Asistente de Live Productions\n📅 ${dayName}\n\n☀️ ${aiMessage}`;
+      // Mensaje EXPRESS: empieza con Luna y va directo al contenido del día
+      let fullMessage = `*${intro}*`;
+      if (resumen) fullMessage += `\n${resumen}`;
       if (taskLines) fullMessage += `\n\n${taskLines}`;
       if (remindersLines) fullMessage += `\n\n${remindersLines}`;
       if (purchasesLines) fullMessage += `\n\n${purchasesLines}`;
       if (cobrosLines) fullMessage += `\n\n${cobrosLines}`;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
-      fullMessage += `\n\n_Escribí *menu* para ver las opciones con botones, o *tareas* para actuar._`;
+      if (fullMessage.length < 40) {
+        // Si no hay nada, igual se le avisa (todo al día)
+        fullMessage = `*${intro}*\n✅ Hoy no tienes pendientes. ¡Todo al día! 🎉`;
+      } else {
+        fullMessage += `\n\n_Escribí *tareas* o *menu* para ver más._`;
+      }
 
       // WhatsApp limita a 4096 caracteres: si el mensaje es muy largo, se recorta.
       if (fullMessage.length > 3950) {
@@ -234,8 +233,11 @@ async function morningBriefing() {
 
       const to = user.whatsappNumber || user.phone;
       if (to) {
-        await sendMessage(to, fullMessage);
+        const ok = await sendMessage(to, fullMessage).catch(() => null);
+        if (!ok) console.error(`[Cron] Briefing NO enviado a ${user.name} (${to})`);
         await logActivity(user.id, "CRON_MORNING_BRIEFING", `Briefing matutino enviado a ${user.name}`);
+      } else {
+        console.warn(`[Cron] ${user.name} sin número (whatsapp/phone) → sin briefing`);
       }
     } catch (error) {
       console.error(`[Cron] Error morning briefing for ${user.name}:`, error);
