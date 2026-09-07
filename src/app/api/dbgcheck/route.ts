@@ -50,6 +50,15 @@ export async function POST(req: NextRequest) {
   }
   const digits = String(to).replace(/[^0-9]/g, "");
 
+  if (action === "whoami") {
+    const res = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,code_verification_status,messaging_limit_tier`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const body = await res.json();
+    return NextResponse.json({ httpStatus: res.status, meta: body });
+  }
+
   if (action === "check") {
     const res = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/contacts`, {
       method: "POST",
