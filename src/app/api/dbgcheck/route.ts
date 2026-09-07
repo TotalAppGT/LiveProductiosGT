@@ -18,10 +18,17 @@ export async function GET(req: NextRequest) {
     take: 80,
     select: { id: true, userId: true, action: true, resource: true, details: true, createdAt: true },
   }).catch(() => []);
+  const wm = await prisma.whatsAppMessage.findMany({
+    where: { createdAt: { gte: since } },
+    orderBy: { createdAt: "desc" },
+    take: 40,
+    select: { id: true, type: true, toNumber: true, status: true, createdAt: true },
+  }).catch(() => []);
   return NextResponse.json({
     provider: provider?.value || "META",
     configOk: !!(wac?.phoneNumberId && (wac?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN)),
     hasDbConfig: !!wac,
+    whatsAppMessages: wm,
     activities,
     users: users.map((u) => ({
       id: u.id,
