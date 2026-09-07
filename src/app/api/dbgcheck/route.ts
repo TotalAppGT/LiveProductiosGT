@@ -40,32 +40,41 @@ export async function POST(req: NextRequest) {
   if (!key || req.headers.get("x-dbg") !== key) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const { to } = await req.json().catch(() => ({}));
-  if (!to) return NextResponse.json({ error: "need-to" }, { status: 400 });
+  const { action, to } = await req.json().catch(() => ({}));
 
-  const providerCfg = await prisma.systemConfig.findUnique({ where: { key: "whatsapp_provider" } });
-  const provider = providerCfg?.value || "META";
-  if (provider !== "META") {
-    return NextResponse.json({ provider, note: "no probando Twilio" });
-  }
   const wac = await prisma.whatsAppConfig.findFirst({ orderBy: { updatedAt: "desc" } });
   const phoneNumberId = wac?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
   const accessToken = wac?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN || "";
   if (!phoneNumberId || !accessToken) {
-    return NextResponse.json({ error: "meta-no-config", hasDbConfig: !!wac });
+    return NextResponse.json({ error: "meta-no-config" });
   }
   const digits = String(to).replace(/[^0-9]/g, "");
-  const res = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: digits,
-      type: "text",
-      text: { preview_url: false, body: "Luna 🌙 · Prueba de canal. Si recibes esto, respondé OK." },
-    }),
-  });
-  const body = await res.json();
-  return NextResponse.json({ httpStatus: res.status, meta: body });
+
+  if (action === "check") {
+    const res = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/contacts`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", contacts: [{ phone: digits }] }),
+    });
+    const body = await res.json();
+    return NextResponse.json({ httpStatus: res.status, meta: body });
+  }
+
+  if (action === "send") {
+    const res = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: digits,
+        type: "text",
+        text: { preview_url: false, body: "Luna 🌙 · Prueba de canal. Si recibes esto, respondé OK." },
+      }),
+    });
+    const body = await res.json();
+    return NextResponse.json({ httpStatus: res.status, meta: body });
+  }
+
+  return NextResponse.json({ error: "unknown-action" }, { status: 400 });
 }
