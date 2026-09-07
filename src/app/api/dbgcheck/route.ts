@@ -11,10 +11,18 @@ export async function GET(req: NextRequest) {
   });
   const provider = await prisma.systemConfig.findUnique({ where: { key: "whatsapp_provider" } });
   const wac = await prisma.whatsAppConfig.findFirst({ orderBy: { updatedAt: "desc" } });
+  const since = new Date(Date.now() - 26 * 60 * 60 * 1000);
+  const activities = await prisma.activity.findMany({
+    where: { createdAt: { gte: since } },
+    orderBy: { createdAt: "desc" },
+    take: 60,
+    select: { id: true, userId: true, type: true, message: true, createdAt: true },
+  }).catch(() => []);
   return NextResponse.json({
     provider: provider?.value || "META",
     configOk: !!(wac?.phoneNumberId && (wac?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN)),
     hasDbConfig: !!wac,
+    activities,
     users: users.map((u) => ({
       id: u.id,
       name: u.name,
