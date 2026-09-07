@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
   const activities = await prisma.activity.findMany({
     where: { createdAt: { gte: since } },
     orderBy: { createdAt: "desc" },
-    take: 60,
-    select: { id: true, userId: true, type: true, message: true, createdAt: true },
+    take: 80,
+    select: { id: true, userId: true, action: true, resource: true, details: true, createdAt: true },
   }).catch(() => []);
   return NextResponse.json({
     provider: provider?.value || "META",
