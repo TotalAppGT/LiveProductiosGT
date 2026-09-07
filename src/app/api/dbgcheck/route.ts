@@ -42,6 +42,13 @@ export async function POST(req: NextRequest) {
   }
   const { action, to } = await req.json().catch(() => ({}));
 
+  if (action === "briefing") {
+    const { debugRunMorningBriefing } = await import("@/lib/cron-manager");
+    const started = Date.now();
+    await debugRunMorningBriefing();
+    return NextResponse.json({ done: true, ms: Date.now() - started });
+  }
+
   const wac = await prisma.whatsAppConfig.findFirst({ orderBy: { updatedAt: "desc" } });
   const phoneNumberId = wac?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
   const accessToken = wac?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN || "";

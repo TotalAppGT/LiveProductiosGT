@@ -233,9 +233,16 @@ async function morningBriefing() {
 
       const to = user.whatsappNumber || user.phone;
       if (to) {
-        const ok = await sendMessage(to, fullMessage).catch(() => null);
+        const ok = await sendMessage(to, fullMessage).catch((err) => {
+          console.error(`[Cron] excepción sendMessage a ${user.name}:`, err);
+          return null;
+        });
+        await logActivity(
+          user.id,
+          "CRON_MORNING_BRIEFING",
+          ok ? `Briefing matutino enviado a ${user.name} (${to})` : `FALLO envío briefing a ${user.name} (${to})`
+        );
         if (!ok) console.error(`[Cron] Briefing NO enviado a ${user.name} (${to})`);
-        await logActivity(user.id, "CRON_MORNING_BRIEFING", `Briefing matutino enviado a ${user.name}`);
       } else {
         console.warn(`[Cron] ${user.name} sin número (whatsapp/phone) → sin briefing`);
       }
@@ -243,6 +250,11 @@ async function morningBriefing() {
       console.error(`[Cron] Error morning briefing for ${user.name}:`, error);
     }
   }
+}
+
+/** Solo diagnóstico: dispara el briefing completo ahora (no reprogramado). */
+export async function debugRunMorningBriefing() {
+  await morningBriefing();
 }
 
 async function dailyDigest() {
