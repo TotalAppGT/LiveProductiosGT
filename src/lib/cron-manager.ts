@@ -237,11 +237,21 @@ async function morningBriefing() {
           console.error(`[Cron] excepción sendMessage a ${user.name}:`, err);
           return null;
         });
-        await logActivity(
+        const record = prisma.whatsAppMessage.create({
+          data: {
+            userId: user.id,
+            toNumber: to,
+            message: `[BRIEFING] ${fullMessage}`,
+            type: "NOTIFICATION",
+            status: ok ? "SENT" : "FAILED",
+          },
+        });
+        const act = logActivity(
           user.id,
           "CRON_MORNING_BRIEFING",
           ok ? `Briefing matutino enviado a ${user.name} (${to})` : `FALLO envío briefing a ${user.name} (${to})`
         );
+        await Promise.allSettled([record, act]);
         if (!ok) console.error(`[Cron] Briefing NO enviado a ${user.name} (${to})`);
       } else {
         console.warn(`[Cron] ${user.name} sin número (whatsapp/phone) → sin briefing`);
@@ -250,11 +260,6 @@ async function morningBriefing() {
       console.error(`[Cron] Error morning briefing for ${user.name}:`, error);
     }
   }
-}
-
-/** Solo diagnóstico: dispara el briefing completo ahora (no reprogramado). */
-export async function debugRunMorningBriefing() {
-  await morningBriefing();
 }
 
 async function dailyDigest() {
