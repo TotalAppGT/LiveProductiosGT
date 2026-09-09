@@ -1729,7 +1729,12 @@ async function handleCommand(
       return "No entendí bien la fecha. Prueba: *tareas para mañana*, *tareas del lunes*, *tareas de la próxima semana*";
     }
 
-    const tasks = (await prisma.task.findMany({
+    // Determinar si es un solo día o varios días (comparación en hora de Guatemala)
+    const d1 = getGuatemalaWallClock(dateFrom);
+    const d2 = getGuatemalaWallClock(dateTo);
+    const isSingleDay = d1.year === d2.year && d1.month === d2.month && d1.day === d2.day;
+
+    const rangeTasks = (await prisma.task.findMany({
       where: {
         assignedToId: user.id,
         status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
@@ -1744,14 +1749,35 @@ async function handleCommand(
       take: 20,
     })).filter((t) => !t.title.startsWith("🔔"));
 
+    // En consulta de UN día también mostramos las FIJA recurrentes de ese día
+    // (diarias + las del día de la semana), igual que el briefing y "tareas hoy".
+    const tasks = rangeTasks.slice();
+    if (isSingleDay) {
+      const recurring = await prisma.task.findMany({
+        where: {
+          assignedToId: user.id,
+          type: "FIJA",
+          frequency: { in: ["DIARIA", "SEMANAL"] },
+          status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
+        },
+        take: 150,
+      });
+      const PRIO: Record<string, number> = { URGENTE: 5, ALTA: 4, MEDIA: 3, BAJA: 2, OTRO: 1 };
+      for (const t of recurring) {
+        if (isTaskDueOnDate(t, dateFrom) && !tasks.some((x) => x.id === t.id)) {
+          tasks.push(t);
+        }
+      }
+      tasks.sort(
+        (a, b) =>
+          (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0) ||
+          (PRIO[b.priority] ?? 0) - (PRIO[a.priority] ?? 0)
+      );
+    }
+
     if (tasks.length === 0) {
       return `${user.name}, no tienes tareas para *${title}*. ¡Bien! 🎉`;
     }
-
-    // Determinar si es un solo día o varios días (comparación en hora de Guatemala)
-    const d1 = getGuatemalaWallClock(dateFrom);
-    const d2 = getGuatemalaWallClock(dateTo);
-    const isSingleDay = d1.year === d2.year && d1.month === d2.month && d1.day === d2.day;
 
     let body: string;
     if (isSingleDay) {

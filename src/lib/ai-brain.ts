@@ -782,7 +782,7 @@ export async function getAIAssistantContext(userId: string): Promise<string> {
       prisma.vehicle.findMany({ orderBy: { name: "asc" }, select: { name: true, plate: true, status: true, assignedTo: { select: { name: true } } } }),
       prisma.cobro.findMany({ where: { status: "PENDIENTE" }, orderBy: { dueDate: "asc" }, take: 20, select: { clientName: true, amount: true, dueDate: true, assignedTo: { select: { name: true } } } }),
       prisma.user.findMany({ where: { active: true }, select: { name: true, role: true, email: true, phone: true }, orderBy: { name: "asc" } }),
-      prisma.activity.count({ where: { userId, createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } } }),
+      prisma.activity.count({ where: { userId, createdAt: { gte: gtStartOfToday() } } }),
     ]);
 
     const complianceRate = assignedCount > 0 ? Math.min(100, Math.round((completedCount / assignedCount) * 100)) : 0;

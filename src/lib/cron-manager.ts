@@ -101,7 +101,7 @@ async function morningBriefing() {
       const tasks = (await prisma.task.findMany({
         where: {
           assignedToId: user.id,
-          status: { in: ["PENDIENTE", "EN_PROCESO"] },
+          status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
         },
         orderBy: [{ dueDate: "asc" }],
         take: 100,
@@ -109,12 +109,14 @@ async function morningBriefing() {
 
       const events = await prisma.event.findMany({
         where: {
-          date: { gte: new Date(Date.UTC(wNow.year, wNow.month - 1, wNow.day - 1)) },
+          // Eventos de HOY en adelante (medianoche real de Guatemala),
+          // alineado con el resto del sistema (reminders de eventos).
+          date: { gte: startOfToday },
           status: { in: ["CONFIRMADO", "EN_PROGRESO"] },
           OR: [{ plannerId: user.id }, { responsibleId: user.id }],
         },
         orderBy: { date: "asc" },
-        take: 5,
+        take: 6,
       });
 
       const { orderTasksByDayHour, groupTasksByDayText } = await import("@/lib/task-view");
@@ -140,14 +142,10 @@ async function morningBriefing() {
       const hNow = wNow.hour;
       const saludo = hNow < 12 ? "Buenos días" : hNow < 18 ? "Buenas tardes" : "Buenas noches";
       const intro = `Luna 🌙 · ${saludo}, ${user.name.split(" ")[0]}`;
-      let resumen = "";
-      if (stillCount > 0 && todayCount > 0) resumen = `Tienes ${stillCount} vencidas y ${todayCount} para hoy.`;
-      else if (stillCount > 0) resumen = `Tienes ${stillCount} vencidas que atender primero.`;
-      else if (todayCount > 0) resumen = `Tienes ${todayCount} para hoy.`;
 
       const eventLines = events
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .map((e) => `🎪 ${e.name} - ${new Date(e.date).toLocaleDateString("es-GT")}`)
+        .map((e) => `🎪 ${e.name} - ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })}`)
         .join("\n");
 
       // ⏰ Recordatorios de HOY (se muestran en el mensaje del día; avisan a su hora)
@@ -212,8 +210,27 @@ async function morningBriefing() {
       }
 
       // Mensaje EXPRESS: empieza con Luna y va directo al contenido del día
+      const countIn = (s: string) => {
+        const m = s.match(/\((\d+)\)/);
+        return m ? parseInt(m[1], 10) : 0;
+      };
+      const remN = countIn(remindersLines);
+      const buyN = countIn(purchasesLines);
+      const cobN = countIn(cobrosLines);
+      const resumenParts: string[] = [];
+      if (todayCount > 0) resumenParts.push(`${todayCount} tarea${todayCount === 1 ? "" : "s"} para hoy`);
+      if (stillCount > 0) resumenParts.push(`${stillCount} vencida${stillCount > 1 ? "s" : ""}`);
+      if (remN > 0) resumenParts.push(`${remN} recordatorio${remN > 1 ? "s" : ""} hoy`);
+      if (buyN > 0) resumenParts.push(`${buyN} compra${buyN > 1 ? "s" : ""} hoy`);
+      if (cobN > 0) resumenParts.push(`${cobN} cobro${cobN > 1 ? "s" : ""} pendiente`);
+      if (events.length > 0) resumenParts.push(`${events.length} evento${events.length > 1 ? "s" : ""}`);
+      let resumen = "";
+      if (resumenParts.length > 0) {
+        resumen = `📋 ${resumenParts.join(" · ")}`;
+      }
+
       let fullMessage = `*${intro}*`;
-      if (resumen) fullMessage += `\n${resumen}`;
+      if (resumen) fullMessage += `\n\n${resumen}`;
       if (taskLines) fullMessage += `\n\n${taskLines}`;
       if (remindersLines) fullMessage += `\n\n${remindersLines}`;
       if (purchasesLines) fullMessage += `\n\n${purchasesLines}`;
