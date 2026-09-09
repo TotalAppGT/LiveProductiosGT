@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
 }
 
 function esGTDate(date: Date): string {
-  return date.toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" });
+  return date.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "short", day: "numeric", month: "short" });
 }
 
 function parseTimeExpression(text: string): { hours: number; minutes: number } | null {
@@ -222,6 +222,25 @@ function parseRelativeDate(text: string, referenceDate: Date): Date | null {
 
   if (/\bmañana\b/.test(t) && !/\ben la mañana\b/.test(t)) {
     return at9(base + 1 * 24 * 60 * 60 * 1000);
+  }
+
+  // Fecha numérica dd/mm o dd/mm/aaaa: "25/09", "25/09/2026", "25-09-2026"
+  const dm = t.match(/\b(\d{1,2})\s*[/\-]\s*(\d{1,2})(?:\s*[/\-]\s*(\d{2,4}))?\b/);
+  if (dm) {
+    const d = parseInt(dm[1], 10);
+    const m = parseInt(dm[2], 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      const refUTC = Date.UTC(refGT.getUTCFullYear(), refGT.getUTCMonth(), refGT.getUTCDate());
+      if (dm[3]) {
+        // Año explícito
+        let y = parseInt(dm[3], 10);
+        if (y < 100) y += 2000;
+        return at9(Date.UTC(y, m - 1, d));
+      }
+      // Sin año: este año; si ya pasó, año siguiente
+      const cand = Date.UTC(refGT.getUTCFullYear(), m - 1, d);
+      return at9(cand >= refUTC ? cand : Date.UTC(refGT.getUTCFullYear() + 1, m - 1, d));
+    }
   }
 
   // Fechas más adelante: "dentro de N días" / "en N días" / "en N semanas" / "dentro de N semanas"
@@ -379,7 +398,7 @@ async function formatTasksForUser(userId: string, period?: string) {
     const weekAll = [...thisWeekTasks, ...todayTasks].filter((t, i, arr) => arr.indexOf(t) === i);
     if (weekAll.length === 0) {
       if (nextWeekTasks.length > 0) {
-        return `📅 *Esta semana no tienes tareas pendientes.* 🎉\n\nEstas son las de la *próxima semana* (${nextMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })}):\n${groupTasksByDay(orderTasksForDisplay(nextWeekTasks), 1)}`;
+        return `📅 *Esta semana no tienes tareas pendientes.* 🎉\n\nEstas son las de la *próxima semana* (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })}):\n${groupTasksByDay(orderTasksForDisplay(nextWeekTasks), 1)}`;
       }
       return "📅 No tienes tareas para esta semana. ¡Todo al día! 🎉";
     }
@@ -402,10 +421,10 @@ async function formatTasksForUser(userId: string, period?: string) {
   // Números continuos para que los comandos (#) coincidan con lo mostrado
   const thisWeekAll = [...todayTasks, ...thisWeekTasks].filter((t, i, arr) => arr.indexOf(t) === i);
   const weekBlocks: { label: string; tasks: any[] }[] = [];
-  if (thisWeekAll.length > 0) weekBlocks.push({ label: `ESTA SEMANA (${monday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: thisWeekAll });
+  if (thisWeekAll.length > 0) weekBlocks.push({ label: `ESTA SEMANA (${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })})`, tasks: thisWeekAll });
   else if (nextWeekTasks.length > 0) output += `⚠️ *No tienes tareas pendientes para esta semana.*\nEstas son las de la *próxima semana*:\n\n`;
-  if (nextWeekTasks.length > 0) weekBlocks.push({ label: `PRÓXIMA SEMANA (${nextMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: nextWeekTasks });
-  if (thirdWeekTasks.length > 0) weekBlocks.push({ label: `SIGUIENTE SEMANA (${thirdMonday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })} - ${thirdSunday.toLocaleDateString("es-GT", { day: "numeric", month: "short" })})`, tasks: thirdWeekTasks });
+  if (nextWeekTasks.length > 0) weekBlocks.push({ label: `PRÓXIMA SEMANA (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })})`, tasks: nextWeekTasks });
+  if (thirdWeekTasks.length > 0) weekBlocks.push({ label: `SIGUIENTE SEMANA (${thirdMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })} - ${thirdSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })})`, tasks: thirdWeekTasks });
 
   const blocks: string[] = [];
   let runningNum = 1;
@@ -828,7 +847,7 @@ async function formatEventsForUser(userId: string) {
   return events
     .map(
       (e) =>
-        `• 🎪 *${e.name}* - Cliente: ${e.clientName} - ${new Date(e.date).toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })} - ${e.location || "Sin ubicación"}`
+        `• 🎪 *${e.name}* - Cliente: ${e.clientName} - ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "long", day: "numeric", month: "long" })} - ${e.location || "Sin ubicación"}`
     )
     .join("\n");
 }
@@ -1112,7 +1131,7 @@ async function listTasksForSelection(userId: string): Promise<string> {
   return tasks.map((t, i) => {
     const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
     const status = t.status === "REPROGRAMADA" ? "🟣 Pospuesta" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌";
-    const due = t.dueDate ? ` → ${new Date(t.dueDate).toLocaleDateString("es-GT", {weekday:"short",day:"numeric"})}` : "";
+    const due = t.dueDate ? ` → ${new Date(t.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday:"short",day:"numeric"})}` : "";
     return `${i + 1}. ${prio} *${t.title}* ${status}${due}`;
   }).join("\n");
 }
@@ -1485,8 +1504,8 @@ async function handleCommand(
 
     await postponeTask(task.id, finalDate, reason, user);
 
-    const dateStr = finalDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" });
-    const timeStr = finalDate.toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" });
+    const dateStr = finalDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "long", day: "numeric", month: "long" });
+    const timeStr = finalDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala",  hour: "2-digit", minute: "2-digit" });
     return `⏰ Tarea *${task.title}* pospuesta para *${dateStr} a las ${timeStr}*.\nRazón: ${reason}\n_Se notificará al administrador._`;
   }
 
@@ -1684,6 +1703,30 @@ async function handleCommand(
         title = `${targetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
         dateFrom = new Date(targetDate);
         dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
+      }
+    }
+    // 5.26) Fecha numérica dd/mm o dd/mm/aaaa: "tareas 25/09", "tareas 25/09/2026"
+    else if (/(\d{1,2})\s*[/\-]\s*(\d{1,2})(?:\s*[/\-]\s*(\d{2,4}))?/.test(cmd)) {
+      const dm = cmd.match(/(\d{1,2})\s*[/\-]\s*(\d{1,2})(?:\s*[/\-]\s*(\d{2,4}))?/);
+      if (dm) {
+        const dayNum = parseInt(dm[1], 10);
+        const monthNum = parseInt(dm[2], 10);
+        if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31) {
+          const hasYear = !!dm[3];
+          let year = w.year;
+          if (hasYear) {
+            year = parseInt(dm[3], 10);
+            if (year < 100) year += 2000;
+          }
+          let targetDate = guatemalaDate(year, monthNum, dayNum);
+          // Sin año explícito: si la fecha ya pasó este año, usar el próximo año
+          if (!hasYear && targetDate.getTime() < today.getTime()) {
+            targetDate = guatemalaDate(year + 1, monthNum, dayNum);
+          }
+          title = `${targetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", year: "numeric" })}`;
+          dateFrom = new Date(targetDate);
+          dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
+        }
       }
     }
     // 5.27) Día con número sin mes: "lunes 17", "tareas 17" (día del mes actual/próximo)
@@ -1936,7 +1979,7 @@ async function handleCommand(
       const taskLines = e.tasks
         .map((t) => `  • ${t.title} [${t.status}] -> ${t.assignedTo?.name || "Sin asignar"}`)
         .join("\n");
-      return `🎪 *${e.name}*\n📅 ${new Date(e.date).toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}\n📍 ${e.location || "Sin ubicación"}\n👤 Cliente: ${e.clientName}\n📊 Estado: ${e.status}\n👥 Planner: ${e.planner?.name || "N/A"} | Responsable: ${e.responsible?.name || "N/A"}\n📋 Tareas (${e.tasks.length}):\n${taskLines || "  Ninguna pendiente"}`;
+      return `🎪 *${e.name}*\n📅 ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "long", day: "numeric", month: "long", year: "numeric" })}\n📍 ${e.location || "Sin ubicación"}\n👤 Cliente: ${e.clientName}\n📊 Estado: ${e.status}\n👥 Planner: ${e.planner?.name || "N/A"} | Responsable: ${e.responsible?.name || "N/A"}\n📋 Tareas (${e.tasks.length}):\n${taskLines || "  Ninguna pendiente"}`;
     });
 
     return lines.join("\n\n---\n\n");
@@ -2137,7 +2180,7 @@ async function handleCommand(
     if (cobros.length === 0) return "✅ No hay cobros pendientes. ¡Todo al día!";
     const total = cobros.reduce((s, c) => s + Number(c.amount), 0);
     return `💰 *Cobros Pendientes (${cobros.length})*\n\n${cobros.map(c =>
-      `• ${c.clientName}: *Q${Number(c.amount).toFixed(2)}*${c.dueDate ? ` → ${new Date(c.dueDate).toLocaleDateString("es-GT")}` : ""}${c.event ? ` (${c.event.name})` : ""}${c.assignedTo ? ` | ${c.assignedTo.name}` : ""}`
+      `• ${c.clientName}: *Q${Number(c.amount).toFixed(2)}*${c.dueDate ? ` → ${new Date(c.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })}` : ""}${c.event ? ` (${c.event.name})` : ""}${c.assignedTo ? ` | ${c.assignedTo.name}` : ""}`
     ).join("\n")}\n\n💵 *Total: Q${total.toFixed(2)}*`;
   }
 
@@ -2321,7 +2364,7 @@ async function handleConversationStep(
       return "No entendí la fecha. Usa: *mañana*, *viernes*, *lunes próximo*, *el 20 de agosto*.\n\n⏰ *Posponer Tarea*\n¿Para qué día?";
     }
     setConversation(fromNumber, "postpone_time", { ...conv.data, dueDate: date.toISOString() });
-    return `⏰ *Posponer Tarea*\n\nDía: ${date.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })}\n\n¿A qué hora?\nEj: *9am*, *3pm*, *en la tarde*`;
+    return `⏰ *Posponer Tarea*\n\nDía: ${date.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "long", day: "numeric", month: "long" })}\n\n¿A qué hora?\nEj: *9am*, *3pm*, *en la tarde*`;
   }
 
   if (conv.state === "postpone_time") {
@@ -2342,8 +2385,8 @@ async function handleConversationStep(
     const dueDate = new Date(conv.data.dueDate);
     await postponeTask(conv.data.taskId, dueDate, reason, user);
     conversations.delete(fromNumber);
-    const dateStr = dueDate.toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" });
-    const timeStr = dueDate.toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" });
+    const dateStr = dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "long", day: "numeric", month: "long" });
+    const timeStr = dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala",  hour: "2-digit", minute: "2-digit" });
     return `✅ Tarea *${conv.data.taskTitle}* pospuesta para *${dateStr} a las ${timeStr}*.\nMotivo: ${reason}\n_Se notificará al administrador._`;
   }
 

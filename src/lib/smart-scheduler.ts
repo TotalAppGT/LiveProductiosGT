@@ -228,11 +228,11 @@ export async function generateDailyBriefing(): Promise<{
       if (pendingTasks.length === 0 && upcomingEvents.length === 0) continue;
 
       const taskLines = pendingTasks
-        .map((t) => `• ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : "🔵"} ${t.title}${t.dueDate ? ` (${new Date(t.dueDate).toLocaleDateString("es-GT")})` : ""}`)
+        .map((t) => `• ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : "🔵"} ${t.title}${t.dueDate ? ` (${new Date(t.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })})` : ""}`)
         .join("\n");
 
       const eventLines = upcomingEvents
-        .map((e) => `• 🎪 ${e.name} - ${e.clientName} - ${new Date(e.date).toLocaleDateString("es-GT")}`)
+        .map((e) => `• 🎪 ${e.name} - ${e.clientName} - ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })}`)
         .join("\n");
 
       let briefing = `☀️ *Briefing Diario - ${user.name}*\n\n`;
@@ -473,7 +473,7 @@ export async function triggerEventReminders(): Promise<{
         if (to) {
           await sendMessage(
             to,
-            `${emoji} *Recordatorio de Evento*\n\nEvento: ${event.name}\nCliente: ${event.clientName}\nFecha: ${event.date.toLocaleDateString("es-GT")} (${daysUntil === 0 ? "HOY" : `${daysUntil} días`})\nTu rol: ${member.role}\n\n${alertMsg}`
+            `${emoji} *Recordatorio de Evento*\n\nEvento: ${event.name}\nCliente: ${event.clientName}\nFecha: ${event.date.toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })} (${daysUntil === 0 ? "HOY" : `${daysUntil} días`})\nTu rol: ${member.role}\n\n${alertMsg}`
           ).catch(() => {});
           remindersSent++;
         }
@@ -591,7 +591,7 @@ export async function checkDailyAccessRequirement(): Promise<{
     // Send ONE consolidated report to all admins/dueños
     const admins = await getAdmins();
     if (admins.length > 0 && (inactiveToday > 0 || belowThreshold > 0 || goodList.length > 0)) {
-      const dateStr = new Date().toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" });
+      const dateStr = new Date().toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "long", day: "numeric", month: "long" });
       let adminMsg = `📊 *Reporte Diario - ${dateStr}*\n\n`;
       adminMsg += `👥 *Total usuarios:* ${allUsers.length}\n`;
       if (overdueTasksCount > 0) adminMsg += `⏰ *Tareas vencidas:* ${overdueTasksCount}\n`;

@@ -18,17 +18,53 @@ const SHORT_DAY_NAMES: Record<string, string> = {
   Saturday: "Sáb",
 };
 
+export const GT_TZ = "America/Guatemala";
+
+// Formato estándar de fechas del sistema: dd/mm/yyyy (Guatemala)
+export function fmtDMY(date: string | Date): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("es-GT", { timeZone: GT_TZ, day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+}
+
+// dd/mm/yyyy hh:mm (24h)
+export function fmtDMYhm(date: string | Date): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("es-GT", {
+    timeZone: GT_TZ,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d).replace(", ", " ");
+}
+
+// Fecha descriptiva larga en Guatemala (ej: lunes, 7 de septiembre de 2026)
+export function fmtGTLong(date: string | Date): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("es-GT", {
+    timeZone: GT_TZ,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
+}
+
 export function formatDate(
   date: string | Date,
   options?: Intl.DateTimeFormatOptions
 ): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  const defaultOptions: Intl.DateTimeFormatOptions = {
+  const opts: Intl.DateTimeFormatOptions = {
+    timeZone: GT_TZ,
     year: "numeric",
     month: "long",
     day: "numeric",
+    ...options,
   };
-  return d.toLocaleDateString("es-GT", options || defaultOptions);
+  return d.toLocaleDateString("es-GT", opts);
 }
 
 export function formatCurrency(amount: number): string {

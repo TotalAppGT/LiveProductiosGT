@@ -793,10 +793,10 @@ DÍA Y HORA ACTUAL (Guatemala): ${now.toLocaleString("es-GT", { timeZone: "Ameri
 ACCESOS HOY: ${todayAccesses}/4 mínimo requerido
 
 --- TAREAS (${pendingTasks.length}) ---
-${pendingTasks.map((t, i) => `${i+1}. ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢"} ${t.title} | vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT",{weekday:"short",day:"numeric"}) : "S/F"} | ${t.status}`).join("\n") || "Ninguna pendiente"}
+${pendingTasks.map((t, i) => `${i+1}. ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢"} ${t.title} | vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT",{ timeZone: "America/Guatemala",weekday:"short",day:"numeric"}) : "S/F"} | ${t.status}`).join("\n") || "Ninguna pendiente"}
 
 --- EVENTOS (${upcomingEvents.length}) ---
-${upcomingEvents.map(e => `• ${e.name} | ${e.clientName} | ${new Date(e.date).toLocaleDateString("es-GT",{weekday:"short",day:"numeric",month:"short"})} | ${e.status} | ${e.location || "S/L"}`).join("\n") || "Sin eventos"}
+${upcomingEvents.map(e => `• ${e.name} | ${e.clientName} | ${new Date(e.date).toLocaleDateString("es-GT",{ timeZone: "America/Guatemala",weekday:"short",day:"numeric",month:"short"})} | ${e.status} | ${e.location || "S/L"}`).join("\n") || "Sin eventos"}
 
 CUMPLIMIENTO MES: ${completedCount}/${assignedCount} (${complianceRate}%)`;
 
@@ -817,7 +817,7 @@ Disponible: ${totalItems - damaged - inUse} | En uso: ${inUse} | Dañado: ${dama
 ${vehicles.map(v => `• ${v.name} (${v.plate}) | ${v.status}${v.assignedTo ? ` → ${v.assignedTo.name}` : ""}`).join("\n")}
 
 --- COBROS PENDIENTES (${cobros.length}) ---
-${cobros.map(c => `• ${c.clientName}: Q${Number(c.amount).toFixed(2)}${c.dueDate ? ` | vence: ${new Date(c.dueDate).toLocaleDateString("es-GT")}` : ""}${c.assignedTo ? ` → ${c.assignedTo.name}` : ""}`).join("\n") || "Sin cobros pendientes"}
+${cobros.map(c => `• ${c.clientName}: Q${Number(c.amount).toFixed(2)}${c.dueDate ? ` | vence: ${new Date(c.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })}` : ""}${c.assignedTo ? ` → ${c.assignedTo.name}` : ""}`).join("\n") || "Sin cobros pendientes"}
 
 --- EQUIPO (${allEmployees.length}) ---
 ${allEmployees.map(e => `• ${e.name} (${e.role})${e.phone ? ` | ${e.phone.slice(-8)}` : ""}`).join("\n")}`;
@@ -1052,7 +1052,7 @@ Contexto:
 - Tarea: ${task.title}
 - Prioridad: ${task.priority}
 - Estado: ${task.status}
-- Vence: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-GT") : "Sin fecha"}
+- Vence: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" }) : "Sin fecha"}
 - Asignado a: ${user.name} (${user.role})
 
 Responde SOLO con el texto del recordatorio en español de Guatemala. Usa el nombre de la persona.`;
@@ -1224,7 +1224,7 @@ export async function processNaturalLanguage(
       .join("\n");
 
     const incomeStr = userContext.incomeRecords
-      .map((i) => `Q${i.amount} - ${i.type}: ${i.description} (${new Date(i.createdAt).toLocaleDateString("es-GT")})`)
+      .map((i) => `Q${i.amount} - ${i.type}: ${i.description} (${new Date(i.createdAt).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })})`)
       .join("\n");
 
     const prompt = `Analiza este mensaje de ${userContext.name} (${userContext.role}) y determina qué acción quiere realizar. Responde SOLO con JSON.
@@ -1311,7 +1311,7 @@ export async function getProactiveSuggestions(userId: string): Promise<string[]>
 
     const suggestions: string[] = [];
     const now = new Date();
-    const todayStr = now.toLocaleDateString("es-GT", { weekday: "long" });
+    const todayStr = now.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "long" });
 
     const urgentTasks = context.pendingTasks.filter((t) => t.priority === "URGENTE" || t.priority === "ALTA");
     if (urgentTasks.length > 0) {
@@ -1328,7 +1328,7 @@ export async function getProactiveSuggestions(userId: string): Promise<string[]>
     if (context.upcomingEvents.length > 0) {
       const nextEvent = context.upcomingEvents[0];
       const eventDate = new Date(nextEvent.date);
-      suggestions.push(`Próximo evento: ${nextEvent.name} el ${eventDate.toLocaleDateString("es-GT")}`);
+      suggestions.push(`Próximo evento: ${nextEvent.name} el ${eventDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })}`);
     }
 
     if (context.complianceRate < 50 && context.assignedCount > 5) {
@@ -1415,7 +1415,7 @@ export async function executeNLUAction(
 
         return {
           success: true,
-          message: `Tarea "${task.title}" reprogramada para ${newDueDate.toLocaleDateString("es-GT")}`,
+          message: `Tarea "${task.title}" reprogramada para ${newDueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })}`,
           data: { task },
         };
       }

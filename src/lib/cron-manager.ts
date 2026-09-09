@@ -312,7 +312,7 @@ async function dailyDigest() {
     });
 
     const eventLines = todayEvents
-      .map((e) => `• ${new Date(e.date).toLocaleDateString("es-GT")} - ${e.name} (${e.clientName})`)
+      .map((e) => `• ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })} - ${e.name} (${e.clientName})`)
       .join("\n");
 
     const aiPrompt = `Genera un resumen diario para el equipo directivo de Live Productions Guatemala. Sé ejecutivo y claro. Incluye: tareas pendientes, tareas vencidas, eventos próximos, usuarios inactivos, cobros pendientes. Máximo 1 párrafo por tema. Español de Guatemala.`;

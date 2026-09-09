@@ -471,12 +471,12 @@ async function sendAIAssistantReply(
 
   const taskLines = pendingTasks
     .slice(0, 10)
-    .map((t) => `${t.title} | Estado: ${t.status} | Prioridad: ${t.priority} | Vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT") : "Sin fecha"}`)
+    .map((t) => `${t.title} | Estado: ${t.status} | Prioridad: ${t.priority} | Vence: ${t.dueDate ? new Date(t.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" }) : "Sin fecha"}`)
     .join("\n");
 
   const eventLines = upcomingEvents
     .slice(0, 5)
-    .map((e) => `${e.name} | Cliente: ${e.clientName} | Fecha: ${new Date(e.date).toLocaleDateString("es-GT")}`)
+    .map((e) => `${e.name} | Cliente: ${e.clientName} | Fecha: ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })}`)
     .join("\n");
 
   const prompt = `Eres el asistente inteligente de WhatsApp de Live Productions. Genera un resumen proactivo para ${user.name} (rol: ${user.role || "Empleado"}).
@@ -549,11 +549,11 @@ async function sendAutomatedReminder(
   const events = context.upcomingEvents || [];
 
   const taskLines = tasks
-    .map((t) => `• ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : "🔵"} ${t.title}${t.dueDate ? ` (${new Date(t.dueDate).toLocaleDateString("es-GT")})` : ""}`)
+    .map((t) => `• ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : "🔵"} ${t.title}${t.dueDate ? ` (${new Date(t.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })})` : ""}`)
     .join("\n");
 
   const eventLines = events
-    .map((e) => `• 🎪 ${e.name} - ${e.clientName} - ${new Date(e.date).toLocaleDateString("es-GT")}`)
+    .map((e) => `• 🎪 ${e.name} - ${e.clientName} - ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })}`)
     .join("\n");
 
   let aiPrompt = "";

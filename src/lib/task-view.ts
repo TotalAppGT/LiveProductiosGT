@@ -89,5 +89,5 @@ export function orderEventsChronologically<T extends { date: Date | string }>(ev
 
 // Formato compacto de evento para notificaciones
 export function formatEventLine(e: { name: string; clientName?: string | null; date: Date | string; location?: string | null }): string {
-  return `🎪 *${e.name}* - Cliente: ${e.clientName || "—"} - ${new Date(e.date).toLocaleDateString("es-GT", { weekday: "long", day: "numeric", month: "long" })} - ${e.location || "Sin ubicación"}`;
+  return `🎪 *${e.name}* - Cliente: ${e.clientName || "—"} - ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "long", day: "numeric", month: "long" })} - ${e.location || "Sin ubicación"}`;
 }
