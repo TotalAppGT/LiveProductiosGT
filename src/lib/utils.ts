@@ -20,6 +20,20 @@ const SHORT_DAY_NAMES: Record<string, string> = {
 
 export const GT_TZ = "America/Guatemala";
 
+// Interpreta un valor de fecha proveniente del frontend (que trabaja en hora de Guatemala).
+// - "YYYY-MM-DD"  → se interpreta como ese DÍA en Guatemala (medianoche GT).
+// - "YYYY-MM-DDTHH:mm[:ss]" sin zona → hora local de Guatemala (UTC-6).
+// - Si ya trae zona (Z u offset) se deja tal cual.
+export function parseGTInputDate(value: string | Date): Date {
+  if (value instanceof Date) return value;
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(value)) return new Date(value);
+  const m = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return new Date(value);
+  const [, y, mo, d, hh, mm, ss] = m;
+  const hour = hh !== undefined ? parseInt(hh, 10) + 6 : 0; // GT = UTC-6 → UTC = GT + 6h
+  return new Date(Date.UTC(parseInt(y, 10), parseInt(mo, 10) - 1, parseInt(d, 10), hour, parseInt(mm || "0", 10), parseInt(ss || "0", 10)));
+}
+
 // Formato estándar de fechas del sistema: dd/mm/yyyy (Guatemala)
 export function fmtDMY(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;

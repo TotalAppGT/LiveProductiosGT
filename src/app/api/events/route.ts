@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
+import { parseGTInputDate } from "@/lib/utils";
 import type { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
         clientName,
         clientPhone: clientPhone || null,
         clientEmail: clientEmail || null,
-        date: new Date(date),
+        date: parseGTInputDate(date),
         location: location || null,
         guestCount: guestCount || null,
         status: status || "COTIZACION",
