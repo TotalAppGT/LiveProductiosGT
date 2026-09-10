@@ -174,6 +174,35 @@ async function sendMessage(
   return sendMetaMessage(to, phoneNumberId, accessToken, message);
 }
 
+/**
+ * Envía un mensaje PROACTIVO (que no responde a un mensaje del usuario).
+ * WhatsApp/Meta solo entrega mensajes de texto libre dentro de la "ventana de
+ * 24 horas" (el usuario debe habernos escrito en las últimas 24h). Fuera de esa
+ * ventana, se usa una PLANTILLA aprobada si está configurada.
+ * Config por BD (systemConfig): whatsapp_template_name (+ opcional whatsapp_template_lang).
+ */
+export async function sendProactiveMessage(
+  to: string,
+  message: string
+): Promise<{ ok: boolean; via: "text" | "template" | "none" }> {
+  const sent = await sendMessage(to, message).catch(() => null);
+  if (sent) return { ok: true, via: "text" };
+
+  // Fuera de ventana / error: intentar con plantilla aprobada
+  const tplName =
+    (await prisma.systemConfig.findUnique({ where: { key: "whatsapp_template_name" } }))?.value ||
+    process.env.WHATSAPP_TEMPLATE_NAME ||
+    "";
+  if (!tplName) return { ok: false, via: "none" };
+
+  const tplLang =
+    (await prisma.systemConfig.findUnique({ where: { key: "whatsapp_template_lang" } }))?.value ||
+    process.env.WHATSAPP_TEMPLATE_LANG ||
+    "es";
+  const tpl = await sendTemplateMessage(to, tplName, [{ type: "text", text: message }], tplLang).catch(() => null);
+  return { ok: !!tpl, via: tpl ? "template" : "none" };
+}
+
 interface TemplateParameter {
   type: "text" | "currency" | "date_time";
   text?: string;
@@ -184,7 +213,8 @@ interface TemplateParameter {
 async function sendTemplateMessage(
   to: string,
   templateName: string,
-  params: TemplateParameter[]
+  params: TemplateParameter[],
+  languageCode: string = "es"
 ): Promise<WhatsAppApiResponse | null> {
   const provider = await getProvider();
 
@@ -236,7 +266,7 @@ async function sendTemplateMessage(
           type: "template",
           template: {
             name: templateName,
-            language: { code: "es" },
+            language: { code: languageCode },
             components,
           },
         }),

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendMessage, sendAutomatedReminder } from "@/lib/whatsapp";
+import { sendMessage, sendProactiveMessage, sendAutomatedReminder } from "@/lib/whatsapp";
 import { generateSmartAlert, detectAnomalies, summarizeCompany, weeklyPerformanceReport } from "@/lib/ai-brain";
 import { subDays, differenceInHours } from "date-fns";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, isTaskDueOnDate } from "@/lib/task-utils";
@@ -931,7 +931,7 @@ export async function sendBihourlyReminders(): Promise<{
         emptyMsg += purchasesBlock;
         emptyMsg += cobrosBlock;
         emptyMsg += `\n\n📅 Escribí *tareas* para ver todo, o *crea tarea [qué] [día] [hora]* para agregar una.`;
-        await sendMessage(to, emptyMsg).catch(() => {});
+        await sendProactiveMessage(to, emptyMsg).catch(() => {});
         await prisma.whatsAppMessage.create({
           data: {
             userId: user.id,
@@ -996,7 +996,7 @@ export async function sendBihourlyReminders(): Promise<{
         message = message.slice(0, 3950) + "\n… (recortado — escribí *tareas* para ver todo)";
       }
 
-      await sendMessage(to, message).catch(() => {});
+      await sendProactiveMessage(to, message).catch(() => {});
 
       await prisma.whatsAppMessage.create({
         data: {
@@ -1136,7 +1136,7 @@ export async function fireTaskReminders(): Promise<{ fired: number }> {
       const hora = task.dueDate
         ? new Date(task.dueDate).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })
         : "";
-      await sendMessage(
+      await sendProactiveMessage(
         to,
         `🔔 *Recordatorio (tarea)*\n\n${task.title}${hora ? `\n🕐 ${hora}` : ""}\n\n_Esta tarea también funciona como recordatorio._`
       ).catch(() => {});
@@ -1178,7 +1178,7 @@ export async function fireDueReminders(): Promise<{ fired: number; advanced: num
       try {
         const to = reminder.assignedTo?.whatsappNumber || reminder.assignedTo?.phone;
         if (to) {
-          await sendMessage(
+          await sendProactiveMessage(
             to,
             `⏰ *Recordatorio en unos minutos*\n\n${reminder.title}${reminder.description ? `\n_${reminder.description}_` : ""}\n\n🕐 Inicia a las ${reminder.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}. Preparate y te aviso puntual.`
           );
@@ -1204,7 +1204,7 @@ export async function fireDueReminders(): Promise<{ fired: number; advanced: num
       try {
         const to = reminder.assignedTo?.whatsappNumber || reminder.assignedTo?.phone;
         if (to) {
-          await sendMessage(
+          await sendProactiveMessage(
             to,
             `⏰ *RECORDATORIO*\n\n${reminder.title}${reminder.description ? `\n_${reminder.description}_` : ""}\n\n📅 Programado para: ${reminder.remindAt.toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`
           );

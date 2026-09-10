@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
-import { sendMessage } from "@/lib/whatsapp";
+import { sendMessage, sendProactiveMessage } from "@/lib/whatsapp";
 import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireTaskReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
 import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate } from "@/lib/task-utils";
 
@@ -14,6 +14,10 @@ interface CronJob {
   skipOnSunday?: boolean;
   // Días de la semana (0=domingo ... 6=sábado) en los que NO corre este job.
   skipWeekdays?: number[];
+  // Si el proceso estuvo caído/reiniciado, se permite ejecutar el job (una sola
+  // vez) hasta esta hora de Guatemala inclusive. Ej: briefing 7 → 11 = corre
+  // tarde si a las 7 no estaba arriba. Evita "días sin mensajes".
+  catchUpUntilHour?: number;
 }
 
 interface JobState {
@@ -250,10 +254,11 @@ async function morningBriefing() {
 
       const to = user.whatsappNumber || user.phone;
       if (to) {
-        const ok = await sendMessage(to, fullMessage).catch((err) => {
-          console.error(`[Cron] excepción sendMessage a ${user.name}:`, err);
-          return null;
+        const res = await sendProactiveMessage(to, fullMessage).catch((err) => {
+          console.error(`[Cron] excepción enviando briefing a ${user.name}:`, err);
+          return { ok: false, via: "none" as const };
         });
+        const ok = res.ok;
         const record = prisma.whatsAppMessage.create({
           data: {
             userId: user.id,
@@ -266,7 +271,7 @@ async function morningBriefing() {
         const act = logActivity(
           user.id,
           "CRON_MORNING_BRIEFING",
-          ok ? `Briefing matutino enviado a ${user.name} (${to})` : `FALLO envío briefing a ${user.name} (${to})`
+          ok ? `Briefing matutino enviado a ${user.name} (${to}) vía ${res.via}` : `FALLO envío briefing a ${user.name} (${to})`
         );
         await Promise.allSettled([record, act]);
         if (!ok) console.error(`[Cron] Briefing NO enviado a ${user.name} (${to})`);
@@ -662,13 +667,13 @@ async function dailyCarryOver() {
 }
 
 const jobs: CronJob[] = [
-  { name: "morningBriefing", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing, skipOnSunday: true },
-  { name: "dailyCarryOver", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: dailyCarryOver, skipOnSunday: true },
-  { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck, skipOnSunday: true },
-  { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck, skipOnSunday: true },
-  { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck, skipOnSunday: true },
-  { name: "bihourly11", schedule: { hour: 11, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(11), skipOnSunday: true },
-  { name: "bihourly14", schedule: { hour: 14, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(14), skipOnSunday: true, skipWeekdays: [6] },
+  { name: "morningBriefing", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing, skipOnSunday: true, catchUpUntilHour: 11 },
+  { name: "dailyCarryOver", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: dailyCarryOver, skipOnSunday: true, catchUpUntilHour: 12 },
+  { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck, skipOnSunday: true, catchUpUntilHour: 15 },
+  { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck, skipOnSunday: true, catchUpUntilHour: 17 },
+  { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck, skipOnSunday: true, catchUpUntilHour: 19 },
+  { name: "bihourly11", schedule: { hour: 11, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(11), skipOnSunday: true, catchUpUntilHour: 13 },
+  { name: "bihourly14", schedule: { hour: 14, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(14), skipOnSunday: true, skipWeekdays: [6], catchUpUntilHour: 16 },
 ];
 
 // Usar globalThis para que el cron sea UN SOLO singleton entre todas las instancias del módulo
@@ -720,10 +725,12 @@ async function runJobIfScheduled(job: CronJob) {
 
   const hourDiff = w.hour - job.schedule.hour;
 
-  // Future jobs: skip. Past jobs beyond 1.5h: skip.
-  if (hourDiff < 0 || hourDiff > 1) return;
-  // Catch-up desde la hora anterior: hasta el minuto 30 (para tolerar reinicios/deploys)
-  if (hourDiff === 1 && w.minute >= 30) return;
+  // Ventana de catch-up: por defecto 1 hora (hasta el minuto 30 de la hora
+  // siguiente). Los jobs con catchUpUntilHour permiten ejecutarse tarde (una
+  // sola vez) si el proceso estuvo caído, para no perder el mensaje del día.
+  const catchLimit = (job.catchUpUntilHour ?? job.schedule.hour + 1) - job.schedule.hour;
+  if (hourDiff < 0 || hourDiff > catchLimit) return;
+  if (hourDiff === catchLimit && w.minute >= 30) return;
 
   if (!(await shouldRunJob(job))) {
     console.log(`[Cron] ${job.name}: ya se ejecutó en esta hora, saltando (DB dedup)`);
