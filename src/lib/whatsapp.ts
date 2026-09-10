@@ -199,7 +199,11 @@ export async function sendProactiveMessage(
     (await prisma.systemConfig.findUnique({ where: { key: "whatsapp_template_lang" } }))?.value ||
     process.env.WHATSAPP_TEMPLATE_LANG ||
     "es";
-  const tpl = await sendTemplateMessage(to, tplName, [{ type: "text", text: message }], tplLang).catch(() => null);
+  // Los parámetros de plantilla tienen límite (~1024) y no admiten tabs ni
+  // más de 3 espacios seguidos. Se sanea y recorta.
+  let tplText = message.replace(/\t/g, " ").replace(/ {4,}/g, "   ").trim();
+  if (tplText.length > 1000) tplText = tplText.slice(0, 995) + "…";
+  const tpl = await sendTemplateMessage(to, tplName, [{ type: "text", text: tplText }], tplLang).catch(() => null);
   return { ok: !!tpl, via: tpl ? "template" : "none" };
 }
 
