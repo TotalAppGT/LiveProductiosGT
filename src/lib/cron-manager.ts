@@ -108,7 +108,7 @@ async function morningBriefing() {
           status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
         },
         orderBy: [{ dueDate: "asc" }],
-        take: 100,
+        take: 500,
       })).filter((t) => !t.title.startsWith("🔔"));
 
       const events = await prisma.event.findMany({

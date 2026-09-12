@@ -207,6 +207,39 @@ export async function sendProactiveMessage(
   return { ok: !!tpl, via: tpl ? "template" : "none" };
 }
 
+// Divide un texto largo en trozos <= limit respetando saltos de línea.
+function splitMessage(text: string, limit: number): string[] {
+  if (text.length <= limit) return [text];
+  const parts: string[] = [];
+  let remaining = text;
+  while (remaining.length > limit) {
+    let cut = remaining.lastIndexOf("\n", limit);
+    if (cut < limit * 0.5) cut = remaining.lastIndexOf(" ", limit);
+    if (cut <= 0) cut = limit;
+    parts.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut).replace(/^\n+/, "");
+  }
+  if (remaining) parts.push(remaining);
+  return parts;
+}
+
+/**
+ * Envía un mensaje largo dividiéndolo en varios si excede el límite de WhatsApp
+ * (4096). Así el usuario siempre puede ver TODO (ej. todas las tareas).
+ */
+export async function sendMessageChunked(to: string, text: string, limit = 3900): Promise<boolean> {
+  const chunks = splitMessage(text, limit);
+  let anyOk = false;
+  for (let i = 0; i < chunks.length; i++) {
+    const header = chunks.length > 1 ? `(${i + 1}/${chunks.length})\n` : "";
+    const r = await sendMessage(to, header + chunks[i]).catch(() => null);
+    if (!r) return false;
+    anyOk = true;
+    if (i < chunks.length - 1) await new Promise((res) => setTimeout(res, 500));
+  }
+  return anyOk;
+}
+
 interface TemplateParameter {
   type: "text" | "currency" | "date_time";
   text?: string;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
-import { sendMessage, sendInteractiveButtons } from "@/lib/whatsapp";
+import { sendMessage, sendMessageChunked, sendInteractiveButtons } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate } from "@/lib/task-utils";
@@ -358,10 +358,11 @@ async function formatTasksForUser(userId: string, period?: string) {
   const allTasks = (await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
-    take: 200,
+    take: 1000,
   })).filter((t) => !t.title.startsWith("🔔"));
 
   const todayTasks = allTasks.filter(t => isTaskDueOnDate(t, todayStart));
+  const overdueTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) < todayStart && !isTaskDueOnDate(t, todayStart));
   const thisWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) > todayEnd && new Date(t.dueDate) >= monday && new Date(t.dueDate) <= sunday);
   const nextWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= nextMonday && new Date(t.dueDate) <= nextSunday);
   const thirdWeekTasks = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= thirdMonday && new Date(t.dueDate) <= thirdSunday);
@@ -395,7 +396,7 @@ async function formatTasksForUser(userId: string, period?: string) {
   }
 
   if (period === "semana") {
-    const weekAll = [...thisWeekTasks, ...todayTasks].filter((t, i, arr) => arr.indexOf(t) === i);
+    const weekAll = [...overdueTasks, ...todayTasks, ...thisWeekTasks].filter((t, i, arr) => arr.indexOf(t) === i);
     if (weekAll.length === 0) {
       if (nextWeekTasks.length > 0) {
         return `📅 *Esta semana no tienes tareas pendientes.* 🎉\n\nEstas son las de la *próxima semana* (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })}):\n${groupTasksByDay(orderTasksForDisplay(nextWeekTasks), 1)}`;
@@ -404,6 +405,7 @@ async function formatTasksForUser(userId: string, period?: string) {
     }
     output = `📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })})\n\n`;
     output += groupTasksByDay(weekAll);
+    saveTaskView(userId, orderTasksForDisplay(weekAll));
     output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output;
   }
@@ -419,7 +421,7 @@ async function formatTasksForUser(userId: string, period?: string) {
 
   // Prioridad: semana a semana (esta → próxima → siguiente), agrupado por día
   // Números continuos para que los comandos (#) coincidan con lo mostrado
-  const thisWeekAll = [...todayTasks, ...thisWeekTasks].filter((t, i, arr) => arr.indexOf(t) === i);
+  const thisWeekAll = [...overdueTasks, ...todayTasks, ...thisWeekTasks].filter((t, i, arr) => arr.indexOf(t) === i);
   const weekBlocks: { label: string; tasks: any[] }[] = [];
   if (thisWeekAll.length > 0) weekBlocks.push({ label: `ESTA SEMANA (${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })})`, tasks: thisWeekAll });
   else if (nextWeekTasks.length > 0) output += `⚠️ *No tienes tareas pendientes para esta semana.*\nEstas son las de la *próxima semana*:\n\n`;
@@ -478,7 +480,7 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
   const tasks = (await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
-    take: 200,
+    take: 1000,
   })).filter((t) => !t.title.startsWith("🔔")); // recordatorios no son tareas
 
   if (tasks.length === 0) {
@@ -1789,7 +1791,7 @@ async function handleCommand(
           : [{ dueDate: { gte: dateFrom, lte: dateTo } }],
       },
       orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
-      take: 20,
+      take: 500,
     })).filter((t) => !t.title.startsWith("🔔"));
 
     // En consulta de UN día también mostramos las FIJA recurrentes de ese día
@@ -1803,7 +1805,7 @@ async function handleCommand(
           frequency: { in: ["DIARIA", "SEMANAL"] },
           status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
         },
-        take: 150,
+        take: 500,
       });
       const PRIO: Record<string, number> = { URGENTE: 5, ALTA: 4, MEDIA: 3, BAJA: 2, OTRO: 1 };
       for (const t of recurring) {
@@ -1865,9 +1867,8 @@ async function handleCommand(
     const tasks = await formatTaskSchemeView(user.id, user.role);
     if (!tasks) return `👋 *¡Hola ${user.name}!* Soy *LUNA* 🌙\n\nNo tienes tareas pendientes. ¡Excelente trabajo! 🎉`;
     if (fromNumber) {
-      let msg = tasks;
-      if (msg.length > 3950) msg = msg.slice(0, 3950) + "\n… (recortado — consultá con *tareas hoy* o *compras*)";
-      await sendMessage(fromNumber, msg);
+      // Enviar TODO (troceado si es largo) en lugar de recortar
+      await sendMessageChunked(fromNumber, tasks);
       await sendInteractiveButtons(fromNumber, "⚡ ¿Qué querés hacer con tus tareas?", [
         { id: "act_complete", title: "✅ Completar" },
         { id: "act_postpone", title: "⏰ Posponer" },
@@ -2950,7 +2951,8 @@ export async function POST(request: NextRequest) {
                   if (commandResponse === COMMAND_SENT) {
                     // handleCommand ya envió su respuesta (botones/menú) — no duplicar
                   } else if (commandResponse) {
-                    const sendResult = await sendMessage(fromNumber, commandResponse);
+                    const sentOk = await sendMessageChunked(fromNumber, commandResponse);
+                    const sendResult = sentOk ? true : null;
 
                     await prisma.whatsAppMessage.create({
                       data: {
@@ -2991,7 +2993,8 @@ export async function POST(request: NextRequest) {
                     const suggestion = suggestCommand(text);
                     const aiReply = suggestion ?? (await handleWhatsAppMessage(fromNumber, text));
 
-                    const sendResult = await sendMessage(fromNumber, aiReply);
+                    const aiSentOk = await sendMessageChunked(fromNumber, aiReply);
+                    const sendResult = aiSentOk ? true : null;
 
                     await prisma.whatsAppMessage.create({
                       data: {
