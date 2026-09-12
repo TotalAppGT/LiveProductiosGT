@@ -45,13 +45,35 @@ function aiSucceeded(msg: string): boolean {
   return !!msg && !msg.includes("no pude procesar tu solicitud");
 }
 
+let _systemUserId: string | null | undefined;
+async function resolveSystemUserId(): Promise<string | null> {
+  if (_systemUserId !== undefined) return _systemUserId;
+  try {
+    const u = await prisma.user.findFirst({
+      where: { active: true, role: { in: ["DUENO", "ADMIN", "JEFE"] } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    _systemUserId = u?.id ?? null;
+  } catch {
+    _systemUserId = null;
+  }
+  return _systemUserId;
+}
+
 async function logActivity(userId: string, action: string, details: string) {
   try {
+    let uid = userId;
+    if (uid === "system") {
+      const resolved = await resolveSystemUserId();
+      if (!resolved) return; // no hay usuario válido: no registrar (evita error FK)
+      uid = resolved;
+    }
     await prisma.activity.create({
-      data: { userId, action, resource: "CRON", details },
+      data: { userId: uid, action, resource: "CRON", details },
     });
-  } catch (error) {
-    console.error(`[Cron] Error logging activity:`, error);
+  } catch {
+    // silencioso: la bitácora no debe romper el cron
   }
 }
 

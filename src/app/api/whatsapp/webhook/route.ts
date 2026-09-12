@@ -377,6 +377,9 @@ async function formatTasksForUser(userId: string, period?: string) {
       fixedByDay[t.dayOfWeek].push(t);
     }
   });
+  // Fijas diarias (o sin día asignado) que aplican todos los días
+  const dailyFixed = fixedTasks.filter(t => !t.dayOfWeek && t.frequency !== "SEMANAL");
+  const hasFixed = Object.values(fixedByDay).some((arr) => arr.length > 0) || dailyFixed.length > 0;
 
   let output = "";
 
@@ -397,23 +400,64 @@ async function formatTasksForUser(userId: string, period?: string) {
 
   if (period === "semana") {
     const weekAll = [...overdueTasks, ...todayTasks, ...thisWeekTasks].filter((t, i, arr) => arr.indexOf(t) === i);
-    if (weekAll.length === 0) {
+    if (weekAll.length === 0 && !hasFixed) {
       if (nextWeekTasks.length > 0) {
         return `📅 *Esta semana no tienes tareas pendientes.* 🎉\n\nEstas son las de la *próxima semana* (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })}):\n${groupTasksByDay(orderTasksForDisplay(nextWeekTasks), 1)}`;
       }
       return "📅 No tienes tareas para esta semana. ¡Todo al día! 🎉";
     }
     output = `📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })})\n\n`;
+    const orderedWeek = orderTasksForDisplay(weekAll);
     output += groupTasksByDay(weekAll);
-    saveTaskView(userId, orderTasksForDisplay(weekAll));
-    output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
+    const semanaView: any[] = [...orderedWeek];
+    let semanaNum = orderedWeek.length + 1;
+    if (hasFixed) {
+      output += `\n📌 *ACTIVIDADES FIJAS*\n`;
+      if (dailyFixed.length > 0) {
+        const od = orderTasksForDisplay(dailyFixed);
+        output += `${formatTaskList(od, semanaNum)}\n`;
+        semanaView.push(...od);
+        semanaNum += od.length;
+      }
+      for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
+        if (fixedByDay[day] && fixedByDay[day].length > 0) {
+          const od = orderTasksForDisplay(fixedByDay[day]);
+          output += `${formatTaskList(od, semanaNum)}\n`;
+          semanaView.push(...od);
+          semanaNum += od.length;
+        }
+      }
+    }
+    saveTaskView(userId, semanaView);
+    output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output;
   }
 
   if (period === "semana2") {
     output = `📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })})\n\n`;
+    const nextOrdered = orderTasksForDisplay(nextWeekTasks);
     if (nextWeekTasks.length > 0) output += groupTasksByDay(nextWeekTasks);
-    output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
+    const semana2View: any[] = [...nextOrdered];
+    let s2num = nextOrdered.length + 1;
+    if (hasFixed) {
+      output += `\n📌 *ACTIVIDADES FIJAS*\n`;
+      if (dailyFixed.length > 0) {
+        const od = orderTasksForDisplay(dailyFixed);
+        output += `${formatTaskList(od, s2num)}\n`;
+        semana2View.push(...od);
+        s2num += od.length;
+      }
+      for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
+        if (fixedByDay[day] && fixedByDay[day].length > 0) {
+          const od = orderTasksForDisplay(fixedByDay[day]);
+          output += `${formatTaskList(od, s2num)}\n`;
+          semana2View.push(...od);
+          s2num += od.length;
+        }
+      }
+    }
+    saveTaskView(userId, semana2View);
+    output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output || "No hay tareas para la próxima semana.";
   }
 
@@ -443,10 +487,15 @@ async function formatTasksForUser(userId: string, period?: string) {
     saveTaskView(userId, orderedForView);
   }
 
-  const hasFixed = Object.values(fixedByDay).some((arr) => arr.length > 0);
   if (hasFixed) {
     output += `📌 *ACTIVIDADES FIJAS*\n`;
     const fixedOrdered: any[] = [];
+    if (dailyFixed.length > 0) {
+      const od = orderTasksForDisplay(dailyFixed);
+      output += `${formatTaskList(od, runningNum)}\n`;
+      fixedOrdered.push(...od);
+      runningNum += od.length;
+    }
     for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
       if (fixedByDay[day] && fixedByDay[day].length > 0) {
         const od = orderTasksForDisplay(fixedByDay[day]);
