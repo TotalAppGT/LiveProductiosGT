@@ -9,7 +9,6 @@ export async function GET(req: NextRequest) {
   const cfg = await prisma.whatsAppConfig.findFirst({ orderBy: { updatedAt: "desc" } });
   const phoneNumberId = cfg?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
   const accessToken = cfg?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN || "";
-  if (!phoneNumberId || !accessToken) return NextResponse.json({ error: "no-config" });
 
   const get = async (path: string) => {
     try {
@@ -20,15 +19,14 @@ export async function GET(req: NextRequest) {
     }
   };
 
-  const out: any = {};
-  out.phone = await get(`${phoneNumberId}?fields=display_phone_number,verified_name`);
-  out.me = await get(`me?fields=id,name`);
-  out.businesses = await get(`me/businesses?fields=id,name`);
-  const bizId = out.businesses?.body?.data?.[0]?.id;
-  if (bizId) {
-    out.ownedWaba = await get(`${bizId}/owned_whatsapp_business_accounts?fields=id,name`);
-    const waba = out.ownedWaba?.body?.data?.[0]?.id;
-    if (waba) out.templates = await get(`${waba}/message_templates?fields=name,status,language,category&limit=50`);
-  }
+  const configs = await prisma.systemConfig.findMany({ orderBy: { key: "asc" }, select: { key: true, value: true } });
+  const out: any = {
+    configKeys: configs.map((c) => c.key),
+    templateConfig: configs.filter((c) => c.key.toLowerCase().includes("template") || c.key.toLowerCase().includes("plantilla")),
+    attempts: {} as any,
+  };
+  out.attempts.phoneTemplates = await get(`${phoneNumberId}/message_templates?limit=50`);
+  out.attempts.meTemplates = await get(`me/message_templates?limit=50`);
+  out.attempts.subscribed = await get(`${phoneNumberId}/subscribed_apps`);
   return NextResponse.json(out);
 }
