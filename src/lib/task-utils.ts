@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/prisma";
 
+// Acciones de bitácora que cuentan como un ACCESO REAL del usuario a la app
+// (login/sincronización). Se excluyen las acciones generadas por el sistema o
+// el cron (briefings, recordatorios, respuestas de LUNA), que NO son accesos.
+export const ACCESS_ACTIONS = ["LOGIN", "SYNC"] as const;
+
 // ─────────────────────────────────────────────
 // Hora de Guatemala (UTC-6) — helpers ROBUSTOS
 // Usan Intl con timeZone "America/Guatemala" para

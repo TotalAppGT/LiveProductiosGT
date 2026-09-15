@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMessage, sendProactiveMessage, sendAutomatedReminder } from "@/lib/whatsapp";
 import { generateSmartAlert, detectAnomalies, summarizeCompany, weeklyPerformanceReport } from "@/lib/ai-brain";
 import { subDays, differenceInHours } from "date-fns";
-import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, isTaskDueOnDate } from "@/lib/task-utils";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, isTaskDueOnDate, ACCESS_ACTIONS } from "@/lib/task-utils";
 
 async function logActivity(
   action: string,
@@ -38,7 +38,7 @@ export async function checkInactivity(): Promise<{
     const today = gtStartOfToday();
 
     const activeUsers = await prisma.activity.findMany({
-      where: { createdAt: { gte: today } },
+      where: { createdAt: { gte: today }, action: { in: [...ACCESS_ACTIONS] } },
       select: { userId: true },
       distinct: ["userId"],
     });
@@ -516,7 +516,7 @@ export async function checkDailyAccessRequirement(): Promise<{
     });
 
     const activities = await prisma.activity.findMany({
-      where: { createdAt: { gte: today } },
+      where: { createdAt: { gte: today }, action: { in: [...ACCESS_ACTIONS] } },
       select: { userId: true },
     });
 
@@ -683,6 +683,15 @@ export async function sendEndOfDayAlerts(): Promise<{
       }
 
       for (const task of entry.tasks) {
+        // Las tareas FIJAS (diarias/semanales) se regeneran solas en su día:
+        // no se reprograman ni se cuentan como pospuestas.
+        const isRecurringFixed =
+          task.type === "FIJA" &&
+          (task.frequency === "DIARIA" || (task.frequency === "SEMANAL" && task.dayOfWeek));
+        if (isRecurringFixed) continue;
+
+        // Las tareas guardadas para un día específico que no se completaron pasan
+        // automáticamente al día siguiente (lunes a sábado; el domingo se respeta).
         await prisma.task.update({
           where: { id: task.id },
           data: {
@@ -694,15 +703,18 @@ export async function sendEndOfDayAlerts(): Promise<{
           },
         });
 
-        await prisma.taskHistory.create({
-          data: {
-            taskId: task.id,
-            userId: task.assignedToId || "system",
-            action: "REPROGRAMACIÓN_AUTOMATICA",
-            previousStatus: task.status,
-            newStatus: "REPROGRAMADA",
-          },
-        }).catch((e) => console.error("[sendEndOfDayAlerts] history:", e?.message));
+        const historyUserId = task.assignedToId || task.assignedById;
+        if (historyUserId) {
+          await prisma.taskHistory.create({
+            data: {
+              taskId: task.id,
+              userId: historyUserId,
+              action: "REPROGRAMACIÓN_AUTOMATICA",
+              previousStatus: task.status,
+              newStatus: "REPROGRAMADA",
+            },
+          }).catch((e) => console.error("[sendEndOfDayAlerts] history:", e?.message));
+        }
 
         tasksRescheduled++;
       }
@@ -931,14 +943,15 @@ export async function sendBihourlyReminders(): Promise<{
         emptyMsg += purchasesBlock;
         emptyMsg += cobrosBlock;
         emptyMsg += `\n\n📅 Escribí *tareas* para ver todo, o *crea tarea [qué] [día] [hora]* para agregar una.`;
-        await sendProactiveMessage(to, emptyMsg).catch(() => {});
+        const emptyRes = await sendProactiveMessage(to, emptyMsg).catch(() => ({ ok: false, via: "none" as const, messageId: undefined }));
         await prisma.whatsAppMessage.create({
           data: {
+            externalId: emptyRes.messageId,
             userId: user.id,
             toNumber: to,
             message: `[BIHOURLY] ${emptyMsg}`,
             type: "BIHOURLY_REMINDER",
-            status: "SENT",
+            status: emptyRes.ok ? "SENT" : "FAILED",
           },
         });
         usersReminded++;
@@ -996,15 +1009,16 @@ export async function sendBihourlyReminders(): Promise<{
         message = message.slice(0, 3950) + "\n… (recortado — escribí *tareas* para ver todo)";
       }
 
-      await sendProactiveMessage(to, message).catch(() => {});
+      const sendRes = await sendProactiveMessage(to, message).catch(() => ({ ok: false, via: "none" as const, messageId: undefined }));
 
       await prisma.whatsAppMessage.create({
         data: {
+          externalId: sendRes.messageId,
           userId: user.id,
           toNumber: to,
           message: `[BIHOURLY] ${message}`,
           type: "BIHOURLY_REMINDER",
-          status: "SENT",
+          status: sendRes.ok ? "SENT" : "FAILED",
         },
       });
 
@@ -1260,7 +1274,7 @@ export async function getComplianceRanking(): Promise<{
     const [completedTasks, totalTasks, accessedToday] = await Promise.all([
       prisma.task.count({ where: { assignedToId: user.id, status: "COMPLETADA", updatedAt: { gte: monthStart } } }),
       prisma.task.count({ where: { assignedToId: user.id, createdAt: { gte: monthStart }, status: { not: "COMPLETADA" } } }),
-      prisma.activity.count({ where: { userId: user.id, createdAt: { gte: today } } }),
+      prisma.activity.count({ where: { userId: user.id, createdAt: { gte: today }, action: { in: [...ACCESS_ACTIONS] } } }),
     ]);
 
     const compliancePercent = (completedTasks + totalTasks) > 0
@@ -1293,25 +1307,35 @@ export async function fireScheduledAlerts(): Promise<{ sent: number }> {
     const currentDayStr = w.weekday.toString();
     const currentTime = `${String(w.hour).padStart(2, "0")}:${String(w.minute).padStart(2, "0")}`;
 
-    const alerts = await prisma.$queryRaw<Array<{
-      id: string; title: string; message: string; groupId: string | null;
-      targetUserId: string | null; frequency: string | null; sendCount: number;
-    }>>`SELECT id, title, message, "groupId", "targetUserId", frequency, "sendCount"
-      FROM "ScheduledAlert"
-      WHERE "isActive" = true
-      AND (("scheduledAt" IS NOT NULL AND "scheduledAt" <= ${now} AND frequency IS NULL)
-        OR ("dayOfWeek" = ${currentDayStr} AND "time" = ${currentTime} AND "scheduledAt" IS NOT NULL))`;
+    const activeAlerts = await prisma.scheduledAlert.findMany({ where: { isActive: true } });
 
-    for (const alert of alerts) {
+    for (const alert of activeAlerts) {
+      const freq = (alert.frequency || "").toUpperCase();
+      const isRecurring = freq === "DIARIA" || freq === "SEMANAL" || alert.type === "FIJA";
+      const isWeekly = freq === "SEMANAL" || (alert.type === "FIJA" && freq !== "DIARIA");
+
+      let shouldFire = false;
+      if (isRecurring) {
+        const timeMatches = !!alert.time && alert.time === currentTime;
+        const dayMatches = !isWeekly || String(alert.dayOfWeek ?? "") === currentDayStr;
+        const sentRecently =
+          !!alert.lastSentAt && now.getTime() - new Date(alert.lastSentAt).getTime() < 55 * 1000;
+        shouldFire = timeMatches && dayMatches && !sentRecently;
+      } else {
+        shouldFire = !!alert.scheduledAt && new Date(alert.scheduledAt).getTime() <= now.getTime();
+      }
+
+      if (!shouldFire) continue;
+
       const phones = new Set<string>();
-
       if (alert.groupId) {
-        const members = await prisma.$queryRaw<Array<{ whatsappNumber: string | null; phone: string | null }>>`
-          SELECT u."whatsappNumber", u.phone FROM "GroupMember" gm
-          JOIN "User" u ON u.id = gm."userId"
-          WHERE gm."groupId" = ${alert.groupId}`;
+        const members = await prisma.groupMember.findMany({
+          where: { groupId: alert.groupId },
+          select: { user: { select: { whatsappNumber: true, phone: true } } },
+        });
         for (const m of members) {
-          if (m.whatsappNumber || m.phone) phones.add(m.whatsappNumber || m.phone!);
+          const p = m.user?.whatsappNumber || m.user?.phone;
+          if (p) phones.add(p);
         }
       }
       if (alert.targetUserId) {
@@ -1319,10 +1343,8 @@ export async function fireScheduledAlerts(): Promise<{ sent: number }> {
           where: { id: alert.targetUserId },
           select: { whatsappNumber: true, phone: true },
         });
-        if (target) {
-          const p = target.whatsappNumber || target.phone;
-          if (p) phones.add(p);
-        }
+        const p = target?.whatsappNumber || target?.phone;
+        if (p) phones.add(p);
       }
 
       for (const phone of phones) {
@@ -1330,15 +1352,13 @@ export async function fireScheduledAlerts(): Promise<{ sent: number }> {
         sent++;
       }
 
-      const nextFire = alert.frequency === "DIARIA"
-        ? new Date(now.getTime() + 86400000)
-        : alert.frequency === "SEMANAL"
-        ? new Date(now.getTime() + 604800000)
-        : null;
-
       await prisma.scheduledAlert.update({
         where: { id: alert.id },
-        data: { lastSentAt: now, sendCount: { increment: 1 }, scheduledAt: nextFire ?? undefined },
+        data: {
+          lastSentAt: now,
+          sendCount: { increment: 1 },
+          ...(isRecurring ? {} : { isActive: false, scheduledAt: null }),
+        },
       });
     }
   } catch (error) {

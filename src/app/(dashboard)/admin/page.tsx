@@ -799,13 +799,13 @@ export default function AdminPage() {
                       <p className="text-xs text-gray-500 mb-1.5 font-medium">URL del Webhook</p>
                       <div className="flex items-center gap-2">
                         <code className="text-xs bg-gray-800 dark:bg-gray-900 text-green-300 dark:text-green-400 rounded px-3 py-2 flex-1 break-all font-mono">
-                          https://liveproductiosgt-production.up.railway.app/api/whatsapp/webhook
+                          https://admin.liveproductionsgt.com/api/whatsapp/webhook
                         </code>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            navigator.clipboard.writeText("https://liveproductiosgt-production.up.railway.app/api/whatsapp/webhook");
+                            navigator.clipboard.writeText("https://admin.liveproductionsgt.com/api/whatsapp/webhook");
                             toast.success("URL copiada al portapapeles");
                           }}
                         >

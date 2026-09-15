@@ -2,20 +2,21 @@ import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { normalizeGTPhone } from "@/lib/phone";
 import { sendMessage } from "@/lib/whatsapp";
-import { gtStartOfToday, gtEndOfToday } from "@/lib/task-utils";
+import { gtStartOfToday, gtEndOfToday, ACCESS_ACTIONS } from "@/lib/task-utils";
 
 export const LUNA_SYSTEM_PROMPT = `Eres LUNA, la Asistente IA Administrativa de Live Productions GT, una empresa líder en producción de eventos en Guatemala. Eres la mano derecha digital de Jorge Mérida Godoy (Dueño) y de todo el equipo.
 
 TU IDENTIDAD:
 Te presentas como "LUNA, tu Asistente IA de Live Productions GT". Eres profesional, cálida y exacta. No eres un chatbot genérico: eres una controladora administrativa que conoce el negocio, los procesos, y a cada persona por su nombre y rol.
 
-ESTILO DE RESPUESTA:
-- Siempre saluda con el nombre de la persona.
-- Sé concisa pero completa (3-5 oraciones máximo en WhatsApp).
+ESTILO DE RESPUESTA (directo y personal):
+- Respondé PRIMERO lo que se preguntó, en 1-3 líneas. Nada de relleno ni introducciones largas. Si hace falta más detalle, ofrecelo ("¿querés el detalle?").
+- Siempre saludá con el nombre de la persona y usá su rol/área (el contexto incluye su posición y módulos). Hablá de SUS pendientes concretos, no en genérico.
+- Personalizá por persona: a Jorge (dueño) dale visión y datos para decidir; a Diana (cotizaciones/cobros) lo comercial; a Abel (logística/vehículos) lo operativo; a Selvin/Exequiel (técnico/bodega) lo de equipo e inventario.
 - Si detectás un error del usuario (ej: número de tarea inválido), corregí con amabilidad y sugerí la acción correcta.
-- Para dueños/gerentes: tono ejecutivo, con datos precisos y accionables.
-- Para empleados: tono motivador pero firme, recordando responsabilidades.
-- Español de Guatemala, montos en Quetzales (Q).
+- Para dueños/gerentes: tono ejecutivo, con datos precisos y accionables. Para empleados: motivador pero firme, recordando responsabilidades.
+- Cerrá SIEMPRE con una acción concreta o una pregunta corta (ej: "¿lo marco como hecho?", "¿lo pospongo para mañana?").
+- Español de Guatemala, montos en Quetzales (Q). Máximo 4 oraciones en WhatsApp salvo que pidan un listado.
 
 COMANDOS QUE EL USUARIO PUEDE USAR (conocelos y sugerilos cuando sea útil):
 - "menu" → Menú con botones para crear recordatorios, tareas o mensajes programados
@@ -628,7 +629,7 @@ export async function getAdminOverview(): Promise<{
         },
       }),
       prisma.activity.findMany({
-        where: { createdAt: { gte: today } },
+        where: { createdAt: { gte: today }, action: { in: [...ACCESS_ACTIONS] } },
         select: { userId: true },
       }),
       prisma.task.count({
@@ -757,7 +758,7 @@ interface UserContext {
 
 export async function getAIAssistantContext(userId: string): Promise<string> {
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true } });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, position: true, modules: true } });
     if (!user) return "";
 
     const now = new Date();
@@ -782,13 +783,14 @@ export async function getAIAssistantContext(userId: string): Promise<string> {
       prisma.vehicle.findMany({ orderBy: { name: "asc" }, select: { name: true, plate: true, status: true, assignedTo: { select: { name: true } } } }),
       prisma.cobro.findMany({ where: { status: "PENDIENTE" }, orderBy: { dueDate: "asc" }, take: 20, select: { clientName: true, amount: true, dueDate: true, assignedTo: { select: { name: true } } } }),
       prisma.user.findMany({ where: { active: true }, select: { name: true, role: true, email: true, phone: true }, orderBy: { name: "asc" } }),
-      prisma.activity.count({ where: { userId, createdAt: { gte: gtStartOfToday() } } }),
+      prisma.activity.count({ where: { userId, createdAt: { gte: gtStartOfToday() }, action: { in: [...ACCESS_ACTIONS] } } }),
     ]);
 
     const complianceRate = assignedCount > 0 ? Math.min(100, Math.round((completedCount / assignedCount) * 100)) : 0;
     const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
 
-    let ctx = `USUARIO: ${user.name} (${user.role})
+    const positionLine = user.position ? ` · ${user.position}` : "";
+    let ctx = `USUARIO: ${user.name} (${user.role}${positionLine})
 DÍA Y HORA ACTUAL (Guatemala): ${now.toLocaleString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
 ACCESOS HOY: ${todayAccesses}/4 mínimo requerido
 
@@ -904,7 +906,7 @@ let proactiveText = "";
       const today = gtStartOfToday();
 
       const activities = await prisma.activity.findMany({
-        where: { createdAt: { gte: today } },
+        where: { createdAt: { gte: today }, action: { in: [...ACCESS_ACTIONS] } },
         select: { userId: true },
       });
 

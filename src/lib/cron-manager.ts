@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendProactiveMessage } from "@/lib/whatsapp";
 import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireTaskReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
-import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate } from "@/lib/task-utils";
+import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate, ACCESS_ACTIONS } from "@/lib/task-utils";
 
 interface CronJob {
   name: string;
@@ -278,11 +278,12 @@ async function morningBriefing() {
       if (to) {
         const res = await sendProactiveMessage(to, fullMessage).catch((err) => {
           console.error(`[Cron] excepción enviando briefing a ${user.name}:`, err);
-          return { ok: false, via: "none" as const };
+          return { ok: false, via: "none" as const, messageId: undefined };
         });
         const ok = res.ok;
         const record = prisma.whatsAppMessage.create({
           data: {
+            externalId: res.messageId,
             userId: user.id,
             toNumber: to,
             message: `[BRIEFING] ${fullMessage}`,
@@ -392,7 +393,7 @@ async function middayCheck() {
     const usersWithoutActivity = await prisma.user.findMany({
       where: {
         active: true,
-        activities: { none: { createdAt: { gte: startOfDay } } },
+        activities: { none: { createdAt: { gte: startOfDay }, action: { in: [...ACCESS_ACTIONS] } } },
       },
       select: { name: true, role: true },
     });
@@ -454,7 +455,7 @@ async function eveningRecap() {
       prisma.user.findMany({
         where: {
           active: true,
-          activities: { some: { createdAt: { gte: startOfDay } } },
+          activities: { some: { createdAt: { gte: startOfDay }, action: { in: [...ACCESS_ACTIONS] } } },
         },
         select: { id: true, name: true },
       }),
@@ -704,19 +705,36 @@ if (!g.__cronInitialized) g.__cronInitialized = false;
 let cronInterval: ReturnType<typeof setInterval> | null = g.__cronInterval || null;
 let initialized = g.__cronInitialized;
 
+// Cache en memoria de jobs ya ejecutados en el período actual. Evita pegarle a
+// la BD (y loguear) en cada uno de los ~60 chequeos por minuto durante la
+// ventana de catch-up.
+const executedKeys = new Set<string>();
+
 async function shouldRunJob(job: CronJob): Promise<boolean> {
   const w = getGuatemalaWallClock();
   const now = new Date();
   const key = `cron:${job.name}:${w.year}-${String(w.month).padStart(2,'0')}-${String(w.day).padStart(2,'0')}-${job.schedule.hour}`;
+
+  if (executedKeys.has(key)) return false;
+
   try {
     // Chequea antes de crear para evitar el spam de errores P2002 (dedup silencioso)
     const existing = await prisma.systemConfig.findUnique({ where: { key } });
-    if (existing) return false; // ya se ejecutó en esta hora
+    if (existing) {
+      executedKeys.add(key);
+      return false; // ya se ejecutó en esta hora
+    }
     await prisma.systemConfig.create({
       data: { key, value: now.toISOString(), description: `Last run of ${job.name}` },
     });
+    executedKeys.add(key);
     return true;
   } catch (error) {
+    // P2002 = carrera entre instancias/chequeos: ya se ejecutó, no reintentar.
+    if ((error as { code?: string })?.code === "P2002") {
+      executedKeys.add(key);
+      return false;
+    }
     console.error(`[Cron] shouldRunJob ${job.name}:`, error);
     return false;
   }
@@ -755,7 +773,7 @@ async function runJobIfScheduled(job: CronJob) {
   if (hourDiff === catchLimit && w.minute >= 30) return;
 
   if (!(await shouldRunJob(job))) {
-    console.log(`[Cron] ${job.name}: ya se ejecutó en esta hora, saltando (DB dedup)`);
+    // Silencioso: ya se ejecutó en esta hora (evita inundar los logs).
     return;
   }
 

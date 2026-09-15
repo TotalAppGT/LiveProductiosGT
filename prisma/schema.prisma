@@ -437,6 +437,7 @@ model WhatsAppConfig {
 
 model WhatsAppMessage {
   id             String                @id @default(cuid())
+  externalId     String?
   userId         String
   toNumber       String
   message        String
@@ -449,6 +450,8 @@ model WhatsAppMessage {
   user         User?  @relation(fields: [userId], references: [id])
   relatedTask  Task?  @relation(fields: [relatedTaskId], references: [id])
   relatedEvent Event? @relation(fields: [relatedEventId], references: [id])
+
+  @@index([externalId])
 }
 
 model Order {

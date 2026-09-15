@@ -68,8 +68,8 @@ export default function NotificacionesPage() {
   const createAlert = async () => {
     if (!alertTitle.trim() || !alertMsg.trim()) return toast.error("Título y mensaje requeridos");
     const body: any = { title: alertTitle, message: alertMsg, type: alertType };
-    if (alertType === "FIJA") { body.dayOfWeek = alertDay; body.time = alertTime; }
-    else { body.scheduledAt = alertDate ? new Date(alertDate + "T" + alertTime).toISOString() : new Date().toISOString(); }
+    if (alertType === "FIJA") { body.frequency = "SEMANAL"; body.dayOfWeek = alertDay; body.time = alertTime; }
+    else { body.frequency = null; body.scheduledAt = alertDate ? new Date(alertDate + "T" + alertTime).toISOString() : new Date().toISOString(); }
     if (alertGroup) body.groupId = alertGroup;
     if (alertTarget) body.targetUserId = alertTarget;
     const r = await fetch("/api/alerts", { method: "POST", headers, body: JSON.stringify(body) });

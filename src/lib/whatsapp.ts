@@ -62,43 +62,58 @@ async function sendMetaMessage(
   message: string
 ): Promise<WhatsAppApiResponse | null> {
   const WHATSAPP_API_VERSION = "v22.0";
+  const normalizedNumber = normalizeGTPhone(to).replace(/\D/g, "");
+  const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${phoneNumberId}/messages`;
+  const payload = JSON.stringify({
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: normalizedNumber,
+    type: "text",
+    text: {
+      preview_url: false,
+      body: message,
+    },
+  });
 
-  try {
-    const normalizedNumber = normalizeGTPhone(to).replace(/\D/g, "");
-
-    const response = await fetch(
-      `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${phoneNumberId}/messages`,
-      {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: normalizedNumber,
-          type: "text",
-          text: {
-            preview_url: false,
-            body: message,
-          },
-        }),
+        body: payload,
+      });
+
+      const data: WhatsAppApiResponse = await response.json();
+
+      if (!response.ok || data.error) {
+        // Reintentar solo errores transitorios (límite de tasa o 5xx).
+        const transient = response.status === 429 || response.status >= 500;
+        console.error(
+          `WhatsApp Meta send error (intento ${attempt}/${maxAttempts}, HTTP ${response.status}):`,
+          data.error || data
+        );
+        if (transient && attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 800 * attempt));
+          continue;
+        }
+        return null;
       }
-    );
 
-    const data: WhatsAppApiResponse = await response.json();
-
-    if (!response.ok || data.error) {
-      console.error("WhatsApp Meta send error:", data.error);
+      return data;
+    } catch (error) {
+      console.error(`WhatsApp Meta fetch error (intento ${attempt}/${maxAttempts}):`, error);
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 800 * attempt));
+        continue;
+      }
       return null;
     }
-
-    return data;
-  } catch (error) {
-    console.error("WhatsApp Meta fetch error:", error);
-    return null;
   }
+  return null;
 }
 
 async function sendTwilioMessage(
@@ -184,9 +199,9 @@ async function sendMessage(
 export async function sendProactiveMessage(
   to: string,
   message: string
-): Promise<{ ok: boolean; via: "text" | "template" | "none" }> {
+): Promise<{ ok: boolean; via: "text" | "template" | "none"; messageId?: string }> {
   const sent = await sendMessage(to, message).catch(() => null);
-  if (sent) return { ok: true, via: "text" };
+  if (sent) return { ok: true, via: "text", messageId: sent.messages?.[0]?.id };
 
   // Fuera de ventana / error: intentar con plantilla aprobada
   const tplName =
@@ -204,7 +219,7 @@ export async function sendProactiveMessage(
   let tplText = message.replace(/\t/g, " ").replace(/ {4,}/g, "   ").trim();
   if (tplText.length > 1000) tplText = tplText.slice(0, 995) + "…";
   const tpl = await sendTemplateMessage(to, tplName, [{ type: "text", text: tplText }], tplLang).catch(() => null);
-  return { ok: !!tpl, via: tpl ? "template" : "none" };
+  return { ok: !!tpl, via: tpl ? "template" : "none", messageId: tpl?.messages?.[0]?.id };
 }
 
 // Divide un texto largo en trozos <= limit respetando saltos de línea.

@@ -18,6 +18,23 @@ const processedMessageIds = new Set<string>();
 // y el flujo principal NO debe re-enviar ni caer al chat IA.
 const COMMAND_SENT = "__SENT__";
 
+// Usuario "sistema" real para bitácoras internas (evita el FK inválido "system").
+let _systemUserId: string | null | undefined;
+async function getSystemUserId(): Promise<string | null> {
+  if (_systemUserId !== undefined) return _systemUserId;
+  try {
+    const u = await prisma.user.findFirst({
+      where: { active: true, role: { in: ["DUENO", "ADMIN"] } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    _systemUserId = u?.id ?? null;
+  } catch {
+    _systemUserId = null;
+  }
+  return _systemUserId;
+}
+
 function normalizeGuatemalaDate(input: string): Date {
   const trimmed = input.trim();
   // Si ya trae zona horaria (Z o +hh:mm), parsea directo
@@ -2825,6 +2842,20 @@ export async function POST(request: NextRequest) {
             const messages = value?.messages || [];
             const contacts = value?.contacts || [];
 
+            // Confirmaciones de entrega de WhatsApp (sent/delivered/read/failed):
+            // actualiza el estado real del mensaje registrado (por externalId).
+            for (const st of value?.statuses || []) {
+              if (!st?.id || !st?.status) continue;
+              const mapped =
+                st.status === "read" ? "READ"
+                : st.status === "delivered" ? "DELIVERED"
+                : st.status === "failed" ? "FAILED"
+                : "SENT";
+              await prisma.whatsAppMessage
+                .updateMany({ where: { externalId: st.id }, data: { status: mapped } })
+                .catch(() => {});
+            }
+
             for (const message of messages) {
               const fromNumber = message.from;
               // Dedup: si este mensaje ya se procesó (reintento de WhatsApp), se omite
@@ -2887,15 +2918,18 @@ export async function POST(request: NextRequest) {
 
                   await sendMessage(fromNumber, mediaMsg).catch(() => {});
 
-                  await prisma.whatsAppMessage.create({
-                    data: {
-                      userId: "system",
-                      toNumber: fromNumber,
-                      message: `[RECIBIDO ${messageType.toUpperCase()}] No procesable`,
-                      type: "CHAT",
-                      status: "DELIVERED",
-                    },
-                  }).catch(() => {});
+                  const sysId = await getSystemUserId();
+                  if (sysId) {
+                    await prisma.whatsAppMessage.create({
+                      data: {
+                        userId: sysId,
+                        toNumber: fromNumber,
+                        message: `[RECIBIDO ${messageType.toUpperCase()}] No procesable`,
+                        type: "CHAT",
+                        status: "DELIVERED",
+                      },
+                    }).catch(() => {});
+                  }
 
                   continue;
                 }
@@ -3079,7 +3113,7 @@ export async function POST(request: NextRequest) {
                     "¡Hola! 👋 Soy *LUNA*, la asistente virtual de Live Productions. " +
                     "Tu número no está registrado en nuestro sistema.\n\n" +
                     "Si eres parte del equipo, por favor pide a tu administrador que registre tu número de WhatsApp.\n\n" +
-                    "📞 Teléfono: +502 3090-3172\n🌐 liveproductionsgt.com\n🔗 Accede al sistema: https://liveproductiosgt-production.up.railway.app\n📍 16 avenida A 28-76 zona 13 Elgin 2, Guatemala";
+                    "📞 Teléfono: +502 3090-3172\n🌐 liveproductionsgt.com\n🔗 Accede al sistema: https://admin.liveproductionsgt.com\n📍 16 avenida A 28-76 zona 13 Elgin 2, Guatemala";
 
                   await sendMessage(fromNumber, welcomeMsg);
 
