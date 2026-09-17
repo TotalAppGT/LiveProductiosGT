@@ -62,6 +62,41 @@ const CATEGORY_OPTIONS = [
   { value: "OTRO", label: "📌 Actividades diarias" },
 ];
 
+const GT_DOW_BY_NAME: Record<string, number> = {
+  DOMINGO: 0, LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6,
+};
+const GT_DOW_BY_SHORT: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+
+function gtDateKey(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
+}
+
+function gtWeekday(d: Date): number {
+  const s = d.toLocaleDateString("en-US", { timeZone: "America/Guatemala", weekday: "short" });
+  return GT_DOW_BY_SHORT[s] ?? 0;
+}
+
+// ¿La tarea ocurre en esa fecha (hora de Guatemala)?
+// - FIJAS DIARIA: todos los días.
+// - FIJAS SEMANAL: su día (lun-sáb persisten hasta el sábado; domingo solo el domingo).
+// - DINÁMICAS: solo en su fecha de vencimiento.
+function taskOccursOnDate(task: Task, date: Date): boolean {
+  if (task.type === "FIJA") {
+    if (task.frequency === "SEMANAL" && task.dayOfWeek) {
+      const target = GT_DOW_BY_NAME[String(task.dayOfWeek).toUpperCase()];
+      const wd = gtWeekday(date);
+      if (target === undefined) return true;
+      if (target === 0) return wd === 0;
+      return wd !== 0 && wd >= target;
+    }
+    return true; // DIARIA o sin día
+  }
+  if (task.dueDate) return gtDateKey(new Date(task.dueDate)) === gtDateKey(date);
+  return false;
+}
+
 export default function TareasPage() {
   const { user, token } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -151,27 +186,9 @@ export default function TareasPage() {
       if (typeFilter) params.set("type", typeFilter);
       if (search) params.set("search", search);
       params.set("limit", "500");
-      if (activeTab === "HOY") {
-        const today = new Date().toISOString().split("T")[0];
-        params.set("dueDate", today);
-      }
-      if (activeTab === "SEMANA") {
-        const now = new Date();
-        const day = now.getDay();
-        const monday = new Date(now);
-        monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        params.set("dueDateFrom", monday.toISOString().split("T")[0]);
-        params.set("dueDateTo", sunday.toISOString().split("T")[0]);
-      }
-      if (activeTab === "MES") {
-        const now = new Date();
-        const first = new Date(now.getFullYear(), now.getMonth(), 1);
-        const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        params.set("dueDateFrom", first.toISOString().split("T")[0]);
-        params.set("dueDateTo", last.toISOString().split("T")[0]);
-      }
+      // Las pestañas HOY / SEMANA / MES se filtran en el cliente con
+      // taskOccursOnDate(), para incluir también las tareas FIJAS (diarias y
+      // semanales) que no tienen una fecha de vencimiento puntual.
 
       const res = await fetch(`/api/tasks?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -581,15 +598,29 @@ export default function TareasPage() {
   }
 
   const filteredTasks = tasks.filter((task) => {
+    // "Hoy": tareas de hoy (Guatemala) + fijas diarias + fijas del día.
     if (activeTab === "HOY") {
-      const today = new Date().toISOString().split("T")[0];
-      return task.dueDate?.startsWith(today);
+      return taskOccursOnDate(task, new Date());
     }
+    // "Esta Semana": cualquier día de lunes a domingo de la semana actual.
     if (activeTab === "SEMANA") {
       const now = new Date();
-      const weekEnd = new Date(now);
-      weekEnd.setDate(now.getDate() + (7 - now.getDay()));
-      return task.dueDate && new Date(task.dueDate) <= weekEnd && new Date(task.dueDate) >= now;
+      const wd = gtWeekday(now); // 0=domingo .. 6=sábado
+      const monday = new Date(now.getTime() - (wd === 0 ? 6 : wd - 1) * 86400000);
+      for (let i = 0; i < 7; i++) {
+        if (taskOccursOnDate(task, new Date(monday.getTime() + i * 86400000))) return true;
+      }
+      return false;
+    }
+    // "Este Mes": fijas + dinámicas con fecha dentro del mes actual.
+    if (activeTab === "MES") {
+      const now = new Date();
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+        if (taskOccursOnDate(task, new Date(d))) return true;
+      }
+      return false;
     }
     return true;
   });
@@ -659,8 +690,9 @@ export default function TareasPage() {
   };
 
   // ¿Es una tarea FIJA que se repite TODOS los días (diaria o sin día)?
-  const isDailyFixed = (t: Task): boolean =>
-    t.type === "FIJA" && (t.frequency === "DIARIA" || (!t.frequency && !t.dayOfWeek));
+  function isDailyFixed(t: Task): boolean {
+    return t.type === "FIJA" && (t.frequency === "DIARIA" || (!t.frequency && !t.dayOfWeek));
+  }
 
   function taskDayLabel(t: Task): string {
     // Las tareas FIJAS se agrupan por su DÍA DE LA SEMANA (no por una fecha
@@ -1461,10 +1493,19 @@ export default function TareasPage() {
                               )}
                             </div>
                             <div className="col-span-3 text-[11px] text-gray-600 dark:text-gray-300 truncate">
-                              {task.dueDate ? (
+                              {task.type === "FIJA" ? (
                                 <>
-                                  <span className="font-medium">{new Date(task.dueDate).toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" })}</span>
-                                  <span className="text-gray-400"> · {new Date(task.dueDate).toLocaleTimeString("es-GT", { hour: "2-digit", minute: "2-digit" })}</span>
+                                  <span className="font-medium text-indigo-600 dark:text-indigo-300">
+                                    {isDailyFixed(task) ? "Todos los días" : (task.dayOfWeek ? DOW_TO_LABEL[String(task.dayOfWeek).toUpperCase()] : "Fija")}
+                                  </span>
+                                  {task.dueDate && (
+                                    <span className="text-gray-400"> · {new Date(task.dueDate).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}</span>
+                                  )}
+                                </>
+                              ) : task.dueDate ? (
+                                <>
+                                  <span className="font-medium">{new Date(task.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })}</span>
+                                  <span className="text-gray-400"> · {new Date(task.dueDate).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}</span>
                                 </>
                               ) : "—"}
                             </div>
