@@ -653,15 +653,27 @@ export default function TareasPage() {
     Viernes: "VIERNES", "Sábado": "SABADO", Domingo: "DOMINGO",
   };
 
+  const DOW_TO_LABEL: Record<string, string> = {
+    LUNES: "Lunes", MARTES: "Martes", MIERCOLES: "Miércoles", JUEVES: "Jueves",
+    VIERNES: "Viernes", SABADO: "Sábado", DOMINGO: "Domingo",
+  };
+
+  // ¿Es una tarea FIJA que se repite TODOS los días (diaria o sin día)?
+  const isDailyFixed = (t: Task): boolean =>
+    t.type === "FIJA" && (t.frequency === "DIARIA" || (!t.frequency && !t.dayOfWeek));
+
   function taskDayLabel(t: Task): string {
+    // Las tareas FIJAS se agrupan por su DÍA DE LA SEMANA (no por una fecha
+    // antigua que quedó guardada). Las diarias se reparten en todos los días.
+    if (t.type === "FIJA") {
+      if (t.dayOfWeek) return DOW_TO_LABEL[String(t.dayOfWeek).toUpperCase()] || "Sin fecha";
+      return "Sin fecha";
+    }
     if (t.dueDate) {
-      const d = new Date(t.dueDate).toLocaleDateString("es-GT", { weekday: "long" });
+      const d = new Date(t.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long" });
       return d.charAt(0).toUpperCase() + d.slice(1);
     }
-    if (t.dayOfWeek) {
-      const cap = t.dayOfWeek.toLowerCase();
-      return cap.charAt(0).toUpperCase() + cap.slice(1);
-    }
+    if (t.dayOfWeek) return DOW_TO_LABEL[String(t.dayOfWeek).toUpperCase()] || "Sin fecha";
     return "Sin fecha";
   }
 
@@ -688,27 +700,32 @@ export default function TareasPage() {
 
   // Una tarea pertenece a la semana visible si su fecha está dentro, o es fija recurrente
   const taskInViewWeek = (t: Task): boolean => {
+    // Las FIJAS (diarias/semanales) SIEMPRE se muestran en su día de la semana,
+    // aunque tengan guardada una fecha antigua. Antes se descartaban y el
+    // listado quedaba vacío porque casi todas las tareas son fijas.
+    if (t.type === "FIJA") return true;
     if (t.dueDate) {
       const dd = new Date(t.dueDate);
-      const wd = dd.toLocaleDateString("es-GT", { timeZone: "America/Guatemala" });
-      const ms = viewMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala" });
-      const se = viewSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala" });
       // comparación de fecha (YYYY-MM-DD)
       const toKey = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
       return toKey(dd) >= toKey(viewMonday) && toKey(dd) <= toKey(viewSunday);
     }
-    if (t.type === "FIJA") return true; // fijas recurrentes aparecen cada semana que se ve
     return false;
   };
-  const viewTasks = visibleTasks.filter((t) => !dayFilter || taskDayLabel(t) === dayFilter).filter(taskInViewWeek);
+  const viewTasks = visibleTasks
+    .filter((t) => !dayFilter || taskDayLabel(t) === dayFilter || (isDailyFixed(t) && dayFilter !== "Sin fecha"))
+    .filter(taskInViewWeek);
 
   // Agrupación por DÍA (Lunes, Martes...) como en el chat
   function buildDayGroups(): SheetSection[] {
     const byDay = new Map<string, Task[]>();
     viewTasks.forEach((t) => {
-      const dayLabel = taskDayLabel(t);
-      if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
-      byDay.get(dayLabel)!.push(t);
+      // Las fijas diarias aparecen en TODOS los días de la semana visible.
+      const days = isDailyFixed(t) ? weekFromToday : [taskDayLabel(t)];
+      for (const dayLabel of days) {
+        if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
+        byDay.get(dayLabel)!.push(t);
+      }
     });
     const orderedKeys = [...weekFromToday, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
     return orderedKeys.map((d) => ({
@@ -727,6 +744,7 @@ export default function TareasPage() {
     bg: string;
     level: number; // 0=día, 1=fase, 2=tipo
     tasks: Task[];
+    count?: number;
     insertCategory?: string;
     insertType?: string;
     insertDayOfWeek?: string;
@@ -746,15 +764,18 @@ export default function TareasPage() {
     const sections: SheetSection[] = [];
     const byDay = new Map<string, Task[]>();
     viewTasks.forEach((t) => {
-      const day = taskDayLabel(t);
-      if (!byDay.has(day)) byDay.set(day, []);
-      byDay.get(day)!.push(t);
+      // Las fijas diarias aparecen en TODOS los días de la semana visible.
+      const days = isDailyFixed(t) ? weekFromToday : [taskDayLabel(t)];
+      for (const day of days) {
+        if (!byDay.has(day)) byDay.set(day, []);
+        byDay.get(day)!.push(t);
+      }
     });
     const orderedDays = [...weekFromToday, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
     for (const day of orderedDays) {
       const dayTasks = byDay.get(day) || [];
       const dow = dayToDayOfWeek[day];
-      sections.push({ key: `day-${day}`, label: day, bg: dayBgMap[day] || "bg-gray-600", level: 0, tasks: [], insertDayOfWeek: dow });
+      sections.push({ key: `day-${day}`, label: day, bg: dayBgMap[day] || "bg-gray-600", level: 0, tasks: [], count: dayTasks.length, insertDayOfWeek: dow });
 
       const sortByHour = (a: Task, b: Task) => {
         const hasManual = (a.sortOrder || 0) > 0 || (b.sortOrder || 0) > 0;
@@ -1389,7 +1410,7 @@ export default function TareasPage() {
                             <span>{group.label}</span>
                           </span>
                           <div className="flex items-center gap-1">
-                            <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{group.tasks.length}</span>
+                            <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{group.count ?? group.tasks.length}</span>
                             <button
                               onClick={() => {
                                 setCreatePrefill({ category: (group as any).insertCategory, type: (group as any).insertType, dayOfWeek: (group as any).insertDayOfWeek });
