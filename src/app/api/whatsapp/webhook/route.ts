@@ -2854,6 +2854,30 @@ export async function POST(request: NextRequest) {
               await prisma.whatsAppMessage
                 .updateMany({ where: { externalId: st.id }, data: { status: mapped } })
                 .catch(() => {});
+
+              // Meta acepta el texto libre (HTTP 200) y luego lo marca FAILED si
+              // el destinatario está fuera de la ventana de 24h. En ese caso se
+              // reintenta por la PLANTILLA aprobada, que sí entrega siempre.
+              if (st.status === "failed") {
+                try {
+                  const row = await prisma.whatsAppMessage.findFirst({ where: { externalId: st.id } });
+                  if (row && !row.message.startsWith("[TPL]")) {
+                    const { sendViaTemplate } = await import("@/lib/whatsapp");
+                    const retry = await sendViaTemplate(
+                      row.toNumber,
+                      row.message.replace(/^\[[A-Z_]+\]\s*/, "")
+                    );
+                    if (retry.ok) {
+                      await prisma.whatsAppMessage.update({
+                        where: { id: row.id },
+                        data: { message: "[TPL] " + row.message },
+                      });
+                    }
+                  }
+                } catch {
+                  // silencioso: el reintento no debe romper el webhook
+                }
+              }
             }
 
             for (const message of messages) {

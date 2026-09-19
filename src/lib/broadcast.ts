@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendMessage } from "@/lib/whatsapp";
+import { sendProactiveMessage } from "@/lib/whatsapp";
 import { getGuatemalaWallClock, guatemalaDate, applyGuatemalaTime } from "@/lib/task-utils";
 
 export const LUNA_UPDATE_TITLE = "📅 Reunión LUNA — Actualización del sistema";
@@ -64,12 +64,24 @@ export async function sendLUNAUpdateBroadcast(
     const to = user.whatsappNumber || user.phone;
     if (!to) continue;
 
-    const ok = await sendMessage(to, buildLUNAUpdateMessage(user.name)).catch(() => false);
-    if (ok) {
+    const cuerpo = buildLUNAUpdateMessage(user.name);
+    const res = await sendProactiveMessage(to, cuerpo).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+    if (res.ok) {
       sent++;
     } else {
       failed++;
     }
+
+    await prisma.whatsAppMessage.create({
+      data: {
+        externalId: res.messageId,
+        userId: user.id,
+        toNumber: to,
+        message: `[BROADCAST] ${cuerpo}`,
+        type: "NOTIFICATION",
+        status: res.ok ? "SENT" : "FAILED",
+      },
+    }).catch(() => {});
 
     await prisma.reminder.create({
       data: {

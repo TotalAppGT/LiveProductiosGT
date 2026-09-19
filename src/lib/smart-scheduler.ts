@@ -4,6 +4,22 @@ import { generateSmartAlert, detectAnomalies, summarizeCompany, weeklyPerformanc
 import { subDays, differenceInHours } from "date-fns";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, isTaskDueOnDate, ACCESS_ACTIONS } from "@/lib/task-utils";
 
+let _sysUserId: string | null | undefined;
+async function resolveSystemUserId(): Promise<string | null> {
+  if (_sysUserId !== undefined) return _sysUserId;
+  try {
+    const u = await prisma.user.findFirst({
+      where: { active: true, role: { in: ["DUENO", "ADMIN", "JEFE"] } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    _sysUserId = u?.id ?? null;
+  } catch {
+    _sysUserId = null;
+  }
+  return _sysUserId;
+}
+
 async function logActivity(
   action: string,
   resource: string,
@@ -13,8 +29,14 @@ async function logActivity(
 ) {
   try {
     // "system" no es un usuario real; se registra con un id de usuario válido o se omite.
+    let uid = userId;
+    if (uid === "system") {
+      const resolved = await resolveSystemUserId();
+      if (!resolved) return;
+      uid = resolved;
+    }
     await prisma.activity.create({
-      data: { userId, action, resource, resourceId, details },
+      data: { userId: uid, action, resource, resourceId, details },
     });
   } catch (error: any) {
     // Silenciar el FK de "system" (no es un usuario real); loguear solo errores reales
@@ -954,7 +976,7 @@ export async function sendBihourlyReminders(): Promise<{
             status: emptyRes.ok ? "SENT" : "FAILED",
           },
         });
-        usersReminded++;
+        if (emptyRes.ok) usersReminded++;
         continue;
       }
 
@@ -1030,7 +1052,7 @@ export async function sendBihourlyReminders(): Promise<{
         "system"
       );
 
-      usersReminded++;
+      if (sendRes.ok) usersReminded++;
       totalPendingTasks += todayTasks.length;
     }
 

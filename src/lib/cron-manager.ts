@@ -710,6 +710,9 @@ let initialized = g.__cronInitialized;
 // ventana de catch-up.
 const executedKeys = new Set<string>();
 
+// Evita repetir el log de "desactivado" en cada uno de los ~60 ticks por hora.
+const skipLogged = new Set<string>();
+
 async function shouldRunJob(job: CronJob): Promise<boolean> {
   const w = getGuatemalaWallClock();
   const now = new Date();
@@ -753,13 +756,21 @@ async function runJobIfScheduled(job: CronJob) {
   // DOMINGO: los mensajes automáticos están desactivados (solo corren los
   // recordatorios/alertas/mensajes explícitos que pidió el usuario).
   if (w.weekday === 0 && job.skipOnSunday) {
-    console.log(`[Cron] ${job.name}: domingo, mensaje automático desactivado.`);
+    const k = `${job.name}:${w.year}-${w.month}-${w.day}`;
+    if (!skipLogged.has(k)) {
+      skipLogged.add(k);
+      console.log(`[Cron] ${job.name}: domingo, mensaje automático desactivado.`);
+    }
     return;
   }
 
   // Días específicos a saltar (ej: el 14h no corre sábado)
   if (job.skipWeekdays?.includes(w.weekday)) {
-    console.log(`[Cron] ${job.name}: día ${w.weekday} desactivado.`);
+    const k = `${job.name}:${w.year}-${w.month}-${w.day}`;
+    if (!skipLogged.has(k)) {
+      skipLogged.add(k);
+      console.log(`[Cron] ${job.name}: día ${w.weekday} desactivado.`);
+    }
     return;
   }
 

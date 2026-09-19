@@ -196,6 +196,52 @@ async function sendMessage(
  * ventana, se usa una PLANTILLA aprobada si está configurada.
  * Config por BD (systemConfig): whatsapp_template_name (+ opcional whatsapp_template_lang).
  */
+/**
+ * Envía un mensaje largo por la PLANTILLA aprobada, troceándolo para respetar
+ * el límite de parámetros de Meta. La plantilla de Live Productions
+ * (`liveproductions_aviso`) usa dos parámetros: `sistema` y `mensaje`.
+ * Devuelve ok=true si al menos un trozo se envió.
+ */
+export async function sendViaTemplate(
+  to: string,
+  message: string,
+  sistema: string = "Live Productions"
+): Promise<{ ok: boolean; messageId?: string }> {
+  const tplName =
+    (await prisma.systemConfig.findUnique({ where: { key: "whatsapp_template_name" } }))?.value ||
+    process.env.WHATSAPP_TEMPLATE_NAME ||
+    "";
+  if (!tplName) return { ok: false };
+
+  const tplLang =
+    (await prisma.systemConfig.findUnique({ where: { key: "whatsapp_template_lang" } }))?.value ||
+    process.env.WHATSAPP_TEMPLATE_LANG ||
+    "es_MX";
+
+  const clean = message.replace(/\t/g, " ").replace(/ {4,}/g, "   ").trim();
+  const chunks = splitMessage(clean, 1000);
+
+  let ok = false;
+  let firstId: string | undefined;
+  for (let i = 0; i < chunks.length; i++) {
+    const r = await sendTemplateMessage(
+      to,
+      tplName,
+      [
+        { type: "text", parameter_name: "sistema", text: sistema },
+        { type: "text", parameter_name: "mensaje", text: chunks[i] },
+      ],
+      tplLang
+    ).catch(() => null);
+    if (r) {
+      ok = true;
+      if (!firstId) firstId = r.messages?.[0]?.id;
+    }
+    if (i < chunks.length - 1) await new Promise((res) => setTimeout(res, 400));
+  }
+  return { ok, messageId: firstId };
+}
+
 export async function sendProactiveMessage(
   to: string,
   message: string
@@ -203,23 +249,11 @@ export async function sendProactiveMessage(
   const sent = await sendMessage(to, message).catch(() => null);
   if (sent) return { ok: true, via: "text", messageId: sent.messages?.[0]?.id };
 
-  // Fuera de ventana / error: intentar con plantilla aprobada
-  const tplName =
-    (await prisma.systemConfig.findUnique({ where: { key: "whatsapp_template_name" } }))?.value ||
-    process.env.WHATSAPP_TEMPLATE_NAME ||
-    "";
-  if (!tplName) return { ok: false, via: "none" };
-
-  const tplLang =
-    (await prisma.systemConfig.findUnique({ where: { key: "whatsapp_template_lang" } }))?.value ||
-    process.env.WHATSAPP_TEMPLATE_LANG ||
-    "es";
-  // Los parámetros de plantilla tienen límite (~1024) y no admiten tabs ni
-  // más de 3 espacios seguidos. Se sanea y recorta.
-  let tplText = message.replace(/\t/g, " ").replace(/ {4,}/g, "   ").trim();
-  if (tplText.length > 1000) tplText = tplText.slice(0, 995) + "…";
-  const tpl = await sendTemplateMessage(to, tplName, [{ type: "text", text: tplText }], tplLang).catch(() => null);
-  return { ok: !!tpl, via: tpl ? "template" : "none", messageId: tpl?.messages?.[0]?.id };
+  // Fuera de ventana / error: intentar con la PLANTILLA aprobada.
+  const tpl = await sendViaTemplate(to, message);
+  return tpl.ok
+    ? { ok: true, via: "template", messageId: tpl.messageId }
+    : { ok: false, via: "none" };
 }
 
 // Divide un texto largo en trozos <= limit respetando saltos de línea.
@@ -257,6 +291,7 @@ export async function sendMessageChunked(to: string, text: string, limit = 3900)
 
 interface TemplateParameter {
   type: "text" | "currency" | "date_time";
+  parameter_name?: string;
   text?: string;
   currency?: { fallback_value: string; code: string; amount_1000: number };
   date_time?: { fallback_value: string };
@@ -293,12 +328,13 @@ async function sendTemplateMessage(
       ? [
           {
             type: "body",
-            parameters: params.map((p) => ({
-              type: p.type,
-              text: p.text,
-              currency: p.currency,
-              date_time: p.date_time,
-            })),
+            parameters: params.map((p) => {
+              const param: Record<string, unknown> = { type: p.type, text: p.text };
+              if (p.parameter_name) param.parameter_name = p.parameter_name;
+              if (p.currency) param.currency = p.currency;
+              if (p.date_time) param.date_time = p.date_time;
+              return param;
+            }),
           },
         ]
       : [];
