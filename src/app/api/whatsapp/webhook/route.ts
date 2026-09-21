@@ -2870,7 +2870,7 @@ export async function POST(request: NextRequest) {
                     if (retry.ok) {
                       await prisma.whatsAppMessage.update({
                         where: { id: row.id },
-                        data: { message: "[TPL] " + row.message },
+                        data: { message: "[TPL] " + row.message, status: "SENT" },
                       });
                     }
                   }
