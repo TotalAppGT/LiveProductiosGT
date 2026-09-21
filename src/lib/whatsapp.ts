@@ -228,7 +228,9 @@ export async function sendViaTemplate(
     .replace(/\n+/g, "  ")
     .replace(/ {5,}/g, "    ")
     .trim();
-  const chunks = splitMessage(clean, 1000);
+  // Meta suma el texto fijo de la plantilla + los parámetros: el total no puede
+  // pasar de 1024 (error 132005). Se deja margen amplio por trozo.
+  const chunks = splitMessage(clean, 900);
 
   let ok = false;
   let firstId: string | undefined;
