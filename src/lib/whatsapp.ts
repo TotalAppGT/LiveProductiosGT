@@ -204,8 +204,7 @@ async function sendMessage(
  */
 export async function sendViaTemplate(
   to: string,
-  message: string,
-  sistema: string = "Live Productions"
+  message: string
 ): Promise<{ ok: boolean; messageId?: string }> {
   const tplName =
     (await prisma.systemConfig.findUnique({ where: { key: "whatsapp_template_name" } }))?.value ||
@@ -238,10 +237,7 @@ export async function sendViaTemplate(
     const r = await sendTemplateMessage(
       to,
       tplName,
-      [
-        { type: "text", parameter_name: "sistema", text: sistema },
-        { type: "text", parameter_name: "mensaje", text: chunks[i] },
-      ],
+      [{ type: "text", text: chunks[i] }],
       tplLang
     ).catch(() => null);
     if (r) {
