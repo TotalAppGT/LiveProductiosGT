@@ -219,12 +219,14 @@ export async function sendViaTemplate(
     "es_MX";
 
   // Meta NO permite saltos de línea, tabs ni más de 4 espacios seguidos en los
-  // parámetros de una plantilla (error 132018). Se aplana a una sola línea.
+  // parámetros de una plantilla (error 132018). Se aplana a UNA línea legible:
+  // las secciones se separan con "  |  " y los items quedan con doble espacio.
   const clean = message
     .replace(/\r\n/g, "\n")
     .replace(/[\t\u00A0]/g, " ")
-    .replace(/\n+/g, " | ")
-    .replace(/ {2,}/g, " ")
+    .replace(/\n\s*\n+/g, "  |  ")
+    .replace(/\n+/g, "  ")
+    .replace(/ {5,}/g, "    ")
     .trim();
   const chunks = splitMessage(clean, 1000);
 
