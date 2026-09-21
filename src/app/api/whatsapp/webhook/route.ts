@@ -2855,6 +2855,10 @@ export async function POST(request: NextRequest) {
                 .updateMany({ where: { externalId: st.id }, data: { status: mapped } })
                 .catch(() => {});
 
+              if (st.status === "failed") {
+                console.error(`[WhatsApp] estado FAILED ${st.id}:`, JSON.stringify(st.errors || st));
+              }
+
               // Meta acepta el texto libre (HTTP 200) y luego lo marca FAILED si
               // el destinatario está fuera de la ventana de 24h. En ese caso se
               // reintenta por la PLANTILLA aprobada, que sí entrega siempre.
