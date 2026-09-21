@@ -218,7 +218,14 @@ export async function sendViaTemplate(
     process.env.WHATSAPP_TEMPLATE_LANG ||
     "es_MX";
 
-  const clean = message.replace(/\t/g, " ").replace(/ {4,}/g, "   ").trim();
+  // Meta NO permite saltos de línea, tabs ni más de 4 espacios seguidos en los
+  // parámetros de una plantilla (error 132018). Se aplana a una sola línea.
+  const clean = message
+    .replace(/\r\n/g, "\n")
+    .replace(/[\t\u00A0]/g, " ")
+    .replace(/\n+/g, " | ")
+    .replace(/ {2,}/g, " ")
+    .trim();
   const chunks = splitMessage(clean, 1000);
 
   let ok = false;
