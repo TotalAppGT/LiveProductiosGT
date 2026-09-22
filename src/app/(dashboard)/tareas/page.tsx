@@ -83,6 +83,7 @@ function gtWeekday(d: Date): number {
 // - FIJAS SEMANAL: su día (lun-sáb persisten hasta el sábado; domingo solo el domingo).
 // - DINÁMICAS: solo en su fecha de vencimiento.
 function taskOccursOnDate(task: Task, date: Date): boolean {
+  if (gtWeekday(date) === 0) return false; // domingo: no hay tareas (semana lunes-sábado)
   if (task.type === "FIJA") {
     if (task.frequency === "SEMANAL" && task.dayOfWeek) {
       // Si tiene fecha concreta (la ocurrencia regenerada al completar), no aplica

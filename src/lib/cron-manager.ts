@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendProactiveMessage } from "@/lib/whatsapp";
 import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireTaskReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
-import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate, ACCESS_ACTIONS } from "@/lib/task-utils";
+import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate, ACCESS_ACTIONS, guatemalaDate } from "@/lib/task-utils";
 
 interface CronJob {
   name: string;
@@ -14,6 +14,8 @@ interface CronJob {
   skipOnSunday?: boolean;
   // Días de la semana (0=domingo ... 6=sábado) en los que NO corre este job.
   skipWeekdays?: number[];
+  // Si es true, el job corre SOLO los domingos (ej: cierre semanal).
+  onlyOnSunday?: boolean;
   // Si el proceso estuvo caído/reiniciado, se permite ejecutar el job (una sola
   // vez) hasta esta hora de Guatemala inclusive. Ej: briefing 7 → 11 = corre
   // tarde si a las 7 no estaba arriba. Evita "días sin mensajes".
@@ -690,7 +692,35 @@ async function dailyCarryOver() {
   }
 }
 
+// Domingo 5:00 PM: cierre semanal. Resume por persona lo completado de la
+// semana (lunes→sábado) y lo pendiente/vencido; las pendientes pasan como
+// prioridad a la próxima semana.
+async function weeklyClose() {
+  console.log("[Cron] Ejecutando cierre semanal (domingo 5:00 PM)");
+  const w = getGuatemalaWallClock();
+  const mondayDelta = w.weekday === 0 ? 6 : w.weekday - 1;
+  const monday = guatemalaDate(w.year, w.month, w.day - mondayDelta);
+  const users = await getActiveUsersWithWhatsApp();
+  for (const user of users) {
+    try {
+      const [completed, pending, overdue] = await Promise.all([
+        prisma.task.count({ where: { assignedToId: user.id, status: "COMPLETADA", updatedAt: { gte: monday } } }),
+        prisma.task.count({ where: { assignedToId: user.id, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } } }),
+        prisma.task.count({ where: { assignedToId: user.id, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] }, dueDate: { lt: gtStartOfToday() } } }),
+      ]);
+      const to = user.whatsappNumber || user.phone;
+      if (!to) continue;
+      const msg = `📅 *Cierre Semanal — domingo 5:00 PM*\n\nHola ${user.name.split(" ")[0]}, cerramos la semana.\n\n✅ *Completadas:* ${completed}\n📋 *Pendientes:* ${pending}${overdue > 0 ? `\n⚠️ *Vencidas:* ${overdue}` : ""}\n\nTus pendientes y vencidas pasan como *prioridad* a la próxima semana.\n\n¡Buen trabajo! 💪`;
+      await sendProactiveMessage(to, msg).catch(() => {});
+      await logActivity(user.id, "CRON_WEEKLY_CLOSE", `Cierre semanal enviado a ${user.name}`);
+    } catch (error) {
+      console.error(`[Cron] Error cierre semanal para ${user.name}:`, error);
+    }
+  }
+}
+
 const jobs: CronJob[] = [
+  { name: "weeklyClose", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: weeklyClose, onlyOnSunday: true },
   { name: "morningBriefing", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing, skipOnSunday: true, catchUpUntilHour: 11 },
   { name: "dailyCarryOver", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: dailyCarryOver, skipOnSunday: true, catchUpUntilHour: 12 },
   { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck, skipOnSunday: true, catchUpUntilHour: 15 },
@@ -753,6 +783,9 @@ async function runJobIfScheduled(job: CronJob) {
   if (state.lastRun && Date.now() - state.lastRun.getTime() < 10 * 60 * 1000) return;
 
   const w = getGuatemalaWallClock();
+
+  // Jobs exclusivos del domingo (ej: cierre semanal): no corren otros días.
+  if (job.onlyOnSunday && w.weekday !== 0) return;
 
   // DOMINGO: los mensajes automáticos están desactivados (solo corren los
   // recordatorios/alertas/mensajes explícitos que pidió el usuario).

@@ -126,6 +126,8 @@ export function isTaskDueOnDate(
   gtDate: Date
 ): boolean {
   const w = getGuatemalaWallClock(gtDate);
+  // Domingo: no hay tareas para nadie (la semana es lunes a sábado).
+  if (w.weekday === 0) return false;
   const dayStart = guatemalaDate(w.year, w.month, w.day);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
 
