@@ -760,12 +760,28 @@ export default function TareasPage() {
     .filter((t) => !dayFilter || taskDayLabel(t) === dayFilter || (isDailyFixed(t) && dayFilter !== "Sin fecha"))
     .filter(taskInViewWeek);
 
+  // Días (etiquetas) en que aparece una tarea dentro de la semana visible.
+  // Una FIJA DIARIA con fecha (la ocurrencia regenerada al completarla) aparece
+  // DESDE ese día en adelante, no antes → así se quita del día en que se completó.
+  const toKeyGT = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
+  const dayDateByLabel: Record<string, Date> = {};
+  dayGroupOrder.forEach((label, i) => { dayDateByLabel[label] = new Date(viewMonday.getTime() + i * 86400000); });
+  function taskDaysInView(t: Task): string[] {
+    if (!isDailyFixed(t)) return [taskDayLabel(t)];
+    if (!t.dueDate) return weekFromToday;
+    const dd = new Date(t.dueDate);
+    if (isNaN(dd.getTime())) return weekFromToday;
+    const dueKey = toKeyGT(dd);
+    const filtered = weekFromToday.filter((label) => dayDateByLabel[label] && toKeyGT(dayDateByLabel[label]) >= dueKey);
+    return filtered.length > 0 ? filtered : weekFromToday;
+  }
+
   // Agrupación por DÍA (Lunes, Martes...) como en el chat
   function buildDayGroups(): SheetSection[] {
     const byDay = new Map<string, Task[]>();
     viewTasks.forEach((t) => {
       // Las fijas diarias aparecen en TODOS los días de la semana visible.
-      const days = isDailyFixed(t) ? weekFromToday : [taskDayLabel(t)];
+      const days = taskDaysInView(t);
       for (const dayLabel of days) {
         if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
         byDay.get(dayLabel)!.push(t);
@@ -809,7 +825,7 @@ export default function TareasPage() {
     const byDay = new Map<string, Task[]>();
     viewTasks.forEach((t) => {
       // Las fijas diarias aparecen en TODOS los días de la semana visible.
-      const days = isDailyFixed(t) ? weekFromToday : [taskDayLabel(t)];
+      const days = taskDaysInView(t);
       for (const day of days) {
         if (!byDay.has(day)) byDay.set(day, []);
         byDay.get(day)!.push(t);
