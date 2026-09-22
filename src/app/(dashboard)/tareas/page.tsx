@@ -91,7 +91,12 @@ function taskOccursOnDate(task: Task, date: Date): boolean {
       if (target === 0) return wd === 0;
       return wd !== 0 && wd >= target;
     }
-    return true; // DIARIA o sin día
+    // DIARIA: si tiene fecha futura (la ocurrencia regenerada al completarla hoy),
+    // no aplica hasta ese día → desaparece hoy y vuelve mañana.
+    if (task.frequency === "DIARIA" && task.dueDate) {
+      return gtDateKey(new Date(task.dueDate)) <= gtDateKey(date);
+    }
+    return true; // DIARIA sin fecha o sin día
   }
   if (task.dueDate) return gtDateKey(new Date(task.dueDate)) === gtDateKey(date);
   return false;

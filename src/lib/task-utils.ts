@@ -135,7 +135,15 @@ export function isTaskDueOnDate(
   }
 
   if (task.type === "FIJA") {
-    if (task.frequency === "DIARIA") return true;
+    if (task.frequency === "DIARIA") {
+      // Diaria: aplica todos los días, EXCEPTO si tiene una fecha futura (la
+      // ocurrencia regenerada al completarla hoy) → debe volver mañana.
+      if (task.dueDate) {
+        const dd = new Date(task.dueDate);
+        if (!isNaN(dd.getTime()) && dd > dayEnd) return false;
+      }
+      return true;
+    }
     if (task.frequency === "SEMANAL" && task.dayOfWeek) {
       const target = WEEKDAY_MAP[String(task.dayOfWeek).toUpperCase()];
       if (target !== undefined) {
@@ -164,8 +172,12 @@ export function nextFixedDueDate(
     if (task.frequency === "SEMANAL" && task.dayOfWeek) {
       return nextWeeklyDueDate(task);
     }
-    if (task.frequency === "DIARIA" && !task.dueDate) {
-      return null;
+    if (task.frequency === "DIARIA") {
+      // La próxima ocurrencia es MAÑANA (no hoy), conservando la hora original.
+      const nowW = getGuatemalaWallClock();
+      const oldW = task.dueDate ? getGuatemalaWallClock(new Date(task.dueDate)) : null;
+      const day = guatemalaDate(nowW.year, nowW.month, nowW.day + 1);
+      return applyGuatemalaTime(day, oldW ? oldW.hour : 12, oldW ? oldW.minute : 0);
     }
   }
   return nextRecurrenceDueDate(task.dueDate ? new Date(task.dueDate) : new Date(), task.frequency ?? null);
