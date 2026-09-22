@@ -85,6 +85,9 @@ function gtWeekday(d: Date): number {
 function taskOccursOnDate(task: Task, date: Date): boolean {
   if (task.type === "FIJA") {
     if (task.frequency === "SEMANAL" && task.dayOfWeek) {
+      // Si tiene fecha concreta (la ocurrencia regenerada al completar), no aplica
+      // antes de esa fecha → desaparece hasta la próxima semana.
+      if (task.dueDate && gtDateKey(new Date(task.dueDate)) > gtDateKey(date)) return false;
       const target = GT_DOW_BY_NAME[String(task.dayOfWeek).toUpperCase()];
       const wd = gtWeekday(date);
       if (target === undefined) return true;

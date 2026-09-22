@@ -244,9 +244,9 @@ async function morningBriefing() {
       const buyN = countIn(purchasesLines);
       const cobN = countIn(cobrosLines);
       const resumenParts: string[] = [];
+      if (remN > 0) resumenParts.push(`${remN} recordatorio${remN > 1 ? "s" : ""} hoy`);
       if (todayCount > 0) resumenParts.push(`${todayCount} tarea${todayCount === 1 ? "" : "s"} para hoy`);
       if (stillCount > 0) resumenParts.push(`${stillCount} vencida${stillCount > 1 ? "s" : ""}`);
-      if (remN > 0) resumenParts.push(`${remN} recordatorio${remN > 1 ? "s" : ""} hoy`);
       if (buyN > 0) resumenParts.push(`${buyN} compra${buyN > 1 ? "s" : ""} hoy`);
       if (cobN > 0) resumenParts.push(`${cobN} cobro${cobN > 1 ? "s" : ""} pendiente`);
       if (events.length > 0) resumenParts.push(`${events.length} evento${events.length > 1 ? "s" : ""}`);
@@ -257,8 +257,9 @@ async function morningBriefing() {
 
       let fullMessage = `*${intro}*`;
       if (resumen) fullMessage += `\n\n${resumen}`;
-      if (taskLines) fullMessage += `\n\n${taskLines}`;
+      // Prioridad: primero los RECORDATORIOS, luego las tareas del día.
       if (remindersLines) fullMessage += `\n\n${remindersLines}`;
+      if (taskLines) fullMessage += `\n\n${taskLines}`;
       if (purchasesLines) fullMessage += `\n\n${purchasesLines}`;
       if (cobrosLines) fullMessage += `\n\n${cobrosLines}`;
       if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;

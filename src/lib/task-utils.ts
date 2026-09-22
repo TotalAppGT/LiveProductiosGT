@@ -153,6 +153,10 @@ export function isTaskDueOnDate(
           if (target === 0) return w.weekday === 0;
           return w.weekday !== 0 && w.weekday >= target;
         }
+        // Con fecha concreta (la ocurrencia regenerada al completar): aplica desde esa
+        // fecha en adelante. Si es futura (próxima semana), aún no aparece.
+        const dd = new Date(task.dueDate);
+        if (!isNaN(dd.getTime())) return dd <= dayEnd;
         return target === w.weekday;
       }
     }
