@@ -740,14 +740,18 @@ export default function TareasPage() {
 
   // Una tarea pertenece a la semana visible si su fecha está dentro, o es fija recurrente
   const taskInViewWeek = (t: Task): boolean => {
-    // Las FIJAS (diarias/semanales) SIEMPRE se muestran en su día de la semana,
-    // aunque tengan guardada una fecha antigua. Antes se descartaban y el
-    // listado quedaba vacío porque casi todas las tareas son fijas.
-    if (t.type === "FIJA") return true;
+    const toKey = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
+    if (t.type === "FIJA") {
+      // Si la fija tiene una fecha futura (la ocurrencia regenerada al completarla),
+      // no aparece hasta que esa fecha entre en la semana visible.
+      if (t.dueDate) {
+        const dd = new Date(t.dueDate);
+        if (!isNaN(dd.getTime()) && toKey(dd) > toKey(viewSunday)) return false;
+      }
+      return true;
+    }
     if (t.dueDate) {
       const dd = new Date(t.dueDate);
-      // comparación de fecha (YYYY-MM-DD)
-      const toKey = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
       return toKey(dd) >= toKey(viewMonday) && toKey(dd) <= toKey(viewSunday);
     }
     return false;
