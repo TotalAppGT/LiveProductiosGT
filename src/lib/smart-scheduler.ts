@@ -1013,8 +1013,8 @@ export async function sendBihourlyReminders(): Promise<{
           message += `⚠️ Tienes ${overdueTasks.length} vencida${overdueTasks.length > 1 ? "s" : ""} que atender primero. `;
         }
         message += `${todayTasks.length} tarea${todayTasks.length === 1 ? "" : "s"} para hoy.`;
-        if (remindersBlock) message += remindersBlock;
         if (digest) message += digest;
+        if (remindersBlock) message += remindersBlock;
         if (purchasesBlock) message += purchasesBlock;
         if (cobrosBlock) message += cobrosBlock;
       } else {
