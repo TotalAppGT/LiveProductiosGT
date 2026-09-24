@@ -338,6 +338,7 @@ export default function CobrosPage() {
       )}
 
       <CobroFormModal
+        key={editingCobro?.id ?? (showAddModal ? "new" : "closed")}
         isOpen={showAddModal || !!editingCobro}
         onClose={() => {
           setShowAddModal(false);
