@@ -543,11 +543,15 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
   const w = getGuatemalaWallClock();
   const today = gtStartOfToday();
 
+  const gtKey = (d: Date | string | null) => (d ? new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }) : "");
+  const todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
   const tasks = (await prisma.task.findMany({
     where: { assignedToId: userId, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
     orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
     take: 1000,
-  })).filter((t) => !t.title.startsWith("🔔")); // recordatorios no son tareas
+  }))
+    .filter((t) => !t.title.startsWith("🔔")) // recordatorios no son tareas
+    .filter((t) => !(t.type === "FIJA" && t.dueDate && gtKey(t.dueDate) > todayKey)); // excluir ocurrencias futuras de fijas
 
   if (tasks.length === 0) {
     return `👋 ¡Hola! Soy *LUNA* 🌙\n\nNo tienes tareas pendientes. ¡Todo al día! 🎉\n\n_Podés crear una: *crea tarea [qué] [día] [hora]*\nO ver la próxima semana: *tareas semana 2*_`;

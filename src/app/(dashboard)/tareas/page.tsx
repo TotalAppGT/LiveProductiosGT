@@ -607,6 +607,10 @@ export default function TareasPage() {
   }
 
   const filteredTasks = tasks.filter((task) => {
+    // Excluir las ocurrencias regeneradas de tareas FIJAS con fecha FUTURA
+    // (se completaron hoy; vuelven en su próxima fecha). Aplica a TODAS las vistas
+    // (lista, kanban y hoja) para que no reaparezcan el mismo día.
+    if (task.type === "FIJA" && task.dueDate && gtDateKey(new Date(task.dueDate)) > gtDateKey(new Date())) return false;
     // "Hoy": tareas de hoy (Guatemala) + fijas diarias + fijas del día.
     if (activeTab === "HOY") {
       return taskOccursOnDate(task, new Date());
