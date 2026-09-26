@@ -644,24 +644,22 @@ async function endOfDayTaskCheck() {
     const startOfDay = gtStartOfToday();
     console.log(`[Cron] Fin de día: ${endResult.usersWithPending} usuarios con pendientes, ${endResult.tasksRescheduled} tareas reprogramadas`);
 
-    const [completedToday, pendingCount] = await Promise.all([
-      prisma.task.count({ where: { status: "COMPLETADA", updatedAt: { gte: startOfDay } } }),
-      prisma.task.count({ where: { status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } } }),
-    ]);
-
-    const msg = `🌙 *Cierre de Jornada - 5:00 PM*
-
-✅ *Completadas hoy:* ${completedToday}
-🔄 *Pendientes de hoy pasadas a mañana:* ${endResult.tasksRescheduled}
-📋 *Pendientes en general (seguimiento):* ${pendingCount}
-
-Las tareas de hoy que no se completaron fueron reprogramadas automáticamente para mañana.`;
-
-
-    const admins = await getAdminUsers();
-    for (const admin of admins) {
-      const to = admin.whatsappNumber || admin.phone;
-      if (to) await sendMessage(to, msg).catch(() => {});
+    // Cierre de jornada a TODOS los usuarios activos (por persona, con plantilla UTILITY)
+    const eodUsers = await getActiveUsersWithWhatsApp();
+    for (const eodUser of eodUsers) {
+      try {
+        const [uCompleted, uPending] = await Promise.all([
+          prisma.task.count({ where: { assignedToId: eodUser.id, status: "COMPLETADA", updatedAt: { gte: startOfDay } } }),
+          prisma.task.count({ where: { assignedToId: eodUser.id, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } } }),
+        ]);
+        const eodTo = eodUser.whatsappNumber || eodUser.phone;
+        if (!eodTo) continue;
+        const uMsg = `🌙 *Cierre de Jornada — 5:00 PM*\n\nHola ${eodUser.name.split(" ")[0]}, cerramos el día.\n\n✅ *Completadas hoy:* ${uCompleted}\n📋 *Pendientes:* ${uPending}\n\n${uPending > 0 ? "Lo pendiente pasa como prioridad a mañana. " : ""}¡Buen trabajo! 💪`;
+        await sendProactiveMessage(eodTo, uMsg).catch(() => {});
+        await logActivity(eodUser.id, "CRON_END_OF_DAY_MSG", `Cierre de jornada enviado a ${eodUser.name}`);
+      } catch (error) {
+        console.error(`[Cron] Error cierre de jornada para ${eodUser.name}:`, error);
+      }
     }
 
     await logActivity("system", "CRON_END_OF_DAY", `${endResult.tasksRescheduled} tareas reprogramadas al final del día`);

@@ -697,7 +697,7 @@ export async function sendEndOfDayAlerts(): Promise<{
     for (const [, entry] of byUser) {
       const to = entry.user.whatsappNumber || entry.user.phone;
       if (to) {
-        await sendMessage(
+        await sendProactiveMessage(
           to,
           `🌙 *Cierre de Jornada*\n\nAún tienes ${entry.tasks.length} tareas pendientes para hoy. Asegúrate de completarlas o posponerlas con razón.`
         ).catch(() => {});
