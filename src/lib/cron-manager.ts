@@ -655,8 +655,11 @@ async function endOfDayTaskCheck() {
         const eodTo = eodUser.whatsappNumber || eodUser.phone;
         if (!eodTo) continue;
         const uMsg = `🌙 *Cierre de Jornada — 5:00 PM*\n\nHola ${eodUser.name.split(" ")[0]}, cerramos el día.\n\n✅ *Completadas hoy:* ${uCompleted}\n📋 *Pendientes:* ${uPending}\n\n${uPending > 0 ? "Lo pendiente pasa como prioridad a mañana. " : ""}¡Buen trabajo! 💪`;
-        await sendProactiveMessage(eodTo, uMsg).catch(() => {});
-        await logActivity(eodUser.id, "CRON_END_OF_DAY_MSG", `Cierre de jornada enviado a ${eodUser.name}`);
+        const eodRes = await sendProactiveMessage(eodTo, uMsg).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+        await prisma.whatsAppMessage.create({
+          data: { externalId: eodRes.messageId, userId: eodUser.id, toNumber: eodTo, message: `[CIERRE] ${uMsg}`, type: "NOTIFICATION", status: eodRes.ok ? "SENT" : "FAILED" },
+        }).catch(() => {});
+        await logActivity(eodUser.id, "CRON_END_OF_DAY_MSG", `Cierre de jornada enviado a ${eodUser.name} (${eodRes.via})`);
       } catch (error) {
         console.error(`[Cron] Error cierre de jornada para ${eodUser.name}:`, error);
       }
@@ -709,8 +712,11 @@ async function weeklyClose() {
       const to = user.whatsappNumber || user.phone;
       if (!to) continue;
       const msg = `📅 *Cierre Semanal — domingo 5:00 PM*\n\nHola ${user.name.split(" ")[0]}, cerramos la semana.\n\n✅ *Completadas:* ${completed}\n📋 *Pendientes:* ${pending}${overdue > 0 ? `\n⚠️ *Vencidas:* ${overdue}` : ""}\n\nTus pendientes y vencidas pasan como *prioridad* a la próxima semana.\n\n¡Buen trabajo! 💪`;
-      await sendProactiveMessage(to, msg).catch(() => {});
-      await logActivity(user.id, "CRON_WEEKLY_CLOSE", `Cierre semanal enviado a ${user.name}`);
+      const wcRes = await sendProactiveMessage(to, msg).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+      await prisma.whatsAppMessage.create({
+        data: { externalId: wcRes.messageId, userId: user.id, toNumber: to, message: `[CIERRE SEMANAL] ${msg}`, type: "NOTIFICATION", status: wcRes.ok ? "SENT" : "FAILED" },
+      }).catch(() => {});
+      await logActivity(user.id, "CRON_WEEKLY_CLOSE", `Cierre semanal enviado a ${user.name} (${wcRes.via})`);
     } catch (error) {
       console.error(`[Cron] Error cierre semanal para ${user.name}:`, error);
     }
