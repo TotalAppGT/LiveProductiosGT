@@ -147,7 +147,7 @@ async function morningBriefing() {
         take: 6,
       });
 
-      const { orderTasksByDayHour, groupTasksByDayText } = await import("@/lib/task-view");
+      const { orderTasksByDayHour, groupTasksByDayText, formatTaskLine } = await import("@/lib/task-view");
 
       // Mensaje diario = SOLO lo de HOY: primero pendientes/vencidas, luego tareas de hoy.
       // La semana y próximas semanas se ven con `tareas`.
@@ -159,7 +159,9 @@ async function morningBriefing() {
       }
       if (todayTasks.length > 0) {
         const todayLabel = startOfToday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
-        taskLines += `📌 *HOY — ${todayLabel}*\n${groupTasksByDayText(orderTasksByDayHour(todayTasks))}\n\n`;
+        // Listado plano: incluye TODAS las tareas de hoy (también las fijas sin fecha).
+        const orderedToday = orderTasksByDayHour(todayTasks);
+        taskLines += `📌 *HOY — ${todayLabel} (${orderedToday.length})*\n${orderedToday.map((t, i) => formatTaskLine(t, i + 1)).join("\n")}\n\n`;
       }
       taskLines = taskLines.trim();
 
