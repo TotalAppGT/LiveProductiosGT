@@ -106,6 +106,29 @@ async function getAdminUsers() {
   });
 }
 
+// Envía un mensaje largo troceándolo (texto libre si está en ventana 24h, o
+// plantilla UTILITY fuera). Así NUNCA se recorta contenido (tareas/recordatorios).
+async function sendProactiveChunkedFull(to: string, message: string): Promise<{ count: number; messageId?: string; via: string }> {
+  const chunks: string[] = [];
+  let rem = message;
+  while (rem.length > 3900) {
+    let cut = rem.lastIndexOf("\n", 3900);
+    if (cut < 1950) cut = rem.lastIndexOf(" ", 3900);
+    if (cut <= 0) cut = 3900;
+    chunks.push(rem.slice(0, cut));
+    rem = rem.slice(cut).replace(/^\n+/, "");
+  }
+  chunks.push(rem);
+  let firstId: string | undefined;
+  let via = "none";
+  for (let i = 0; i < chunks.length; i++) {
+    const r = await sendProactiveMessage(to, chunks[i]).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+    if (!firstId && r.messageId) { firstId = r.messageId; via = r.via; }
+    if (i < chunks.length - 1) await new Promise((res) => setTimeout(res, 500));
+  }
+  return { count: chunks.length, messageId: firstId, via };
+}
+
 async function morningBriefing() {
   console.log("[Cron] Ejecutando morning briefing (7:00 AM)");
 
@@ -274,21 +297,14 @@ async function morningBriefing() {
         fullMessage += `\n\n_Escribí *tareas* o *menu* para ver más._`;
       }
 
-      // WhatsApp limita a 4096 caracteres: si el mensaje es muy largo, se recorta.
-      if (fullMessage.length > 3950) {
-        fullMessage = fullMessage.slice(0, 3950) + "\n… (recortado — escribí *tareas* para ver todo)";
-      }
-
       const to = user.whatsappNumber || user.phone;
       if (to) {
-        const res = await sendProactiveMessage(to, fullMessage).catch((err) => {
-          console.error(`[Cron] excepción enviando briefing a ${user.name}:`, err);
-          return { ok: false, via: "none" as const, messageId: undefined };
-        });
-        const ok = res.ok;
+        // Enviar troceado para no recortar contenido (tareas/recordatorios).
+        const sent = await sendProactiveChunkedFull(to, fullMessage);
+        const ok = !!sent.messageId;
         const record = prisma.whatsAppMessage.create({
           data: {
-            externalId: res.messageId,
+            externalId: sent.messageId,
             userId: user.id,
             toNumber: to,
             message: `[BRIEFING] ${fullMessage}`,
@@ -299,7 +315,7 @@ async function morningBriefing() {
         const act = logActivity(
           user.id,
           "CRON_MORNING_BRIEFING",
-          ok ? `Briefing matutino enviado a ${user.name} (${to}) vía ${res.via}` : `FALLO envío briefing a ${user.name} (${to})`
+          ok ? `Briefing matutino enviado a ${user.name} (${to}) en ${sent.count} mensaje(s) vía ${sent.via}` : `FALLO envío briefing a ${user.name} (${to})`
         );
         await Promise.allSettled([record, act]);
         if (!ok) console.error(`[Cron] Briefing NO enviado a ${user.name} (${to})`);
