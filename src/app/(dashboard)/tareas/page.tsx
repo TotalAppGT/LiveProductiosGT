@@ -697,6 +697,8 @@ export default function TareasPage() {
     Viernes: "VIERNES", "Sábado": "SABADO", Domingo: "DOMINGO",
   };
 
+  const DAYNUM: Record<string, number> = { DOMINGO: 0, LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6 };
+
   const DOW_TO_LABEL: Record<string, string> = {
     LUNES: "Lunes", MARTES: "Martes", MIERCOLES: "Miércoles", JUEVES: "Jueves",
     VIERNES: "Viernes", SABADO: "Sábado", DOMINGO: "Domingo",
@@ -772,13 +774,28 @@ export default function TareasPage() {
   const dayDateByLabel: Record<string, Date> = {};
   dayGroupOrder.forEach((label, i) => { dayDateByLabel[label] = new Date(viewMonday.getTime() + i * 86400000); });
   function taskDaysInView(t: Task): string[] {
-    if (!isDailyFixed(t)) return [taskDayLabel(t)];
-    if (!t.dueDate) return weekFromToday;
-    const dd = new Date(t.dueDate);
-    if (isNaN(dd.getTime())) return weekFromToday;
-    const dueKey = toKeyGT(dd);
-    const filtered = weekFromToday.filter((label) => dayDateByLabel[label] && toKeyGT(dayDateByLabel[label]) >= dueKey);
-    return filtered.length > 0 ? filtered : weekFromToday;
+    if (isDailyFixed(t)) {
+      if (!t.dueDate) return weekFromToday;
+      const dd = new Date(t.dueDate);
+      if (isNaN(dd.getTime())) return weekFromToday;
+      const dueKey = toKeyGT(dd);
+      const filtered = weekFromToday.filter((label) => dayDateByLabel[label] && toKeyGT(dayDateByLabel[label]) >= dueKey);
+      return filtered.length > 0 ? filtered : weekFromToday;
+    }
+    // FIJA SEMANAL: aparece su día y PERSISTE día a día (lun→sáb) hasta completarse.
+    // Si no se completó, se sigue mostrando los días siguientes (prioridad).
+    if (t.type === "FIJA" && t.frequency === "SEMANAL" && t.dayOfWeek) {
+      const target = DAYNUM[String(t.dayOfWeek).toUpperCase()];
+      if (target !== undefined) {
+        if (target === 0) return weekFromToday.filter((l) => dayToDayOfWeek[l] === "DOMINGO");
+        const days = weekFromToday.filter((l) => {
+          const dn = DAYNUM[dayToDayOfWeek[l]];
+          return dn !== undefined && dn !== 0 && dn >= target;
+        });
+        return days.length > 0 ? days : [taskDayLabel(t)];
+      }
+    }
+    return [taskDayLabel(t)];
   }
 
   // Agrupación por DÍA (Lunes, Martes...) como en el chat

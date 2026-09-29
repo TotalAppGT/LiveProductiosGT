@@ -574,8 +574,18 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
   const monday = new Date(today.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
 
   // Vencidas / prioridad (con fecha anterior a hoy)
-  const overdue = tasks.filter((t) => t.dueDate && new Date(t.dueDate) < today);
-  const rest = tasks.filter((t) => !(t.dueDate && new Date(t.dueDate) < today));
+  // Vencidas / prioridad: con fecha anterior a hoy, o fija semanal de un día
+  // anterior que no se completó (persiste día a día hasta completarse).
+  const isPriorFija = (t: any) => {
+    if (t.type === "FIJA" && t.frequency === "SEMANAL" && t.dayOfWeek && !t.dueDate) {
+      const target = WEEK[String(t.dayOfWeek).toUpperCase()];
+      return target !== undefined && target !== 0 && w.weekday !== 0 && w.weekday > target;
+    }
+    return false;
+  };
+  const isOverdueTask = (t: any) => (t.dueDate && new Date(t.dueDate) < today) || isPriorFija(t);
+  const overdue = tasks.filter(isOverdueTask);
+  const rest = tasks.filter((t) => !isOverdueTask(t));
 
   const byDay: Record<number, any[]> = {};
   const noDay: any[] = [];
