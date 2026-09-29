@@ -50,6 +50,10 @@ const STATUS_TABS = [
 const CATEGORY_OPTIONS = [
   { value: "", label: "Todas las categorías" },
   { value: "PRE_EVENTO", label: "🎪 Pre Evento" },
+  { value: "PRE_EVENTO_ESTA_SEMANA", label: "🎪 Pre Evento · Esta semana" },
+  { value: "PRE_EVENTO_PROXIMA_SEMANA", label: "🎪 Pre Evento · Próxima semana" },
+  { value: "PRE_EVENTO_3RA_SEMANA", label: "🎪 Pre Evento · 3ra semana" },
+  { value: "EVENTO", label: "🎬 Eventos" },
   { value: "POST_EVENTO", label: "🏁 Post Evento" },
   { value: "COTIZACION", label: "Cotización" },
   { value: "COBRO", label: "Cobro" },
@@ -61,6 +65,10 @@ const CATEGORY_OPTIONS = [
   { value: "ADMINISTRACION", label: "Administración" },
   { value: "OTRO", label: "📌 Actividades diarias" },
 ];
+
+// Categorías que pertenecen al grupo "Pre Evento" (incluye subcategorías).
+const PRE_EVENTO_CATS = ["PRE_EVENTO", "PRE_EVENTO_ESTA_SEMANA", "PRE_EVENTO_PROXIMA_SEMANA", "PRE_EVENTO_3RA_SEMANA"];
+const isPreEventoCat = (c?: string | null) => !!c && PRE_EVENTO_CATS.includes(c);
 
 const GT_DOW_BY_NAME: Record<string, number> = {
   DOMINGO: 0, LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6,
@@ -833,12 +841,14 @@ export default function TareasPage() {
   }
   // Orden de fase
   const phasePriority = (t: Task) => {
-    if (t.category === "PRE_EVENTO") return 0;
-    if (t.category === "POST_EVENTO") return 1;
-    return 2;
+    if (isPreEventoCat(t.category)) return 0;
+    if (t.category === "EVENTO") return 1;
+    if (t.category === "POST_EVENTO") return 2;
+    return 3;
   };
   const phaseDefs = [
     { key: "PRE_EVENTO", label: "🎪 Pre Evento", bg: "bg-blue-500" },
+    { key: "EVENTO", label: "🎬 Eventos", bg: "bg-indigo-500" },
     { key: "POST_EVENTO", label: "🏁 Post Evento", bg: "bg-emerald-500" },
     { key: "OTRO", label: "📌 Actividades diarias", bg: "bg-gray-500" },
   ];
@@ -872,7 +882,9 @@ export default function TareasPage() {
       // Para cada fase (Pre, Evento, Post, Otras) en este día
       for (const phase of phaseDefs) {
         const phaseTasks = dayTasks.filter((t) =>
-          phase.key === "OTRO" ? !["PRE_EVENTO", "POST_EVENTO"].includes(t.category) : t.category === phase.key
+          phase.key === "PRE_EVENTO" ? isPreEventoCat(t.category)
+          : phase.key === "OTRO" ? !isPreEventoCat(t.category) && !["POST_EVENTO", "EVENTO"].includes(t.category)
+          : t.category === phase.key
         );
         if (phaseTasks.length === 0) continue;
         sections.push({ key: `${day}-${phase.key}`, label: phase.label, bg: phase.bg, level: 1, tasks: [], insertCategory: phase.key === "OTRO" ? "OTRO" : phase.key, insertDayOfWeek: dow });
@@ -1371,6 +1383,10 @@ export default function TareasPage() {
                         className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 text-xs text-gray-900 dark:text-white"
                       >
                         <option value="PRE_EVENTO">🎪 Pre Evento</option>
+<option value="PRE_EVENTO_ESTA_SEMANA">🎪 Pre Evento · Esta semana</option>
+<option value="PRE_EVENTO_PROXIMA_SEMANA">🎪 Pre Evento · Próxima semana</option>
+<option value="PRE_EVENTO_3RA_SEMANA">🎪 Pre Evento · 3ra semana</option>
+<option value="EVENTO">🎬 Eventos</option>
                                                 <option value="POST_EVENTO">🏁 Post Evento</option>
                         <option value="COTIZACION">Cotización</option>
                         <option value="INVENTARIO">Inventario</option>
@@ -2202,6 +2218,10 @@ function CreateTaskModal({
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="PRE_EVENTO">🎪 Pre Evento</option>
+<option value="PRE_EVENTO_ESTA_SEMANA">🎪 Pre Evento · Esta semana</option>
+<option value="PRE_EVENTO_PROXIMA_SEMANA">🎪 Pre Evento · Próxima semana</option>
+<option value="PRE_EVENTO_3RA_SEMANA">🎪 Pre Evento · 3ra semana</option>
+<option value="EVENTO">🎬 Eventos</option>
                         <option value="POST_EVENTO">🏁 Post Evento</option>
             <option value="COTIZACION">Cotización</option>
             <option value="COBRO">Cobro</option>
@@ -2465,6 +2485,10 @@ function EditTaskModal({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoría</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
               <option value="PRE_EVENTO">🎪 Pre Evento</option>
+<option value="PRE_EVENTO_ESTA_SEMANA">🎪 Pre Evento · Esta semana</option>
+<option value="PRE_EVENTO_PROXIMA_SEMANA">🎪 Pre Evento · Próxima semana</option>
+<option value="PRE_EVENTO_3RA_SEMANA">🎪 Pre Evento · 3ra semana</option>
+<option value="EVENTO">🎬 Eventos</option>
                             <option value="POST_EVENTO">🏁 Post Evento</option>
               <option value="COTIZACION">Cotización</option>
               <option value="COBRO">Cobro</option>
