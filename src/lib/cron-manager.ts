@@ -309,12 +309,14 @@ async function morningBriefing() {
 
       const to = user.whatsappNumber || user.phone;
       if (to) {
-        // Enviar troceado para no recortar contenido (tareas/recordatorios).
-        const sent = await sendProactiveChunkedFull(to, fullMessage);
-        const ok = !!sent.messageId;
+        // UN solo mensaje ordenado (los automáticos de LUNA son 1 mensaje).
+        let msgOut = fullMessage;
+        if (msgOut.length > 3950) msgOut = msgOut.slice(0, 3950) + "\n\n… (escribí *tareas* para ver todo el detalle)";
+        const res = await sendProactiveMessage(to, msgOut).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+        const ok = res.ok;
         const record = prisma.whatsAppMessage.create({
           data: {
-            externalId: sent.messageId,
+            externalId: res.messageId,
             userId: user.id,
             toNumber: to,
             message: `[BRIEFING] ${fullMessage}`,
@@ -325,7 +327,7 @@ async function morningBriefing() {
         const act = logActivity(
           user.id,
           "CRON_MORNING_BRIEFING",
-          ok ? `Briefing matutino enviado a ${user.name} (${to}) en ${sent.count} mensaje(s) vía ${sent.via}` : `FALLO envío briefing a ${user.name} (${to})`
+          ok ? `Briefing matutino enviado a ${user.name} (${to}) vía ${res.via}` : `FALLO envío briefing a ${user.name} (${to})`
         );
         await Promise.allSettled([record, act]);
         if (!ok) console.error(`[Cron] Briefing NO enviado a ${user.name} (${to})`);
