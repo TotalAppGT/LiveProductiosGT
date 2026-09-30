@@ -182,9 +182,19 @@ async function morningBriefing() {
       }
       if (todayTasks.length > 0) {
         const todayLabel = startOfToday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
-        // Listado plano: incluye TODAS las tareas de hoy (también las fijas sin fecha).
-        const orderedToday = orderTasksByDayHour(todayTasks);
-        taskLines += `📌 *HOY — ${todayLabel} (${orderedToday.length})*\n${orderedToday.map((t, i) => formatTaskLine(t, i + 1)).join("\n")}\n\n`;
+        // Listado de HOY: todas las tareas (incl. fijas sin fecha), ordenadas por
+        // categoría/fase para que salgan agrupadas (no revueltas).
+        const CAT_RANK: Record<string, number> = {
+          PRE_EVENTO: 0, PRE_EVENTO_ESTA_SEMANA: 0, PRE_EVENTO_PROXIMA_SEMANA: 0, PRE_EVENTO_3RA_SEMANA: 0,
+          EVENTO: 1, POST_EVENTO: 2,
+        };
+        const orderedToday = orderTasksByDayHour(todayTasks).sort((a, b) => {
+          const ca = CAT_RANK[String(a.category || "OTRO").toUpperCase()] ?? 3;
+          const cb = CAT_RANK[String(b.category || "OTRO").toUpperCase()] ?? 3;
+          if (ca !== cb) return ca - cb;
+          return String(a.category || "").localeCompare(String(b.category || ""));
+        });
+        taskLines += `📌 *TAREAS DE HOY — ${todayLabel} (${orderedToday.length})*\n${orderedToday.map((t, i) => formatTaskLine(t, i + 1)).join("\n")}\n\n`;
       }
       taskLines = taskLines.trim();
 

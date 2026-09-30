@@ -997,7 +997,16 @@ export async function sendBihourlyReminders(): Promise<{
           const od = orderTasksByDayHour(overdueTasks);
           digest += `\n\n⚠️ *Vencidas (${od.length})*\n${od.slice(0, 8).map((t: any, i: number) => formatTaskLine(t, i + 1)).join("\n")}`;
         }
-        const ordered = orderTasksByDayHour(todayTasks);
+        const CAT_RANK: Record<string, number> = {
+          PRE_EVENTO: 0, PRE_EVENTO_ESTA_SEMANA: 0, PRE_EVENTO_PROXIMA_SEMANA: 0, PRE_EVENTO_3RA_SEMANA: 0,
+          EVENTO: 1, POST_EVENTO: 2,
+        };
+        const ordered = orderTasksByDayHour(todayTasks).sort((a: any, b: any) => {
+          const ca = CAT_RANK[String(a.category || "OTRO").toUpperCase()] ?? 3;
+          const cb = CAT_RANK[String(b.category || "OTRO").toUpperCase()] ?? 3;
+          if (ca !== cb) return ca - cb;
+          return String(a.category || "").localeCompare(String(b.category || ""));
+        });
         if (ordered.length > 0) {
           const start = overdueTasks.length > 0 ? Math.min(8, overdueTasks.length) + 1 : 1;
           digest += `\n\n${ordered.slice(0, 15).map((t: any, i: number) => formatTaskLine(t, start + i)).join("\n")}`;
