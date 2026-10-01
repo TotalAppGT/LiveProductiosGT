@@ -873,6 +873,13 @@ async function runJobIfScheduled(job: CronJob) {
 }
 
 export function startCronManager(): void {
+  // Interruptor de migracion: permite correr una instancia en paralelo
+  // sin duplicar los envios programados (briefing, recordatorios, etc.).
+  if (process.env.DISABLE_CRON === "true") {
+    console.log("[Cron] Cron manager desactivado (DISABLE_CRON=true)");
+    return;
+  }
+
   if (initialized) {
     console.log("[Cron] Cron manager ya está inicializado");
     return;
