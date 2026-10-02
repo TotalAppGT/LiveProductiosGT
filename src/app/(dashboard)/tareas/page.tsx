@@ -70,6 +70,46 @@ const CATEGORY_OPTIONS = [
 const PRE_EVENTO_CATS = ["PRE_EVENTO", "PRE_EVENTO_ESTA_SEMANA", "PRE_EVENTO_PROXIMA_SEMANA", "PRE_EVENTO_3RA_SEMANA"];
 const isPreEventoCat = (c?: string | null) => !!c && PRE_EVENTO_CATS.includes(c);
 
+// Módulos operativos (departamentos) en orden OBLIGATORIO
+const MODULE_DEFS: { key: string; label: string; bg: string }[] = [
+  { key: "PRE_EVENTO", label: "🎪 Pre Eventos", bg: "bg-blue-600" },
+  { key: "EVENTO", label: "🎬 Eventos", bg: "bg-indigo-600" },
+  { key: "POST_EVENTO", label: "🏁 Post Eventos", bg: "bg-emerald-600" },
+  { key: "ADMINISTRACION", label: "🗂️ Administración", bg: "bg-amber-600" },
+  { key: "OTRO", label: "📌 Otro", bg: "bg-gray-600" },
+];
+
+// A qué módulo pertenece una tarea según su categoría (siempre uno de los 5)
+function moduleOfTask(category?: string | null): string {
+  if (isPreEventoCat(category)) return "PRE_EVENTO";
+  if (category === "EVENTO") return "EVENTO";
+  if (category === "POST_EVENTO") return "POST_EVENTO";
+  if (category === "ADMINISTRACION") return "ADMINISTRACION";
+  return "OTRO";
+}
+
+// Bloques de frecuencia (vistas globales)
+const FREQ_BLOCKS: { key: string; label: string; bg: string }[] = [
+  { key: "DIARIA", label: "📋 ACTIVIDADES DIARIAS", bg: "bg-slate-700" },
+  { key: "SEMANAL", label: "🗓️ ACTIVIDADES SEMANALES", bg: "bg-slate-700" },
+  { key: "MENSUAL", label: "📆 ACTIVIDADES MENSUALES", bg: "bg-slate-700" },
+];
+
+// Bloque de frecuencia al que pertenece una tarea.
+// Las variables (DINAMICA) sin frecuencia caen en Diarias, junto a las fijas diarias.
+function blockOfTask(t: Task): string {
+  if (t.frequency === "SEMANAL") return "SEMANAL";
+  if (t.frequency === "MENSUAL") return "MENSUAL";
+  return "DIARIA";
+}
+
+// Sub-nivel temporal EXCLUSIVO de Pre Eventos → Fijas
+const PRE_EVENTO_SUBLEVELS: { key: string; label: string; cats: string[] }[] = [
+  { key: "ESTA", label: "● Esta semana", cats: ["PRE_EVENTO", "PRE_EVENTO_ESTA_SEMANA"] },
+  { key: "PROXIMA", label: "○ Próxima semana", cats: ["PRE_EVENTO_PROXIMA_SEMANA"] },
+  { key: "3RA", label: "○ 3ra semana", cats: ["PRE_EVENTO_3RA_SEMANA"] },
+];
+
 const GT_DOW_BY_NAME: Record<string, number> = {
   DOMINGO: 0, LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6,
 };
@@ -835,70 +875,74 @@ export default function TareasPage() {
     insertType?: string;
     insertDayOfWeek?: string;
   }
-  // Orden de fase
-  const phasePriority = (t: Task) => {
-    if (isPreEventoCat(t.category)) return 0;
-    if (t.category === "EVENTO") return 1;
-    if (t.category === "POST_EVENTO") return 2;
-    return 3;
-  };
-  const phaseDefs = [
-    { key: "PRE_EVENTO", label: "🎪 Pre Evento", bg: "bg-blue-500" },
-    { key: "EVENTO", label: "🎬 Eventos", bg: "bg-indigo-500" },
-    { key: "POST_EVENTO", label: "🏁 Post Evento", bg: "bg-emerald-500" },
-    { key: "OTRO", label: "📌 Actividades diarias", bg: "bg-gray-500" },
-  ];
-  function buildHierarchicalGroups(): SheetSection[] {
+  // Agrupación JERÁRQUICA por FRECUENCIA (regla de negocio):
+  //   BLOQUE (Diarias / Semanales / Mensuales)
+  //     └ MÓDULO (Pre Eventos → Eventos → Post Eventos → Administración → Otro)
+  //         └ "Fijas" primero, "Variables" después
+  //             └ (solo Pre Eventos · Fijas) Esta semana / Próxima semana / 3ra semana
+  // El día de la semana se aplica como FILTRO (chips de arriba), no como nivel.
+  function buildFrequencyGroups(): SheetSection[] {
     const sections: SheetSection[] = [];
-    const byDay = new Map<string, Task[]>();
-    viewTasks.forEach((t) => {
-      // Las fijas diarias aparecen en TODOS los días de la semana visible.
-      const days = taskDaysInView(t);
-      for (const day of days) {
-        if (!byDay.has(day)) byDay.set(day, []);
-        byDay.get(day)!.push(t);
+    const dow = dayFilter ? (dayToDayOfWeek[dayFilter] || "") : "";
+    const sortByHour = (a: Task, b: Task) => {
+      const hasManual = (a.sortOrder || 0) > 0 || (b.sortOrder || 0) > 0;
+      if (hasManual && a.sortOrder !== b.sortOrder) {
+        return (a.sortOrder || 0) - (b.sortOrder || 0);
       }
-    });
-    const orderedDays = [...weekFromToday, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
-    for (const day of orderedDays) {
-      const dayTasks = byDay.get(day) || [];
-      const dow = dayToDayOfWeek[day];
-      sections.push({ key: `day-${day}`, label: day, bg: dayBgMap[day] || "bg-gray-600", level: 0, tasks: [], count: dayTasks.length, insertDayOfWeek: dow });
+      const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return da - db;
+    };
 
-      const sortByHour = (a: Task, b: Task) => {
-        const hasManual = (a.sortOrder || 0) > 0 || (b.sortOrder || 0) > 0;
-        if (hasManual && a.sortOrder !== b.sortOrder) {
-          return (a.sortOrder || 0) - (b.sortOrder || 0);
-        }
-        const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-        const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-        return da - db;
-      };
+    for (const block of FREQ_BLOCKS) {
+      const blockTasks = viewTasks.filter((t) => blockOfTask(t) === block.key);
+      if (blockTasks.length === 0) continue;
+      sections.push({ key: `blk:${block.key}`, label: block.label, bg: block.bg, level: 0, tasks: [], count: blockTasks.length });
 
-      // Para cada fase (Pre, Evento, Post, Otras) en este día
-      for (const phase of phaseDefs) {
-        const phaseTasks = dayTasks.filter((t) =>
-          phase.key === "PRE_EVENTO" ? isPreEventoCat(t.category)
-          : phase.key === "OTRO" ? !isPreEventoCat(t.category) && !["POST_EVENTO", "EVENTO"].includes(t.category)
-          : t.category === phase.key
-        );
-        if (phaseTasks.length === 0) continue;
-        sections.push({ key: `${day}-${phase.key}`, label: phase.label, bg: phase.bg, level: 1, tasks: [], insertCategory: phase.key === "OTRO" ? "OTRO" : phase.key, insertDayOfWeek: dow });
+      for (const mod of MODULE_DEFS) {
+        const modTasks = blockTasks.filter((t) => moduleOfTask(t.category) === mod.key);
+        if (modTasks.length === 0) continue;
+        sections.push({
+          key: `blk:${block.key}|mod:${mod.key}`,
+          label: mod.label, bg: mod.bg, level: 1, tasks: [], count: modTasks.length,
+          insertCategory: mod.key, insertDayOfWeek: dow,
+        });
 
-        const fijas = phaseTasks.filter((t) => t.type === "FIJA").sort(sortByHour);
-        const variables = phaseTasks.filter((t) => t.type !== "FIJA").sort(sortByHour);
+        const fijas = modTasks.filter((t) => t.type === "FIJA").sort(sortByHour);
+        const variables = modTasks.filter((t) => t.type !== "FIJA").sort(sortByHour);
+
         if (fijas.length > 0) {
-          sections.push({ key: `${day}-${phase.key}-fijas`, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: fijas, insertCategory: phase.key === "OTRO" ? "OTRO" : phase.key, insertType: "FIJA", insertDayOfWeek: dow });
+          const fKey = `blk:${block.key}|mod:${mod.key}|t:FIJA`;
+          sections.push({ key: fKey, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: [], count: fijas.length, insertCategory: mod.key, insertType: "FIJA", insertDayOfWeek: dow });
+          if (mod.key === "PRE_EVENTO") {
+            // Sub-nivel temporal EXCLUSIVO de Pre Eventos · Fijas
+            for (const sub of PRE_EVENTO_SUBLEVELS) {
+              const subTasks = fijas.filter((t) => sub.cats.includes(String(t.category)));
+              if (subTasks.length === 0) continue;
+              sections.push({ key: `${fKey}|s:${sub.key}`, label: sub.label, bg: "bg-blue-50 dark:bg-blue-900/30", level: 3, tasks: subTasks, insertCategory: sub.cats[sub.cats.length - 1], insertType: "FIJA", insertDayOfWeek: dow });
+            }
+          } else {
+            sections[sections.length - 1].tasks = fijas;
+          }
         }
+
         if (variables.length > 0) {
-          sections.push({ key: `${day}-${phase.key}-var`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: variables, insertCategory: phase.key === "OTRO" ? "OTRO" : phase.key, insertType: "DINAMICA", insertDayOfWeek: dow });
+          sections.push({ key: `blk:${block.key}|mod:${mod.key}|t:VAR`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: variables, insertCategory: mod.key, insertType: "DINAMICA", insertDayOfWeek: dow });
         }
       }
     }
     return sections;
   }
 
-  const sheetGroups = groupMode === "dia" ? buildDayGroups() : buildHierarchicalGroups();
+  const sheetGroups = groupMode === "dia" ? buildDayGroups() : buildFrequencyGroups();
+
+  // Un encabezado se oculta si él mismo o algún antecesor está colapsado.
+  const isSectionHidden = (key: string) => {
+    for (const c of collapsedDays) {
+      if (key === c || key.startsWith(c + "|")) return true;
+    }
+    return false;
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -1069,10 +1113,10 @@ export default function TareasPage() {
           </button>
           {viewOffset === 0 && (
             <button
-              onClick={() => setCollapsedDays(new Set(weekFromToday))}
+              onClick={() => setCollapsedDays(new Set(["blk:DIARIA", "blk:SEMANAL", "blk:MENSUAL"]))}
               className="text-xs text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-full px-2.5 py-1 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
-              ▼ Solo hoy
+              ▼ Contraer
             </button>
           )}
         </div>
@@ -1143,7 +1187,7 @@ export default function TareasPage() {
               leftIcon={<Columns3 className="h-4 w-4" />}
               onClick={() => setGroupMode(groupMode === "fase" ? "dia" : "fase")}
             >
-              {groupMode === "fase" ? "Por Día" : "Por Fase"}
+              {groupMode === "fase" ? "Ver por Día" : "Ver por Frecuencia"}
             </Button>
           )}
           <Button
@@ -1473,38 +1517,38 @@ export default function TareasPage() {
                 <div className="overflow-x-auto">
                   <div className="min-w-[720px]">
                     {sheetGroups.map((group, gi) => {
-                      // Si un día está colapsado, ocultar sus sub-secciones (fase/tipo)
-                      const parentDay = group.level > 0 ? group.key.split("-")[0] : null;
-                      if (parentDay && collapsedDays.has(parentDay)) return null;
+                      if (isSectionHidden(group.key)) return null;
                       return (
                       <div key={group.key + gi}>
-                        {/* Fila de encabezado: día / fase / tipo */}
+                        {/* Fila de encabezado: bloque / módulo / Fijas-Variables / sub-nivel */}
                         <div className={`${group.bg} flex items-center justify-between ${
                           group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white cursor-pointer select-none"
                           : group.level === 1 ? "px-3 py-1 text-[11px] font-semibold text-white"
-                          : "px-4 py-0.5 text-[10px] font-semibold text-gray-700 dark:text-gray-200"
+                          : group.level === 2 ? "px-4 py-0.5 text-[10px] font-semibold text-gray-700 dark:text-gray-200"
+                          : "px-6 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300"
                         }`}>
                           <span className="flex items-center gap-1">
                             {group.level === 0 && (
                               <button
                                 onClick={() => {
-                                  const day = group.label;
+                                  const k = group.key;
                                   setCollapsedDays((prev) => {
                                     const next = new Set(prev);
-                                    if (next.has(day)) next.delete(day); else next.add(day);
+                                    if (next.has(k)) next.delete(k); else next.add(k);
                                     return next;
                                   });
                                 }}
                                 className="text-white/80 hover:text-white mr-0.5"
-                                title={collapsedDays.has(group.label) ? "Mostrar día" : "Ocultar día"}
+                                title={collapsedDays.has(group.key) ? "Mostrar" : "Ocultar"}
                               >
-                                {collapsedDays.has(group.label) ? "▶" : "▼"}
+                                {collapsedDays.has(group.key) ? "▶" : "▼"}
                               </button>
                             )}
                             <span>{group.label}</span>
                           </span>
                           <div className="flex items-center gap-1">
                             <span className="bg-white/25 rounded-full px-2 py-0.5 text-[10px] font-semibold">{group.count ?? group.tasks.length}</span>
+                            {(group as any).insertCategory && (
                             <button
                               onClick={() => {
                                 setCreatePrefill({ category: (group as any).insertCategory, type: (group as any).insertType, dayOfWeek: (group as any).insertDayOfWeek });
@@ -1515,6 +1559,7 @@ export default function TareasPage() {
                             >
                               +
                             </button>
+                            )}
                           </div>
                         </div>
                         {group.tasks.map((task, idx) => (

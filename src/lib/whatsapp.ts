@@ -673,9 +673,8 @@ async function sendAutomatedReminder(
   const tasks = context.pendingTasks || [];
   const events = context.upcomingEvents || [];
 
-  const taskLines = tasks
-    .map((t) => `• ${t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🟠" : "🔵"} ${t.title}${t.dueDate ? ` (${new Date(t.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })})` : ""}`)
-    .join("\n");
+  const { formatTaskHierarchy } = await import("@/lib/task-view");
+  const taskLines = tasks.length > 0 ? formatTaskHierarchy(tasks).text : "";
 
   const eventLines = events
     .map((e) => `• 🎪 ${e.name} - ${e.clientName} - ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" })}`)

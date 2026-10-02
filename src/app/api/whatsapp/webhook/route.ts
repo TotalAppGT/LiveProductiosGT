@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendMessageChunked, sendInteractiveButtons } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
-import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest } from "@/lib/task-view";
+import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest, formatTaskHierarchy, orderTasksHierarchical } from "@/lib/task-view";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate } from "@/lib/task-utils";
 import { sendLUNAUpdateBroadcast } from "@/lib/broadcast";
 import { runDataFix } from "@/lib/data-fix";
@@ -408,9 +408,9 @@ async function formatTasksForUser(userId: string, period?: string) {
       return "✅ No tienes tareas para hoy. ¡Todo al día! 🎉";
     }
     output = `📋 *HOY - ${todayStart.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday:"long",day:"numeric",month:"long" })}*\n\n`;
-    const orderedToday = orderTasksForDisplay(todayTasks);
-    output += formatTaskList(orderedToday);
-    saveTaskView(userId, orderedToday);
+    const h = formatTaskHierarchy(todayTasks);
+    output += h.text;
+    saveTaskView(userId, h.ordered);
     output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output;
   }
@@ -419,31 +419,22 @@ async function formatTasksForUser(userId: string, period?: string) {
     const weekAll = [...overdueTasks, ...todayTasks, ...thisWeekTasks].filter((t, i, arr) => arr.indexOf(t) === i);
     if (weekAll.length === 0 && !hasFixed) {
       if (nextWeekTasks.length > 0) {
-        return `📅 *Esta semana no tienes tareas pendientes.* 🎉\n\nEstas son las de la *próxima semana* (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })}):\n${groupTasksByDay(orderTasksForDisplay(nextWeekTasks), 1)}`;
+        const h = formatTaskHierarchy(nextWeekTasks);
+        return `📅 *Esta semana no tienes tareas pendientes.* 🎉\n\nEstas son las de la *próxima semana* (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  day: "numeric", month: "short" })}):\n\n${h.text}`;
       }
       return "📅 No tienes tareas para esta semana. ¡Todo al día! 🎉";
     }
     output = `📅 *ESTA SEMANA* (${monday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })} - ${sunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })})\n\n`;
-    const orderedWeek = orderTasksForDisplay(weekAll);
-    output += groupTasksByDay(weekAll);
-    const semanaView: any[] = [...orderedWeek];
-    let semanaNum = orderedWeek.length + 1;
+    const h = formatTaskHierarchy(weekAll);
+    output += h.text;
+    const semanaView: any[] = [...h.ordered];
+    let semanaNum = h.next;
     if (hasFixed) {
-      output += `\n📌 *ACTIVIDADES FIJAS*\n`;
-      if (dailyFixed.length > 0) {
-        const od = orderTasksForDisplay(dailyFixed);
-        output += `${formatTaskList(od, semanaNum)}\n`;
-        semanaView.push(...od);
-        semanaNum += od.length;
-      }
-      for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
-        if (fixedByDay[day] && fixedByDay[day].length > 0) {
-          const od = orderTasksForDisplay(fixedByDay[day]);
-          output += `${formatTaskList(od, semanaNum)}\n`;
-          semanaView.push(...od);
-          semanaNum += od.length;
-        }
-      }
+      const fixedAll: any[] = [...dailyFixed, ...["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"].flatMap((day) => fixedByDay[day] || [])];
+      const hf = formatTaskHierarchy(fixedAll, semanaNum);
+      output += `\n\n📌 *ACTIVIDADES FIJAS*\n${hf.text}`;
+      semanaView.push(...hf.ordered);
+      semanaNum = hf.next;
     }
     saveTaskView(userId, semanaView);
     output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
@@ -452,26 +443,16 @@ async function formatTasksForUser(userId: string, period?: string) {
 
   if (period === "semana2") {
     output = `📅 *PRÓXIMA SEMANA* (${nextMonday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })} - ${nextSunday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })})\n\n`;
-    const nextOrdered = orderTasksForDisplay(nextWeekTasks);
-    if (nextWeekTasks.length > 0) output += groupTasksByDay(nextWeekTasks);
-    const semana2View: any[] = [...nextOrdered];
-    let s2num = nextOrdered.length + 1;
+    const h = formatTaskHierarchy(nextWeekTasks);
+    if (nextWeekTasks.length > 0) output += h.text;
+    const semana2View: any[] = [...h.ordered];
+    let s2num = h.next;
     if (hasFixed) {
-      output += `\n📌 *ACTIVIDADES FIJAS*\n`;
-      if (dailyFixed.length > 0) {
-        const od = orderTasksForDisplay(dailyFixed);
-        output += `${formatTaskList(od, s2num)}\n`;
-        semana2View.push(...od);
-        s2num += od.length;
-      }
-      for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
-        if (fixedByDay[day] && fixedByDay[day].length > 0) {
-          const od = orderTasksForDisplay(fixedByDay[day]);
-          output += `${formatTaskList(od, s2num)}\n`;
-          semana2View.push(...od);
-          s2num += od.length;
-        }
-      }
+      const fixedAll: any[] = [...dailyFixed, ...["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"].flatMap((day) => fixedByDay[day] || [])];
+      const hf = formatTaskHierarchy(fixedAll, s2num);
+      output += `\n\n📌 *ACTIVIDADES FIJAS*\n${hf.text}`;
+      semana2View.push(...hf.ordered);
+      s2num = hf.next;
     }
     saveTaskView(userId, semana2View);
     output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
@@ -493,36 +474,21 @@ async function formatTasksForUser(userId: string, period?: string) {
   let runningNum = 1;
   const orderedForView: any[] = [];
   for (const wb of weekBlocks) {
-    const ordered = orderTasksForDisplay(wb.tasks);
-    orderedForView.push(...ordered);
-    blocks.push(`📅 *${wb.label}*\n${groupTasksByDay(ordered, runningNum)}`);
-    runningNum += ordered.length;
+    const h = formatTaskHierarchy(wb.tasks, runningNum);
+    orderedForView.push(...h.ordered);
+    blocks.push(`📅 *${wb.label}*\n${h.text}`);
+    runningNum = h.next;
   }
   if (blocks.length > 0) {
     output += blocks.join("\n\n") + "\n\n";
-    // Guardar la lista para que los comandos por # operen sobre lo que el usuario vio
-    saveTaskView(userId, orderedForView);
   }
 
   if (hasFixed) {
-    output += `📌 *ACTIVIDADES FIJAS*\n`;
-    const fixedOrdered: any[] = [];
-    if (dailyFixed.length > 0) {
-      const od = orderTasksForDisplay(dailyFixed);
-      output += `${formatTaskList(od, runningNum)}\n`;
-      fixedOrdered.push(...od);
-      runningNum += od.length;
-    }
-    for (const day of ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]) {
-      if (fixedByDay[day] && fixedByDay[day].length > 0) {
-        const od = orderTasksForDisplay(fixedByDay[day]);
-        output += `${formatTaskList(od, runningNum)}\n`;
-        fixedOrdered.push(...od);
-        runningNum += od.length;
-      }
-    }
-    if (fixedOrdered.length > 0) orderedForView.push(...fixedOrdered);
-    output += "\n";
+    const fixedAll: any[] = [...dailyFixed, ...["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"].flatMap((day) => fixedByDay[day] || [])];
+    const hf = formatTaskHierarchy(fixedAll, runningNum);
+    output += `📌 *ACTIVIDADES FIJAS*\n${hf.text}\n\n`;
+    orderedForView.push(...hf.ordered);
+    runningNum = hf.next;
   }
   if (orderedForView.length > 0) saveTaskView(userId, orderedForView);
 
@@ -559,21 +525,6 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
 
   const WEEK: Record<string, number> = { DOMINGO: 0, LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6 };
 
-  // Día "hogar" de cada tarea
-  const dayOf = (t: any): number | null => {
-    if (t.type === "FIJA" && t.dayOfWeek) {
-      const k = WEEK[String(t.dayOfWeek).toUpperCase()];
-      if (k !== undefined) return k;
-    }
-    if (t.type === "FIJA" && t.frequency === "DIARIA" && !t.dueDate) return w.weekday; // diarias → hoy
-    if (t.dueDate) return getGuatemalaWallClock(new Date(t.dueDate)).weekday;
-    return null;
-  };
-
-  const mondayOffset = w.weekday === 0 ? 6 : w.weekday - 1;
-  const monday = new Date(today.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
-
-  // Vencidas / prioridad (con fecha anterior a hoy)
   // Vencidas / prioridad: con fecha anterior a hoy, o fija semanal de un día
   // anterior que no se completó (persiste día a día hasta completarse).
   const isPriorFija = (t: any) => {
@@ -587,66 +538,23 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
   const overdue = tasks.filter(isOverdueTask);
   const rest = tasks.filter((t) => !isOverdueTask(t));
 
-  const byDay: Record<number, any[]> = {};
-  const noDay: any[] = [];
-  for (const t of rest) {
-    const d = dayOf(t);
-    if (d === null) { noDay.push(t); continue; }
-    (byDay[d] = byDay[d] || []).push(t);
-  }
-
-  let num = 1;
+  // Listado jerárquico a nivel sistema: Frecuencia → Módulo → Fijas/Variables
+  let cursor = 1;
   const displayed: any[] = [];
   let out = `📋 *Tus Tareas*\n\n`;
 
   if (overdue.length > 0) {
-    out += `⚠️ *Vencidas / Prioridad (${overdue.length})*\n`;
-    for (const t of orderTasksForDisplay(overdue)) {
-      out += `${formatTaskLine(t, num++)}\n`;
-      displayed.push(t);
-    }
-    out += `\n`;
+    const h = formatTaskHierarchy(overdue, cursor);
+    out += `⚠️ *VENCIDAS / PRIORIDAD (${h.ordered.length})*\n${h.text}\n\n`;
+    displayed.push(...h.ordered);
+    cursor = h.next;
   }
 
-  // Lunes → domingo
-  const dayOrder = [1, 2, 3, 4, 5, 6, 0];
-  for (const wd of dayOrder) {
-    const list = byDay[wd];
-    if (!list || list.length === 0) continue;
-    const dayDate = new Date(monday.getTime() + ((wd + 6) % 7) * 24 * 60 * 60 * 1000);
-    const isToday = wd === w.weekday;
-    const label = dayDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
-    out += `${isToday ? "📌" : "📅"} *${label}*${isToday ? " — hoy*" : "*"}\n`;
-
-    const fijas = list.filter((t: any) => t.type === "FIJA");
-    const pre = list.filter((t: any) => t.category === "PRE_EVENTO" && t.type !== "FIJA");
-    const post = list.filter((t: any) => t.category === "POST_EVENTO" && t.type !== "FIJA");
-    const act = list.filter((t: any) => t.type !== "FIJA" && t.category !== "PRE_EVENTO" && t.category !== "POST_EVENTO");
-
-    const sections: [string, any[]][] = [
-      ["🔁 Fijas", fijas],
-      ["🎪 Pre Evento", pre],
-      ["🏁 Post Evento", post],
-      ["📌 Actividades diarias", act],
-    ];
-    for (const [secLabel, secTasks] of sections) {
-      if (secTasks.length === 0) continue;
-      out += `  ${secLabel} (${secTasks.length})\n`;
-      for (const t of orderTasksForDisplay(secTasks)) {
-        out += `  ${formatTaskLine(t, num++)}\n`;
-        displayed.push(t);
-      }
-    }
-    out += `\n`;
-  }
-
-  if (noDay.length > 0) {
-    out += `📅 *Sin día asignado*\n`;
-    for (const t of noDay) {
-      out += `${formatTaskLine(t, num++)}\n`;
-      displayed.push(t);
-    }
-    out += `\n`;
+  const hier = formatTaskHierarchy(rest, cursor);
+  if (hier.ordered.length > 0) {
+    out += `${hier.text}\n\n`;
+    displayed.push(...hier.ordered);
+    cursor = hier.next;
   }
 
   if (displayed.length > 0) saveTaskView(userId, displayed);
@@ -1672,26 +1580,9 @@ async function handleCommand(
       take: 60,
     });
     if (fixed.length === 0) return "No tienes actividades fijas. ¡Todo al día! 🎉";
-    const DAY_ORDER = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"];
-    const byDay: Record<string, any[]> = { DIARIA: [] };
-    for (const t of fixed) {
-      if (t.frequency === "DIARIA") byDay["DIARIA"].push(t);
-      else if (t.dayOfWeek) {
-        const k = String(t.dayOfWeek).toUpperCase();
-        (byDay[k] = byDay[k] || []).push(t);
-      }
-    }
-    let out = `📌 *Actividades Fijas (${fixed.length})*\n\n`;
-    if (byDay["DIARIA"].length > 0) {
-      out += `📅 *Todos los días (${byDay["DIARIA"].length})*\n${byDay["DIARIA"].map((t, i) => formatTaskLine(t, i + 1)).join("\n")}\n\n`;
-    }
-    let num = byDay["DIARIA"].length + 1;
-    for (const d of DAY_ORDER) {
-      if (byDay[d]?.length) {
-        out += `📅 *${d.charAt(0) + d.slice(1).toLowerCase()} (${byDay[d].length})*\n${byDay[d].map((t) => formatTaskLine(t, num++)).join("\n")}\n\n`;
-      }
-    }
-    out += `⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 posponer 1 → Posponer\n#3 transferir 1 a Diana → Transferir`;
+    const h = formatTaskHierarchy(fixed);
+    saveTaskView(user.id, h.ordered);
+    const out = `📌 *Actividades Fijas (${fixed.length})*\n\n${h.text}\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 posponer 1 → Posponer\n#3 transferir 1 a Diana → Transferir`;
     return out.trim();
   }
 

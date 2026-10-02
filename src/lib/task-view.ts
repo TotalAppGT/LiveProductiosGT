@@ -51,6 +51,145 @@ export function formatTaskLine(t: any, num: number): string {
   return `${num}. ${prio} ${phaseTag} *${t.title}* ${status}${typeTag}${due}`;
 }
 
+// ============================================================
+// ESTRUCTURA JERÁRQUICA COMPARTIDA (a nivel sistema):
+//   BLOQUE de frecuencia (Diarias / Semanales / Mensuales)
+//     └ MÓDULO (Pre Eventos → Eventos → Post Eventos → Administración → Otro)
+//         └ "Fijas" primero, "Variables" después
+//             └ (solo Pre Eventos · Fijas) Esta / Próxima / 3ra semana
+// ============================================================
+
+export const FREQ_BLOCK_ORDER = ["DIARIA", "SEMANAL", "MENSUAL"] as const;
+export const FREQ_BLOCK_LABELS: Record<string, string> = {
+  DIARIA: "📋 ACTIVIDADES DIARIAS",
+  SEMANAL: "🗓️ ACTIVIDADES SEMANALES",
+  MENSUAL: "📆 ACTIVIDADES MENSUALES",
+};
+
+export const MODULE_ORDER = ["PRE_EVENTO", "EVENTO", "POST_EVENTO", "ADMINISTRACION", "OTRO"] as const;
+export const MODULE_LABELS: Record<string, string> = {
+  PRE_EVENTO: "🎪 PRE EVENTOS",
+  EVENTO: "🎬 EVENTOS",
+  POST_EVENTO: "🏁 POST EVENTOS",
+  ADMINISTRACION: "🗂️ ADMINISTRACIÓN",
+  OTRO: "📌 OTRO",
+};
+
+const PRE_EVENTO_CATS = ["PRE_EVENTO", "PRE_EVENTO_ESTA_SEMANA", "PRE_EVENTO_PROXIMA_SEMANA", "PRE_EVENTO_3RA_SEMANA"];
+export const isPreEventoCategory = (c?: string | null) => !!c && PRE_EVENTO_CATS.includes(c);
+
+// A qué módulo pertenece una tarea según su categoría (siempre uno de los 5)
+export function moduleOfTask(category?: string | null): string {
+  if (isPreEventoCategory(category)) return "PRE_EVENTO";
+  if (category === "EVENTO") return "EVENTO";
+  if (category === "POST_EVENTO") return "POST_EVENTO";
+  if (category === "ADMINISTRACION") return "ADMINISTRACION";
+  return "OTRO";
+}
+
+// Bloque de frecuencia de una tarea (las variables sin frecuencia caen en Diarias)
+export function blockOfTask(t: any): string {
+  if (t.frequency === "SEMANAL") return "SEMANAL";
+  if (t.frequency === "MENSUAL") return "MENSUAL";
+  return "DIARIA";
+}
+
+// Sub-nivel temporal EXCLUSIVO de Pre Eventos → Fijas
+export const PRE_EVENTO_SUBLEVELS: { key: string; label: string; cats: string[] }[] = [
+  { key: "ESTA", label: "● Esta semana", cats: ["PRE_EVENTO", "PRE_EVENTO_ESTA_SEMANA"] },
+  { key: "PROXIMA", label: "○ Próxima semana", cats: ["PRE_EVENTO_PROXIMA_SEMANA"] },
+  { key: "3RA", label: "○ 3ra semana", cats: ["PRE_EVENTO_3RA_SEMANA"] },
+];
+
+function hourOf(t: any): number {
+  if (!t?.dueDate) return Number.MAX_SAFE_INTEGER;
+  const d = new Date(t.dueDate);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  if (isNaN(h)) return Number.MAX_SAFE_INTEGER;
+  return h * 60 + m;
+}
+
+// Respeta el orden manual (sortOrder) y luego la hora del día
+function sortByManualThenHour(a: any, b: any): number {
+  const hasManual = (a.sortOrder || 0) > 0 || (b.sortOrder || 0) > 0;
+  if (hasManual && a.sortOrder !== b.sortOrder) return (a.sortOrder || 0) - (b.sortOrder || 0);
+  return hourOf(a) - hourOf(b);
+}
+
+// Ordena las tareas EXACTAMENTE como se muestran en el listado jerárquico.
+// Es la fuente del número que usan los comandos "hecho 1", "posponer 2", etc.
+export function orderTasksHierarchical(tasks: any[]): any[] {
+  const out: any[] = [];
+  for (const block of FREQ_BLOCK_ORDER) {
+    const blockTasks = tasks.filter((t) => blockOfTask(t) === block);
+    if (blockTasks.length === 0) continue;
+    for (const mod of MODULE_ORDER) {
+      const modTasks = blockTasks.filter((t) => moduleOfTask(t.category) === mod);
+      if (modTasks.length === 0) continue;
+      const fijas = modTasks.filter((t) => t.type === "FIJA").sort(sortByManualThenHour);
+      const variables = modTasks.filter((t) => t.type !== "FIJA").sort(sortByManualThenHour);
+      if (fijas.length > 0) {
+        if (mod === "PRE_EVENTO") {
+          for (const sub of PRE_EVENTO_SUBLEVELS) {
+            out.push(...fijas.filter((t) => sub.cats.includes(String(t.category))));
+          }
+        } else {
+          out.push(...fijas);
+        }
+      }
+      out.push(...variables);
+    }
+  }
+  return out;
+}
+
+// Render profesional en listado jerárquico. Devuelve también el orden para numerar.
+export function formatTaskHierarchy(tasks: any[], startNum = 1): { text: string; ordered: any[]; next: number } {
+  const ordered = orderTasksHierarchical(tasks);
+  if (ordered.length === 0) return { text: "", ordered: [], next: startNum };
+
+  let num = startNum;
+  const lines: string[] = [];
+  const emit = (arr: any[], indent: string) => {
+    for (const t of arr) lines.push(`${indent}${formatTaskLine(t, num++)}`);
+  };
+
+  for (const block of FREQ_BLOCK_ORDER) {
+    const blockTasks = tasks.filter((t) => blockOfTask(t) === block);
+    if (blockTasks.length === 0) continue;
+    lines.push(`*${FREQ_BLOCK_LABELS[block]}*`);
+    for (const mod of MODULE_ORDER) {
+      const modTasks = blockTasks.filter((t) => moduleOfTask(t.category) === mod);
+      if (modTasks.length === 0) continue;
+      lines.push(`*${MODULE_LABELS[mod]}*`);
+      const fijas = modTasks.filter((t) => t.type === "FIJA").sort(sortByManualThenHour);
+      const variables = modTasks.filter((t) => t.type !== "FIJA").sort(sortByManualThenHour);
+      if (fijas.length > 0) {
+        lines.push("  🔁 *Fijas*");
+        if (mod === "PRE_EVENTO") {
+          for (const sub of PRE_EVENTO_SUBLEVELS) {
+            const subTasks = fijas.filter((t) => sub.cats.includes(String(t.category)));
+            if (subTasks.length === 0) continue;
+            lines.push(`    ${sub.label}`);
+            emit(subTasks, "      ");
+          }
+        } else {
+          emit(fijas, "    ");
+        }
+      }
+      if (variables.length > 0) {
+        lines.push("  ⚡ *Variables*");
+        emit(variables, "    ");
+      }
+    }
+    lines.push("");
+  }
+
+  const text = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { text, ordered, next: num };
+}
+
 // Devuelve texto de tareas ordenadas cronológicamente por día y hora, agrupadas por día
 export function groupTasksByDayText(tasks: any[], startNum: number = 1): string {
   const days = new Map<string, any[]>();

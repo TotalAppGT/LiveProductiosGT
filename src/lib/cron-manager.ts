@@ -170,31 +170,24 @@ async function morningBriefing() {
         take: 6,
       });
 
-      const { orderTasksByDayHour, groupTasksByDayText, formatTaskLine } = await import("@/lib/task-view");
+      const { orderTasksByDayHour, groupTasksByDayText, formatTaskLine, formatTaskHierarchy } = await import("@/lib/task-view");
 
       // Mensaje diario = SOLO lo de HOY: primero pendientes/vencidas, luego tareas de hoy.
       // La semana y próximas semanas se ven con `tareas`.
       const todayTasks = tasks.filter((t) => isTaskDueOnDate(t, startOfToday));
       const stillOverdue = tasks.filter((t) => t.dueDate && new Date(t.dueDate) < startOfToday && !isTaskDueOnDate(t, startOfToday));
       let taskLines = "";
+      let cursor = 1;
       if (stillOverdue.length > 0) {
-        taskLines += `⚠️ *Vencidas / Prioridad (${stillOverdue.length})*\n${groupTasksByDayText(orderTasksByDayHour(stillOverdue))}\n\n`;
+        const h = formatTaskHierarchy(stillOverdue, cursor);
+        taskLines += `⚠️ *VENCIDAS / PRIORIDAD (${h.ordered.length})*\n${h.text}\n\n`;
+        cursor = h.next;
       }
       if (todayTasks.length > 0) {
         const todayLabel = startOfToday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
-        // Listado de HOY: todas las tareas (incl. fijas sin fecha), ordenadas por
-        // categoría/fase para que salgan agrupadas (no revueltas).
-        const CAT_RANK: Record<string, number> = {
-          PRE_EVENTO: 0, PRE_EVENTO_ESTA_SEMANA: 0, PRE_EVENTO_PROXIMA_SEMANA: 0, PRE_EVENTO_3RA_SEMANA: 0,
-          EVENTO: 1, POST_EVENTO: 2,
-        };
-        const orderedToday = orderTasksByDayHour(todayTasks).sort((a, b) => {
-          const ca = CAT_RANK[String(a.category || "OTRO").toUpperCase()] ?? 3;
-          const cb = CAT_RANK[String(b.category || "OTRO").toUpperCase()] ?? 3;
-          if (ca !== cb) return ca - cb;
-          return String(a.category || "").localeCompare(String(b.category || ""));
-        });
-        taskLines += `📌 *TAREAS DE HOY — ${todayLabel} (${orderedToday.length})*\n${orderedToday.map((t, i) => formatTaskLine(t, i + 1)).join("\n")}\n\n`;
+        // Listado jerárquico profesional: frecuencia → módulo → Fijas/Variables
+        const h = formatTaskHierarchy(todayTasks, cursor);
+        taskLines += `📌 *TAREAS DE HOY — ${todayLabel} (${h.ordered.length})*\n${h.text}\n\n`;
       }
       taskLines = taskLines.trim();
 
@@ -309,11 +302,10 @@ async function morningBriefing() {
 
       const to = user.whatsappNumber || user.phone;
       if (to) {
-        // UN solo mensaje ordenado (los automáticos de LUNA son 1 mensaje).
-        let msgOut = fullMessage;
-        if (msgOut.length > 3950) msgOut = msgOut.slice(0, 3950) + "\n\n… (escribí *tareas* para ver todo el detalle)";
-        const res = await sendProactiveMessage(to, msgOut).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
-        const ok = res.ok;
+        // Si el mensaje es largo, se envía troceado por bloques (nunca recorta contenido).
+        const chunked = await sendProactiveChunkedFull(to, fullMessage).catch(() => ({ count: 0, via: "none", messageId: undefined as string | undefined }));
+        const ok = chunked.count > 0;
+        const res = { ok, via: chunked.via, messageId: chunked.messageId };
         const record = prisma.whatsAppMessage.create({
           data: {
             externalId: res.messageId,
