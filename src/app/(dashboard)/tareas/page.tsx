@@ -156,6 +156,28 @@ function taskOccursOnDate(task: Task, date: Date): boolean {
   return false;
 }
 
+// ¿Vencida? (misma regla que el servidor)
+//  - Diaria (o fija sin día): NUNCA vencida.
+//  - Fija semanal sin fecha: vencida si su día ya pasó (se corre hasta completarse).
+//  - El resto: fecha anterior a hoy que no ocurra hoy.
+function isTaskOverdueLocal(t: Task): boolean {
+  if (t.type === "FIJA" && (t.frequency === "DIARIA" || (!t.frequency && !t.dayOfWeek))) return false;
+  const now = new Date();
+  if (t.type === "FIJA" && t.frequency === "SEMANAL" && t.dayOfWeek && !t.dueDate) {
+    const target = GT_DOW_BY_NAME[String(t.dayOfWeek).toUpperCase()];
+    const wd = gtWeekday(now);
+    if (target === undefined || target === 0) return false;
+    return wd !== 0 && wd > target;
+  }
+  if (t.dueDate) {
+    const d = new Date(t.dueDate);
+    if (!isNaN(d.getTime()) && gtDateKey(d) < gtDateKey(now)) {
+      return !taskOccursOnDate(t, now);
+    }
+  }
+  return false;
+}
+
 export default function TareasPage() {
   const { user, token } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -891,6 +913,10 @@ export default function TareasPage() {
     const sections: SheetSection[] = [];
     const dow = dayFilter ? (dayToDayOfWeek[dayFilter] || "") : "";
     const sortByHour = (a: Task, b: Task) => {
+      // VENCIDAS PRIMERO, luego orden manual, luego fecha/hora
+      const oa = isTaskOverdueLocal(a) ? 0 : 1;
+      const ob = isTaskOverdueLocal(b) ? 0 : 1;
+      if (oa !== ob) return oa - ob;
       const hasManual = (a.sortOrder || 0) > 0 || (b.sortOrder || 0) > 0;
       if (hasManual && a.sortOrder !== b.sortOrder) {
         return (a.sortOrder || 0) - (b.sortOrder || 0);
@@ -1599,6 +1625,9 @@ export default function TareasPage() {
                               </span>
                               {task.category === "PRE_EVENTO" && <span className="shrink-0 text-[9px]" title="Pre Evento">🎪</span>}
                               {task.category === "POST_EVENTO" && <span className="shrink-0 text-[9px]" title="Post Evento">🏁</span>}
+                              {isTaskOverdueLocal(task) && (
+                                <span className="shrink-0 text-[9px] px-1 rounded bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300 font-semibold" title="Vencida - se corre hasta completarla">⚠️</span>
+                              )}
                               {task.type === "FIJA" && (
                                 <span className="shrink-0 text-[9px] px-1 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 font-semibold">🔁</span>
                               )}

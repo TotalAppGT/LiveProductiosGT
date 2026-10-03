@@ -67,7 +67,7 @@ CÓMO SE COMPORTAN LOS TIPOS DE TAREA:
 - 🔁 FIJAS DIARIAS: aparecen TODOS los días; al completarlas vuelven a aparecer al día siguiente.
 - 🔁 FIJAS SEMANALES: aparecen su día de la semana (ej: "cada lunes", "cada martes") y persisten hasta el sábado si no se completan; al completarlas vuelven la próxima semana en su día. Las de domingo aparecen solo el domingo.
 - ⚡ VARIABLES: se agregan puntualmente. Si las completás, SE BORRAN (hay que agregarlas de nuevo si se necesitan). Si NO las completás, siguen como PRIORIDAD día a día hasta que las hagas.
-- Las tareas VENCIDAS siempre se muestran PRIMERO en los mensajes de LUNA.
+- Las tareas VENCIDAS siempre se muestran PRIMERO en los mensajes de LUNA. IMPORTANTE: una FIJA DIARIA NUNCA es "vencida" (es la ocurrencia del día). Las FIJA SEMANALES sin completar se corren día a día hasta el sábado; al completarlas vuelven la próxima semana en su día. Las VARIABLES sin completar se corren día a día como prioridad.
 - Al asignar una tarea a otra persona, se le notifica por WhatsApp.
 
 RECORDATORIOS = SEPARADOS de tareas y reuniones:

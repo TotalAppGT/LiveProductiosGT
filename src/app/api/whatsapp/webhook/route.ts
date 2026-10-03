@@ -4,7 +4,7 @@ import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendMessageChunked, sendInteractiveButtons } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest, formatTaskHierarchy, orderTasksHierarchical } from "@/lib/task-view";
-import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate } from "@/lib/task-utils";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate, isTaskOverdue } from "@/lib/task-utils";
 import { sendLUNAUpdateBroadcast } from "@/lib/broadcast";
 import { runDataFix } from "@/lib/data-fix";
 
@@ -525,18 +525,10 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
 
   const WEEK: Record<string, number> = { DOMINGO: 0, LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6 };
 
-  // Vencidas / prioridad: con fecha anterior a hoy, o fija semanal de un día
-  // anterior que no se completó (persiste día a día hasta completarse).
-  const isPriorFija = (t: any) => {
-    if (t.type === "FIJA" && t.frequency === "SEMANAL" && t.dayOfWeek && !t.dueDate) {
-      const target = WEEK[String(t.dayOfWeek).toUpperCase()];
-      return target !== undefined && target !== 0 && w.weekday !== 0 && w.weekday > target;
-    }
-    return false;
-  };
-  const isOverdueTask = (t: any) => (t.dueDate && new Date(t.dueDate) < today) || isPriorFija(t);
-  const overdue = tasks.filter(isOverdueTask);
-  const rest = tasks.filter((t) => !isOverdueTask(t));
+  // Vencidas / prioridad (regla compartida): las DIARIAS nunca son vencidas;
+  // las semanales sin fecha vencen cuando su día ya pasó; el resto por fecha.
+  const overdue = tasks.filter((t) => isTaskOverdue(t, today));
+  const rest = tasks.filter((t) => !isTaskOverdue(t, today));
 
   // Listado jerárquico a nivel sistema: Frecuencia → Módulo → Fijas/Variables
   let cursor = 1;

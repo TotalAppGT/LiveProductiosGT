@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendProactiveMessage } from "@/lib/whatsapp";
 import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireTaskReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
-import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate, ACCESS_ACTIONS, guatemalaDate } from "@/lib/task-utils";
+import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate, isTaskOverdue, ACCESS_ACTIONS, guatemalaDate } from "@/lib/task-utils";
 
 interface CronJob {
   name: string;
@@ -175,7 +175,7 @@ async function morningBriefing() {
       // Mensaje diario = SOLO lo de HOY: primero pendientes/vencidas, luego tareas de hoy.
       // La semana y próximas semanas se ven con `tareas`.
       const todayTasks = tasks.filter((t) => isTaskDueOnDate(t, startOfToday));
-      const stillOverdue = tasks.filter((t) => t.dueDate && new Date(t.dueDate) < startOfToday && !isTaskDueOnDate(t, startOfToday));
+      const stillOverdue = tasks.filter((t) => isTaskOverdue(t, startOfToday));
       let taskLines = "";
       let cursor = 1;
       if (stillOverdue.length > 0) {

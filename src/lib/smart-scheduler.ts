@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMessage, sendProactiveMessage, sendAutomatedReminder } from "@/lib/whatsapp";
 import { generateSmartAlert, detectAnomalies, summarizeCompany, weeklyPerformanceReport } from "@/lib/ai-brain";
 import { subDays, differenceInHours } from "date-fns";
-import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, isTaskDueOnDate, ACCESS_ACTIONS } from "@/lib/task-utils";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, isTaskDueOnDate, isTaskOverdue, ACCESS_ACTIONS } from "@/lib/task-utils";
 
 let _sysUserId: string | null | undefined;
 async function resolveSystemUserId(): Promise<string | null> {
@@ -982,9 +982,7 @@ export async function sendBihourlyReminders(): Promise<{
       // Las de HOY (por fecha o por día fijo de la semana) — mismo criterio que "tareas de hoy"
       const todayTasks = allPending.filter((t) => isTaskDueOnDate(t, todayStart));
       // Vencidas de otros días (no reprogramadas a hoy)
-      const overdueTasks = allPending.filter(
-        (t) => t.dueDate && new Date(t.dueDate) < todayStart && !isTaskDueOnDate(t, todayStart)
-      );
+      const overdueTasks = allPending.filter((t) => isTaskOverdue(t, todayStart));
       const overdueOtherDays = overdueTasks.length;
       const upcoming = allPending.length - todayTasks.length - overdueOtherDays;
 

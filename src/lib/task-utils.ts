@@ -167,6 +167,37 @@ export function isTaskDueOnDate(
   return false;
 }
 
+// ¿Está VENCIDA una tarea? (para "vencidas primero", alertas y seguimiento de LUNA)
+//  - FIJA DIARIA (o fija sin día): NUNCA vencida → es la ocurrencia de cada día.
+//  - FIJA SEMANAL sin fecha: vencida si su día de la semana ya pasó (se corre día
+//    a día hasta completarse). Las de domingo solo aplican el domingo.
+//  - Cualquier otra (variables, fijas con fecha): vencida si su fecha es anterior
+//    a hoy y NO ocurre hoy.
+export function isTaskOverdue(
+  task: { dueDate: Date | string | null; type?: string | null; frequency?: string | null; dayOfWeek?: string | null },
+  today: Date = gtStartOfToday()
+): boolean {
+  // Diaria (o fija sin día): jamás vencida.
+  if (task.type === "FIJA" && (task.frequency === "DIARIA" || (!task.frequency && !task.dayOfWeek))) {
+    return false;
+  }
+  // Fija semanal SIN fecha concreta: vence cuando su día ya pasó (persiste hasta el sábado).
+  if (task.type === "FIJA" && task.frequency === "SEMANAL" && task.dayOfWeek && !task.dueDate) {
+    const target = WEEKDAY_MAP[String(task.dayOfWeek).toUpperCase()];
+    const w = getGuatemalaWallClock(today);
+    if (target === undefined || target === 0) return false;
+    return w.weekday !== 0 && w.weekday > target;
+  }
+  if (task.dueDate) {
+    const d = new Date(task.dueDate);
+    if (!isNaN(d.getTime()) && d < today) {
+      // Si aún así ocurre HOY (p. ej. diaria con fecha vieja), no es vencida.
+      return !isTaskDueOnDate(task, today);
+    }
+  }
+  return false;
+}
+
 // Próxima fecha de una tarea FIJA al completarse:
 // - SEMANAL con dayOfWeek → próximo día de la semana indicado (fecha concreta, para que no aparezca esta semana)
 // - DIARIA sin fecha → null (todos los días)
