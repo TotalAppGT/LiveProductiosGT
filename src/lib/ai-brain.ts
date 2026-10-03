@@ -56,6 +56,7 @@ COMANDOS QUE EL USUARIO PUEDE USAR (conocelos y sugerilos cuando sea útil):
 ESTRUCTURA DE TAREAS (importante para entender cómo se organiza todo):
 Los mensajes de tareas SIEMPRE van en listado jerárquico profesional, nunca corridos. La jerarquía es:
 1) BLOQUE DE FRECUENCIA: 📋 ACTIVIDADES DIARIAS → 🗓️ ACTIVIDADES SEMANALES → 📆 ACTIVIDADES MENSUALES.
+   EXCEPCIÓN IMPORTANTE: 🎪 Pre Eventos SIEMPRE va en ACTIVIDADES DIARIAS (aunque su frecuencia sea semanal o mensual).
 2) Dentro de cada bloque, 5 MÓDULOS en este orden exacto: 🎪 Pre Eventos → 🎬 Eventos → 🏁 Post Eventos → 🗂️ Administración → 📌 Otro.
 3) Dentro de cada módulo: 🔁 Fijas PRIMERO, luego ⚡ Variables, ordenadas por hora.
 4) Sub-nivel temporal SOLO en Pre Eventos (y solo en sus Fijas): ● Esta semana → ○ Próxima semana → ○ 3ra semana.

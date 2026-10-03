@@ -96,8 +96,10 @@ const FREQ_BLOCKS: { key: string; label: string; bg: string }[] = [
 ];
 
 // Bloque de frecuencia al que pertenece una tarea.
-// Las variables (DINAMICA) sin frecuencia caen en Diarias, junto a las fijas diarias.
+// REGLA ESPECIAL: Pre Eventos (con sub-niveles Esta/Próxima/3ra semana) SIEMPRE
+// va en el bloque DIARIO. Las variables sin frecuencia también caen en Diarias.
 function blockOfTask(t: Task): string {
+  if (moduleOfTask(t.category) === "PRE_EVENTO") return "DIARIA";
   if (t.frequency === "SEMANAL") return "SEMANAL";
   if (t.frequency === "MENSUAL") return "MENSUAL";
   return "DIARIA";

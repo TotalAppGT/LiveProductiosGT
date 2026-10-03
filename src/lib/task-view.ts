@@ -87,8 +87,12 @@ export function moduleOfTask(category?: string | null): string {
   return "OTRO";
 }
 
-// Bloque de frecuencia de una tarea (las variables sin frecuencia caen en Diarias)
+// Bloque de frecuencia de una tarea.
+// REGLA ESPECIAL: Pre Eventos (con sus sub-niveles Esta/Próxima/3ra semana)
+// SIEMPRE vive en el bloque DIARIO, aunque su frecuencia sea semanal/mensual.
+// Las variables sin frecuencia también caen en Diarias.
 export function blockOfTask(t: any): string {
+  if (moduleOfTask(t.category) === "PRE_EVENTO") return "DIARIA";
   if (t.frequency === "SEMANAL") return "SEMANAL";
   if (t.frequency === "MENSUAL") return "MENSUAL";
   return "DIARIA";
