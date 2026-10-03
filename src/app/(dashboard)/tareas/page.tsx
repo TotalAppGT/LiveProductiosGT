@@ -807,9 +807,13 @@ export default function TareasPage() {
     }
     return false;
   };
-  const viewTasks = visibleTasks
-    .filter((t) => !dayFilter || taskDayLabel(t) === dayFilter || (isDailyFixed(t) && dayFilter !== "Sin fecha"))
-    .filter(taskInViewWeek);
+  // Tareas que pasan el filtro de día (SIN restringir a la semana visible)
+  const viewTasksFiltered = visibleTasks
+    .filter((t) => !dayFilter || taskDayLabel(t) === dayFilter || (isDailyFixed(t) && dayFilter !== "Sin fecha"));
+  // Vista por DÍA: planificador de la semana visible
+  const viewTasks = viewTasksFiltered.filter(taskInViewWeek);
+  // Vista por FRECUENCIA: TODAS las tareas activas — nunca se pierde ninguna
+  const viewTasksAll = viewTasksFiltered;
 
   // Días (etiquetas) en que aparece una tarea dentro de la semana visible.
   // Una FIJA DIARIA con fecha (la ocurrencia regenerada al completarla) aparece
@@ -895,7 +899,7 @@ export default function TareasPage() {
     };
 
     for (const block of FREQ_BLOCKS) {
-      const blockTasks = viewTasks.filter((t) => blockOfTask(t) === block.key);
+      const blockTasks = viewTasksAll.filter((t) => blockOfTask(t) === block.key);
       if (blockTasks.length === 0) continue;
       sections.push({ key: `blk:${block.key}`, label: block.label, bg: block.bg, level: 0, tasks: [], count: blockTasks.length });
 
@@ -936,10 +940,11 @@ export default function TareasPage() {
 
   const sheetGroups = groupMode === "dia" ? buildDayGroups() : buildFrequencyGroups();
 
-  // Un encabezado se oculta si él mismo o algún antecesor está colapsado.
+  // Solo se oculta si un ANCESTRO está colapsado. El encabezado colapsado
+  // SIEMPRE queda visible para poder volver a expandirlo.
   const isSectionHidden = (key: string) => {
     for (const c of collapsedDays) {
-      if (key === c || key.startsWith(c + "|")) return true;
+      if (key.startsWith(c + "|")) return true;
     }
     return false;
   };
