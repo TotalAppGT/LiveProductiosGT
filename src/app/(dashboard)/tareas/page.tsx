@@ -909,6 +909,36 @@ export default function TareasPage() {
   //         └ "Fijas" primero, "Variables" después
   //             └ (solo Pre Eventos · Fijas) Esta semana / Próxima semana / 3ra semana
   // El día de la semana se aplica como FILTRO (chips de arriba), no como nivel.
+  // ¿La tarea corresponde al PERÍODO de su bloque? Así, al completarla,
+  // desaparece hasta su próxima ocurrencia (diaria→mañana, semanal→otra semana,
+  // mensual→otro mes), sin perderse nada del período actual.
+  const NOW = new Date();
+  const occursThisWeek = (t: Task) => {
+    for (let i = 0; i < 7; i++) {
+      if (taskOccursOnDate(t, new Date(viewMonday.getTime() + i * 86400000))) return true;
+    }
+    return false;
+  };
+  const occursThisMonth = (t: Task) => {
+    const first = new Date(NOW.getFullYear(), NOW.getMonth(), 1);
+    for (const d = new Date(first); d.getMonth() === NOW.getMonth(); d.setDate(d.getDate() + 1)) {
+      if (taskOccursOnDate(t, new Date(d))) return true;
+    }
+    return false;
+  };
+  const blockOccursNow = (t: Task, block: string) => {
+    if (dayFilter) return true; // el usuario filtró un día explícitamente
+    if (isTaskOverdueLocal(t)) return true;
+    if (block === "DIARIA") {
+      if (moduleOfTask(t.category) === "PRE_EVENTO") return true; // tablero de planificación
+      if (t.type !== "FIJA" && !t.dueDate) return true; // variable sin fecha
+      return taskOccursOnDate(t, NOW);
+    }
+    if (block === "SEMANAL") return occursThisWeek(t);
+    if (block === "MENSUAL") return occursThisMonth(t);
+    return true;
+  };
+
   function buildFrequencyGroups(): SheetSection[] {
     const sections: SheetSection[] = [];
     const dow = dayFilter ? (dayToDayOfWeek[dayFilter] || "") : "";
@@ -927,7 +957,7 @@ export default function TareasPage() {
     };
 
     for (const block of FREQ_BLOCKS) {
-      const blockTasks = viewTasksAll.filter((t) => blockOfTask(t) === block.key);
+      const blockTasks = viewTasksAll.filter((t) => blockOfTask(t) === block.key && blockOccursNow(t, block.key));
       if (blockTasks.length === 0) continue;
       sections.push({ key: `blk:${block.key}`, label: block.label, bg: block.bg, level: 0, tasks: [], count: blockTasks.length });
 
