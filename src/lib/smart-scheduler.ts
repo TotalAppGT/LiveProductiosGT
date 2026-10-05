@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendMessage, sendProactiveMessage, sendAutomatedReminder } from "@/lib/whatsapp";
+import { sendMessage, sendProactiveMessage, sendProactiveChunked, sendAutomatedReminder } from "@/lib/whatsapp";
 import { generateSmartAlert, detectAnomalies, summarizeCompany, weeklyPerformanceReport } from "@/lib/ai-brain";
 import { subDays, differenceInHours } from "date-fns";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, isTaskDueOnDate, isTaskOverdue, ACCESS_ACTIONS } from "@/lib/task-utils";
@@ -1024,12 +1024,8 @@ export async function sendBihourlyReminders(): Promise<{
       }
       message += `\n\n⚡ Para avanzar: *hecho 1* (o *hecho 1 2 3* para varias), *proceso 1*, *posponer 1*, *transferir 1 a [nombre]*.\n📅 Escribí *tareas* para ver toda la semana, o *recordatorios* para los recordatorios del día.`;
 
-      // WhatsApp limita a 4096 caracteres
-      if (message.length > 3950) {
-        message = message.slice(0, 3950) + "\n… (recortado — escribí *tareas* para ver todo)";
-      }
-
-      const sendRes = await sendProactiveMessage(to, message).catch(() => ({ ok: false, via: "none" as const, messageId: undefined }));
+      // Nunca recortar: si excede el límite de WhatsApp se trocea (todo llega).
+      const sendRes = await sendProactiveChunked(to, message);
 
       await prisma.whatsAppMessage.create({
         data: {

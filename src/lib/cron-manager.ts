@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
-import { sendMessage, sendProactiveMessage } from "@/lib/whatsapp";
+import { sendMessage, sendProactiveMessage, sendProactiveChunked } from "@/lib/whatsapp";
 import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireTaskReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
 import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate, isTaskOverdue, ACCESS_ACTIONS, guatemalaDate } from "@/lib/task-utils";
 
@@ -106,29 +106,6 @@ async function getAdminUsers() {
   });
 }
 
-// Envía un mensaje largo troceándolo (texto libre si está en ventana 24h, o
-// plantilla UTILITY fuera). Así NUNCA se recorta contenido (tareas/recordatorios).
-async function sendProactiveChunkedFull(to: string, message: string): Promise<{ count: number; messageId?: string; via: string }> {
-  const chunks: string[] = [];
-  let rem = message;
-  while (rem.length > 3900) {
-    let cut = rem.lastIndexOf("\n", 3900);
-    if (cut < 1950) cut = rem.lastIndexOf(" ", 3900);
-    if (cut <= 0) cut = 3900;
-    chunks.push(rem.slice(0, cut));
-    rem = rem.slice(cut).replace(/^\n+/, "");
-  }
-  chunks.push(rem);
-  let firstId: string | undefined;
-  let via = "none";
-  for (let i = 0; i < chunks.length; i++) {
-    const r = await sendProactiveMessage(to, chunks[i]).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
-    if (!firstId && r.messageId) { firstId = r.messageId; via = r.via; }
-    if (i < chunks.length - 1) await new Promise((res) => setTimeout(res, 500));
-  }
-  return { count: chunks.length, messageId: firstId, via };
-}
-
 async function morningBriefing() {
   console.log("[Cron] Ejecutando morning briefing (7:00 AM)");
 
@@ -170,38 +147,36 @@ async function morningBriefing() {
         take: 6,
       });
 
-      const { orderTasksByDayHour, groupTasksByDayText, formatTaskLine, formatTaskHierarchy } = await import("@/lib/task-view");
+      const { formatTaskHierarchy } = await import("@/lib/task-view");
 
-      // Mensaje diario = SOLO lo de HOY: primero pendientes/vencidas, luego tareas de hoy.
-      // La semana y próximas semanas se ven con `tareas`.
+      // Mensaje diario = SOLO lo de HOY (lo demás se consulta con `tareas`).
       const todayTasks = tasks.filter((t) => isTaskDueOnDate(t, startOfToday));
       const stillOverdue = tasks.filter((t) => isTaskOverdue(t, startOfToday));
-      let taskLines = "";
+      const todayLabel = startOfToday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
+
+      // Numeración continua entre mensajes (vencidas primero, luego las de hoy).
       let cursor = 1;
+      let overdueBlock = "";
       if (stillOverdue.length > 0) {
         const h = formatTaskHierarchy(stillOverdue, cursor);
-        taskLines += `⚠️ *VENCIDAS / PRIORIDAD (${h.ordered.length})*\n${h.text}\n\n`;
+        overdueBlock = `⚠️ *VENCIDAS (${h.ordered.length})*\n${h.text}`;
         cursor = h.next;
       }
+      let todayBlock = "";
       if (todayTasks.length > 0) {
-        const todayLabel = startOfToday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
-        // Listado jerárquico profesional: frecuencia → módulo → Fijas/Variables
         const h = formatTaskHierarchy(todayTasks, cursor);
-        taskLines += `📌 *TAREAS DE HOY — ${todayLabel} (${h.ordered.length})*\n${h.text}\n\n`;
+        todayBlock = `📌 *TAREAS DE HOY — ${todayLabel} (${h.ordered.length})*\n${h.text}`;
       }
-      taskLines = taskLines.trim();
-
-      const todayCount = todayTasks.length;
-      const stillCount = stillOverdue.length;
 
       // Saludo corto según la hora
       const hNow = wNow.hour;
       const saludo = hNow < 12 ? "Buenos días" : hNow < 18 ? "Buenas tardes" : "Buenas noches";
       const intro = `Luna 🌙 · ${saludo}, ${user.name.split(" ")[0]}`;
 
-      const eventLines = events
+      const todayEvents = events.filter((e) => new Date(e.date) <= endOfToday);
+      const eventLines = todayEvents
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .map((e) => `🎪 ${e.name} - ${new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })}`)
+        .map((e) => `🎪 *${e.name}* — ${new Date(e.date).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
         .join("\n");
 
       // ⏰ Recordatorios de HOY (se muestran en el mensaje del día; avisan a su hora)
@@ -265,68 +240,61 @@ async function morningBriefing() {
         }
       }
 
-      // Mensaje EXPRESS: empieza con Luna y va directo al contenido del día
-      const countIn = (s: string) => {
-        const m = s.match(/\((\d+)\)/);
-        return m ? parseInt(m[1], 10) : 0;
-      };
-      const remN = countIn(remindersLines);
-      const buyN = countIn(purchasesLines);
-      const cobN = countIn(cobrosLines);
-      const resumenParts: string[] = [];
-      if (stillCount > 0) resumenParts.push(`${stillCount} vencida${stillCount > 1 ? "s" : ""}`);
-      if (todayCount > 0) resumenParts.push(`${todayCount} tarea${todayCount === 1 ? "" : "s"} para hoy`);
-      if (remN > 0) resumenParts.push(`${remN} recordatorio${remN > 1 ? "s" : ""} hoy`);
-      if (buyN > 0) resumenParts.push(`${buyN} compra${buyN > 1 ? "s" : ""} hoy`);
-      if (cobN > 0) resumenParts.push(`${cobN} cobro${cobN > 1 ? "s" : ""} pendiente`);
-      if (events.length > 0) resumenParts.push(`${events.length} evento${events.length > 1 ? "s" : ""}`);
-      let resumen = "";
-      if (resumenParts.length > 0) {
-        resumen = `📋 ${resumenParts.join(" · ")}`;
-      }
+      // Orden de los 3 mensajes:
+      //   1) PRIORIDAD  → vencidas + recordatorios
+      //   2) HOY        → eventos del día + tareas del día
+      //   3) ADMIN      → compras + cobros (roles admin)
+      const prioPieces: string[] = [];
+      if (overdueBlock) prioPieces.push(overdueBlock);
+      if (remindersLines) prioPieces.push(remindersLines.trim());
+      const msg1 = prioPieces.length > 0 ? `🔥 *PRIORIDAD DEL DÍA*\n\n${prioPieces.join("\n\n")}` : "";
 
-      let fullMessage = `*${intro}*`;
-      if (resumen) fullMessage += `\n\n${resumen}`;
-      // Orden: primero vencidas/prioridad + tareas del día, luego recordatorios.
-      if (taskLines) fullMessage += `\n\n${taskLines}`;
-      if (remindersLines) fullMessage += `\n\n${remindersLines}`;
-      if (purchasesLines) fullMessage += `\n\n${purchasesLines}`;
-      if (cobrosLines) fullMessage += `\n\n${cobrosLines}`;
-      if (eventLines) fullMessage += `\n\n🎪 *Eventos (${events.length})*\n${eventLines}`;
-      if (fullMessage.length < 40) {
-        // Si no hay nada, igual se le avisa (todo al día)
-        fullMessage = `*${intro}*\n✅ Hoy no tienes pendientes. ¡Todo al día! 🎉`;
-      } else {
-        fullMessage += `\n\n_Escribí *tareas* o *menu* para ver más._`;
-      }
+      const todayPieces: string[] = [];
+      if (eventLines) todayPieces.push(`🎪 *EVENTOS DE HOY (${todayEvents.length})*\n${eventLines}`);
+      if (todayBlock) todayPieces.push(todayBlock);
+      const msg2 = todayPieces.length > 0
+        ? `${todayPieces.join("\n\n")}\n\n_Escribí *hecho N* · *posponer N* · *tareas* para ver la semana._`
+        : "";
+
+      const adminPieces: string[] = [];
+      if (purchasesLines) adminPieces.push(purchasesLines.trim());
+      if (cobrosLines) adminPieces.push(cobrosLines.trim());
+      const msg3 = adminPieces.length > 0 ? `💼 *ADMINISTRACIÓN DEL DÍA*\n\n${adminPieces.join("\n\n")}` : "";
 
       const to = user.whatsappNumber || user.phone;
-      if (to) {
-        // UN solo mensaje: evita el troceo (que causaba desorden y encabezado repetido de la plantilla)
-        let msgOut = fullMessage;
-        if (msgOut.length > 3900) msgOut = msgOut.slice(0, 3880) + "\n\n… (escribí *tareas* para ver todo el detalle)";
-        const res = await sendProactiveMessage(to, msgOut).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
-        const ok = res.ok;
-        const record = prisma.whatsAppMessage.create({
-          data: {
-            externalId: res.messageId,
-            userId: user.id,
-            toNumber: to,
-            message: `[BRIEFING] ${fullMessage}`,
-            type: "NOTIFICATION",
-            status: ok ? "SENT" : "FAILED",
-          },
-        });
-        const act = logActivity(
-          user.id,
-          "CRON_MORNING_BRIEFING",
-          ok ? `Briefing matutino enviado a ${user.name} (${to}) vía ${res.via}` : `FALLO envío briefing a ${user.name} (${to})`
-        );
-        await Promise.allSettled([record, act]);
-        if (!ok) console.error(`[Cron] Briefing NO enviado a ${user.name} (${to})`);
-      } else {
+      if (!to) {
         console.warn(`[Cron] ${user.name} sin número (whatsapp/phone) → sin briefing`);
+        continue;
       }
+
+      const messages = [msg1, msg2, msg3].filter((m) => !!m);
+      if (messages.length === 0) messages.push(`✅ *Hoy no tenés pendientes.* ¡Todo al día! 🎉`);
+      messages[0] = `*${intro}*\n\n${messages[0]}`;
+
+      let ok = false;
+      let firstId: string | undefined;
+      let via = "none";
+      for (let i = 0; i < messages.length; i++) {
+        const r = await sendProactiveChunked(to, messages[i]);
+        if (r.ok) { ok = true; if (!firstId) firstId = r.messageId; via = r.via; }
+        if (i < messages.length - 1) await new Promise((res) => setTimeout(res, 500));
+      }
+      await prisma.whatsAppMessage.create({
+        data: {
+          externalId: firstId,
+          userId: user.id,
+          toNumber: to,
+          message: `[BRIEFING] ${messages.join("\n\n———\n\n")}`,
+          type: "NOTIFICATION",
+          status: ok ? "SENT" : "FAILED",
+        },
+      });
+      await logActivity(
+        user.id,
+        "CRON_MORNING_BRIEFING",
+        ok ? `Briefing matutino enviado a ${user.name} (${to}) · ${messages.length} mensaje(s) · vía ${via}` : `FALLO envío briefing a ${user.name} (${to})`
+      );
+      if (!ok) console.error(`[Cron] Briefing NO enviado a ${user.name} (${to})`);
     } catch (error) {
       console.error(`[Cron] Error morning briefing for ${user.name}:`, error);
     }

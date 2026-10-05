@@ -296,6 +296,32 @@ export async function sendMessageChunked(to: string, text: string, limit = 3900)
   return anyOk;
 }
 
+/**
+ * Igual que sendProactiveMessage (texto libre dentro de la ventana 24h, o
+ * plantilla UTILITY fuera), pero trocea el contenido si excede el límite de
+ * WhatsApp. Se usa en briefings/recordatorios para NO recortar información.
+ */
+export async function sendProactiveChunked(
+  to: string,
+  message: string,
+  limit = 3900
+): Promise<{ count: number; ok: boolean; messageId?: string; via: string }> {
+  const chunks = splitMessage(message, limit);
+  let ok = false;
+  let messageId: string | undefined;
+  let via = "none";
+  for (let i = 0; i < chunks.length; i++) {
+    const r = await sendProactiveMessage(to, chunks[i]).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+    if (r.ok) {
+      ok = true;
+      if (!messageId) messageId = r.messageId;
+      via = r.via;
+    }
+    if (i < chunks.length - 1) await new Promise((res) => setTimeout(res, 500));
+  }
+  return { count: chunks.length, ok, messageId, via };
+}
+
 interface TemplateParameter {
   type: "text" | "currency" | "date_time";
   parameter_name?: string;
