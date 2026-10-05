@@ -754,7 +754,7 @@ export default function TareasPage() {
     ? filteredTasks.filter((t) => t.status === "COMPLETADA")
     : filteredTasks.filter((t) => t.status !== "COMPLETADA" && t.status !== "CANCELADA");
 
-  const dayGroupOrder = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+  const dayGroupOrder = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
   const dayBgMap: Record<string, string> = {
     Lunes: "bg-blue-600", Martes: "bg-indigo-600", "Miércoles": "bg-violet-600",
     Jueves: "bg-purple-600", Viernes: "bg-fuchsia-600", "Sábado": "bg-pink-600",
@@ -795,7 +795,8 @@ export default function TareasPage() {
   // Orden de días de la SEMANA VISIBLE (navegable por semanas/fechas)
   const todayLabel = new Date().toLocaleDateString("es-GT", { weekday: "long" });
   const todayCap = todayLabel.charAt(0).toUpperCase() + todayLabel.slice(1);
-  const todayIdx = dayGroupOrder.indexOf(todayCap);
+  const todayIdxRaw = dayGroupOrder.indexOf(todayCap);
+  const todayIdx = todayIdxRaw >= 0 ? todayIdxRaw : 0;
 
   // Lunes de la semana actual (hora de Guatemala)
   const nowD = new Date();
@@ -835,7 +836,7 @@ export default function TareasPage() {
   const viewTasksFiltered = visibleTasks
     .filter((t) => !dayFilter || taskDayLabel(t) === dayFilter || (isDailyFixed(t) && dayFilter !== "Sin fecha"));
   // Vista por DÍA: planificador de la semana visible
-  const viewTasks = viewTasksFiltered.filter(taskInViewWeek);
+  const viewTasks = viewTasksFiltered.filter((t) => taskInViewWeek(t) || moduleOfTask(t.category) === "PRE_EVENTO");
   // Vista por FRECUENCIA: TODAS las tareas activas — nunca se pierde ninguna
   const viewTasksAll = viewTasksFiltered;
 
