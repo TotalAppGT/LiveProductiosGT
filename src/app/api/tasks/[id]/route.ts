@@ -109,6 +109,7 @@ export async function PUT(
     } = body;
 
     const previousStatus = existingTask.status;
+    console.log("[TASK-PUT]", existingTask.title, "| rol=", auth.payload.role, "| ", previousStatus, "->", status, "| tipo=", existingTask.type, existingTask.frequency, existingTask.dayOfWeek || "");
     const statusChanged = status && status !== previousStatus;
 
     const task = await prisma.task.update({
