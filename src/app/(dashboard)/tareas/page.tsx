@@ -212,7 +212,7 @@ export default function TareasPage() {
   const [buyForm, setBuyForm] = useState({ title: "", amount: "", assignToId: "", dueDate: "", priority: "MEDIA" });
   const [reminders, setReminders] = useState<any[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [groupMode, setGroupMode] = useState<"fase" | "dia">("fase");
+  const [groupMode, setGroupMode] = useState<"fase" | "dia">("dia");
   const [dayFilter, setDayFilter] = useState("");
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [viewOffset, setViewOffset] = useState(0); // semanas desde la actual (0=esta semana)
@@ -882,13 +882,27 @@ export default function TareasPage() {
         byDay.get(dayLabel)!.push(t);
       }
     });
+    // Dentro de cada día: PRIORIDAD (vencidas primero), luego Fijas, luego Variables; y por hora.
+    const daySort = (a: Task, b: Task) => {
+      const oa = isTaskOverdueLocal(a) ? 0 : 1;
+      const ob = isTaskOverdueLocal(b) ? 0 : 1;
+      if (oa !== ob) return oa - ob;
+      const fa = a.type === "FIJA" ? 0 : 1;
+      const fb = b.type === "FIJA" ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      const hasManual = (a.sortOrder || 0) > 0 || (b.sortOrder || 0) > 0;
+      if (hasManual && a.sortOrder !== b.sortOrder) return (a.sortOrder || 0) - (b.sortOrder || 0);
+      const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return da - db;
+    };
     const orderedKeys = [...weekFromToday, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
     return orderedKeys.map((d) => ({
       key: `dia-${d}`,
-      label: d,
+      label: viewOffset === 0 && d === todayCap ? `📌 ${d} · Hoy` : d,
       bg: dayBgMap[d] || "bg-gray-600",
       level: 1,
-      tasks: byDay.get(d) || [],
+      tasks: (byDay.get(d) || []).sort(daySort),
     }));
   }
 
