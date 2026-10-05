@@ -302,10 +302,11 @@ async function morningBriefing() {
 
       const to = user.whatsappNumber || user.phone;
       if (to) {
-        // Si el mensaje es largo, se envía troceado por bloques (nunca recorta contenido).
-        const chunked = await sendProactiveChunkedFull(to, fullMessage).catch(() => ({ count: 0, via: "none", messageId: undefined as string | undefined }));
-        const ok = chunked.count > 0;
-        const res = { ok, via: chunked.via, messageId: chunked.messageId };
+        // UN solo mensaje: evita el troceo (que causaba desorden y encabezado repetido de la plantilla)
+        let msgOut = fullMessage;
+        if (msgOut.length > 3900) msgOut = msgOut.slice(0, 3880) + "\n\n… (escribí *tareas* para ver todo el detalle)";
+        const res = await sendProactiveMessage(to, msgOut).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+        const ok = res.ok;
         const record = prisma.whatsAppMessage.create({
           data: {
             externalId: res.messageId,
