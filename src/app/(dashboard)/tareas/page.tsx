@@ -814,6 +814,17 @@ export default function TareasPage() {
     ? [...dayGroupOrder.slice(todayIdx), ...dayGroupOrder.slice(0, todayIdx)]
     : [...dayGroupOrder];
 
+  // Al entrar: DÍA DE HOY desplegado y los demás contraídos (para ver día por día).
+  useEffect(() => {
+    if (groupMode !== "dia") return;
+    const s = new Set<string>();
+    for (const d of dayGroupOrder) {
+      if (!(viewOffset === 0 && d === todayCap)) s.add(`d:${d}`);
+    }
+    setCollapsedDays(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupMode, viewOffset]);
+
   // Una tarea pertenece a la semana visible si su fecha está dentro, o es fija recurrente
   const taskInViewWeek = (t: Task): boolean => {
     const toKey = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
@@ -920,9 +931,9 @@ export default function TareasPage() {
       const isToday = viewOffset === 0 && dayLabel === todayCap;
       sections.push({
         key: `d:${dayLabel}`,
-        label: isToday ? `📌 ${dayLabel.toUpperCase()} · HOY` : dayLabel.toUpperCase(),
+        label: isToday ? `⭐ ${dayLabel.toUpperCase()} · HOY` : `📅 ${dayLabel.toUpperCase()}`,
         bg: dayBgMap[dayLabel] || "bg-gray-600",
-        level: 0, tasks: [], count: dayTasks.length,
+        level: 0, tasks: [], count: dayTasks.length, highlight: isToday,
       });
 
       for (const block of FREQ_BLOCKS) {
@@ -940,7 +951,7 @@ export default function TareasPage() {
 
           if (fijas.length > 0) {
             const fKey = `d:${dayLabel}|blk:${block.key}|mod:${mod.key}|t:FIJA`;
-            sections.push({ key: fKey, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 3, tasks: [], count: fijas.length, insertCategory: mod.key, insertType: "FIJA" });
+            sections.push({ key: fKey, label: "🔁 Fijas", bg: "bg-indigo-100 dark:bg-indigo-900/40", level: 3, tasks: [], count: fijas.length, insertCategory: mod.key, insertType: "FIJA" });
             if (mod.key === "PRE_EVENTO") {
               for (const sub of PRE_EVENTO_SUBLEVELS) {
                 const subTasks = fijas.filter((t) => sub.cats.includes(String(t.category)));
@@ -952,7 +963,7 @@ export default function TareasPage() {
             }
           }
           if (variables.length > 0) {
-            sections.push({ key: `d:${dayLabel}|blk:${block.key}|mod:${mod.key}|t:VAR`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 3, tasks: variables, insertCategory: mod.key, insertType: "DINAMICA" });
+            sections.push({ key: `d:${dayLabel}|blk:${block.key}|mod:${mod.key}|t:VAR`, label: "⚡ Variables", bg: "bg-amber-100 dark:bg-amber-900/40", level: 3, tasks: variables, insertCategory: mod.key, insertType: "DINAMICA" });
           }
         }
       }
@@ -971,6 +982,7 @@ export default function TareasPage() {
     insertCategory?: string;
     insertType?: string;
     insertDayOfWeek?: string;
+    highlight?: boolean;
   }
   // Agrupación JERÁRQUICA por FRECUENCIA (regla de negocio):
   //   BLOQUE (Diarias / Semanales / Mensuales)
@@ -1044,7 +1056,7 @@ export default function TareasPage() {
 
         if (fijas.length > 0) {
           const fKey = `blk:${block.key}|mod:${mod.key}|t:FIJA`;
-          sections.push({ key: fKey, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: [], count: fijas.length, insertCategory: mod.key, insertType: "FIJA", insertDayOfWeek: dow });
+          sections.push({ key: fKey, label: "🔁 Fijas", bg: "bg-indigo-100 dark:bg-indigo-900/40", level: 2, tasks: [], count: fijas.length, insertCategory: mod.key, insertType: "FIJA", insertDayOfWeek: dow });
           if (mod.key === "PRE_EVENTO") {
             // Sub-nivel temporal EXCLUSIVO de Pre Eventos · Fijas
             for (const sub of PRE_EVENTO_SUBLEVELS) {
@@ -1058,7 +1070,7 @@ export default function TareasPage() {
         }
 
         if (variables.length > 0) {
-          sections.push({ key: `blk:${block.key}|mod:${mod.key}|t:VAR`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 2, tasks: variables, insertCategory: mod.key, insertType: "DINAMICA", insertDayOfWeek: dow });
+          sections.push({ key: `blk:${block.key}|mod:${mod.key}|t:VAR`, label: "⚡ Variables", bg: "bg-amber-100 dark:bg-amber-900/40", level: 2, tasks: variables, insertCategory: mod.key, insertType: "DINAMICA", insertDayOfWeek: dow });
         }
       }
     }
@@ -1653,7 +1665,7 @@ export default function TareasPage() {
                       return (
                       <div key={group.key + gi}>
                         {/* Fila de encabezado: bloque / módulo / Fijas-Variables / sub-nivel */}
-                        <div className={`${group.bg} flex items-center justify-between ${
+                        <div className={`${group.bg} flex items-center justify-between ${(group as any).highlight ? "ring-2 ring-inset ring-yellow-300" : ""} ${
                           group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white cursor-pointer select-none"
                           : group.level === 1 ? "px-3 py-1 text-[11px] font-bold text-white cursor-pointer select-none"
                           : group.level === 2 ? "px-4 py-1 text-[11px] font-semibold text-white"
