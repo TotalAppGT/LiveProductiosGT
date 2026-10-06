@@ -871,39 +871,93 @@ export default function TareasPage() {
     return [taskDayLabel(t)];
   }
 
-  // Agrupación por DÍA (Lunes, Martes...) como en el chat
+  // ============================================================
+  // ESTRUCTURA ESTÁNDAR (igual que el mensaje de LUNA):
+  //   DÍA DE LA SEMANA (hoy primero)
+  //     └ BLOQUE (ACTIVIDADES DIARIAS / SEMANALES / MENSUALES)
+  //         └ MÓDULO (Pre Eventos → Eventos → Post Eventos → Administración → Otro)
+  //             └ "Fijas" primero, "Variables" después
+  //                 └ (solo Pre Eventos · Fijas) Esta / Próxima / 3ra semana
+  // Al tope: VENCIDAS/PRIORIDAD con TODAS las tareas vencidas enumeradas.
+  // ============================================================
   function buildDayGroups(): SheetSection[] {
-    const byDay = new Map<string, Task[]>();
-    viewTasks.forEach((t) => {
-      // Las fijas diarias aparecen en TODOS los días de la semana visible.
-      const days = taskDaysInView(t);
-      for (const dayLabel of days) {
-        if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
-        byDay.get(dayLabel)!.push(t);
-      }
-    });
-    // Dentro de cada día: PRIORIDAD (vencidas primero), luego Fijas, luego Variables; y por hora.
-    const daySort = (a: Task, b: Task) => {
-      const oa = isTaskOverdueLocal(a) ? 0 : 1;
-      const ob = isTaskOverdueLocal(b) ? 0 : 1;
-      if (oa !== ob) return oa - ob;
-      const fa = a.type === "FIJA" ? 0 : 1;
-      const fb = b.type === "FIJA" ? 0 : 1;
-      if (fa !== fb) return fa - fb;
+    const sections: SheetSection[] = [];
+    const sortByHour = (a: Task, b: Task) => {
       const hasManual = (a.sortOrder || 0) > 0 || (b.sortOrder || 0) > 0;
       if (hasManual && a.sortOrder !== b.sortOrder) return (a.sortOrder || 0) - (b.sortOrder || 0);
       const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
       const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
       return da - db;
     };
-    const orderedKeys = [...weekFromToday, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
-    return orderedKeys.map((d) => ({
-      key: `dia-${d}`,
-      label: viewOffset === 0 && d === todayCap ? `📌 ${d} · Hoy` : d,
-      bg: dayBgMap[d] || "bg-gray-600",
-      level: 1,
-      tasks: (byDay.get(d) || []).sort(daySort),
-    }));
+
+    // 1) PRIORIDAD — todas las vencidas enumeradas (como recordatorios)
+    const overdue = visibleTasks.filter((t) => isTaskOverdueLocal(t)).sort((a, b) => {
+      const pa = a.priority === "URGENTE" || a.priority === "ALTA" ? 0 : 1;
+      const pb = b.priority === "URGENTE" || b.priority === "ALTA" ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return da - db;
+    });
+    if (overdue.length > 0) {
+      sections.push({ key: "PRIORIDAD", label: `⚠️ VENCIDAS / PRIORIDAD (${overdue.length})`, bg: "bg-red-600", level: 0, tasks: overdue });
+    }
+
+    // 2) DÍAS — hoy primero, luego el resto
+    const byDay = new Map<string, Task[]>();
+    viewTasks.forEach((t) => {
+      if (isTaskOverdueLocal(t)) return;
+      for (const dayLabel of taskDaysInView(t)) {
+        if (!byDay.has(dayLabel)) byDay.set(dayLabel, []);
+        byDay.get(dayLabel)!.push(t);
+      }
+    });
+
+    const orderedDays = [...weekFromToday, ...(byDay.has("Sin fecha") ? ["Sin fecha"] : [])];
+    for (const dayLabel of orderedDays) {
+      const dayTasks = byDay.get(dayLabel) || [];
+      if (dayTasks.length === 0) continue;
+      const isToday = viewOffset === 0 && dayLabel === todayCap;
+      sections.push({
+        key: `d:${dayLabel}`,
+        label: isToday ? `📌 ${dayLabel.toUpperCase()} · HOY` : dayLabel.toUpperCase(),
+        bg: dayBgMap[dayLabel] || "bg-gray-600",
+        level: 0, tasks: [], count: dayTasks.length,
+      });
+
+      for (const block of FREQ_BLOCKS) {
+        const blockTasks = dayTasks.filter((t) => blockOfTask(t) === block.key);
+        if (blockTasks.length === 0) continue;
+        sections.push({ key: `d:${dayLabel}|blk:${block.key}`, label: block.label, bg: "bg-slate-700", level: 1, tasks: [], count: blockTasks.length });
+
+        for (const mod of MODULE_DEFS) {
+          const modTasks = blockTasks.filter((t) => moduleOfTask(t.category) === mod.key);
+          if (modTasks.length === 0) continue;
+          sections.push({ key: `d:${dayLabel}|blk:${block.key}|mod:${mod.key}`, label: mod.label, bg: mod.bg, level: 2, tasks: [], count: modTasks.length, insertCategory: mod.key });
+
+          const fijas = modTasks.filter((t) => t.type === "FIJA").sort(sortByHour);
+          const variables = modTasks.filter((t) => t.type !== "FIJA").sort(sortByHour);
+
+          if (fijas.length > 0) {
+            const fKey = `d:${dayLabel}|blk:${block.key}|mod:${mod.key}|t:FIJA`;
+            sections.push({ key: fKey, label: "🔁 Fijas", bg: "bg-gray-300 dark:bg-gray-700", level: 3, tasks: [], count: fijas.length, insertCategory: mod.key, insertType: "FIJA" });
+            if (mod.key === "PRE_EVENTO") {
+              for (const sub of PRE_EVENTO_SUBLEVELS) {
+                const subTasks = fijas.filter((t) => sub.cats.includes(String(t.category)));
+                if (subTasks.length === 0) continue;
+                sections.push({ key: `${fKey}|s:${sub.key}`, label: sub.label, bg: "bg-blue-50 dark:bg-blue-900/30", level: 4, tasks: subTasks, insertCategory: sub.cats[sub.cats.length - 1], insertType: "FIJA" });
+              }
+            } else {
+              sections[sections.length - 1].tasks = fijas;
+            }
+          }
+          if (variables.length > 0) {
+            sections.push({ key: `d:${dayLabel}|blk:${block.key}|mod:${mod.key}|t:VAR`, label: "⚡ Variables", bg: "bg-gray-300 dark:bg-gray-700", level: 3, tasks: variables, insertCategory: mod.key, insertType: "DINAMICA" });
+          }
+        }
+      }
+    }
+    return sections;
   }
 
   // Agrupación jerárquica: DÍA → FASE (Pre/Evento/Post) → FIJAS/VARIABLES
@@ -996,7 +1050,7 @@ export default function TareasPage() {
             for (const sub of PRE_EVENTO_SUBLEVELS) {
               const subTasks = fijas.filter((t) => sub.cats.includes(String(t.category)));
               if (subTasks.length === 0) continue;
-              sections.push({ key: `${fKey}|s:${sub.key}`, label: sub.label, bg: "bg-blue-50 dark:bg-blue-900/30", level: 3, tasks: subTasks, insertCategory: sub.cats[sub.cats.length - 1], insertType: "FIJA", insertDayOfWeek: dow });
+              sections.push({ key: `${fKey}|s:${sub.key}`, label: sub.label, bg: "bg-blue-50 dark:bg-blue-900/30", level: 4, tasks: subTasks, insertCategory: sub.cats[sub.cats.length - 1], insertType: "FIJA", insertDayOfWeek: dow });
             }
           } else {
             sections[sections.length - 1].tasks = fijas;
@@ -1601,12 +1655,13 @@ export default function TareasPage() {
                         {/* Fila de encabezado: bloque / módulo / Fijas-Variables / sub-nivel */}
                         <div className={`${group.bg} flex items-center justify-between ${
                           group.level === 0 ? "px-2 py-1.5 text-[12px] font-bold text-white cursor-pointer select-none"
-                          : group.level === 1 ? "px-3 py-1 text-[11px] font-semibold text-white"
-                          : group.level === 2 ? "px-4 py-0.5 text-[10px] font-semibold text-gray-700 dark:text-gray-200"
+                          : group.level === 1 ? "px-3 py-1 text-[11px] font-bold text-white cursor-pointer select-none"
+                          : group.level === 2 ? "px-4 py-1 text-[11px] font-semibold text-white"
+                          : group.level === 3 ? "px-5 py-0.5 text-[10px] font-semibold text-gray-700 dark:text-gray-200"
                           : "px-6 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300"
                         }`}>
                           <span className="flex items-center gap-1">
-                            {group.level === 0 && (
+                            {group.level <= 1 && (
                               <button
                                 onClick={() => {
                                   const k = group.key;
