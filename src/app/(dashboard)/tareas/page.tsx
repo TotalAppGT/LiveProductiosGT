@@ -1011,8 +1011,18 @@ export default function TareasPage() {
     if (dayFilter) return true; // el usuario filtró un día explícitamente
     if (isTaskOverdueLocal(t)) return true;
     if (block === "DIARIA") {
-      if (moduleOfTask(t.category) === "PRE_EVENTO") return true; // tablero de planificación
-      if (t.type !== "FIJA" && !t.dueDate) return true; // variable sin fecha
+      if (moduleOfTask(t.category) === "PRE_EVENTO") {
+        const cat = String(t.category);
+        // Próxima / 3ra semana: planificación, siempre visibles
+        if (cat.includes("PROXIMA") || cat.includes("3RA")) return true;
+        // Esta semana / genérico: visible, salvo que ya se haya regenerado a una semana futura (recién completada)
+        if (t.dueDate) {
+          const d = new Date(t.dueDate);
+          if (gtDateKey(d) > gtDateKey(viewSunday)) return false;
+        }
+        return true;
+      }
+      if (t.type !== "FIJA" && !t.dueDate) return true;
       return taskOccursOnDate(t, NOW);
     }
     if (block === "SEMANAL") return occursThisWeek(t);
