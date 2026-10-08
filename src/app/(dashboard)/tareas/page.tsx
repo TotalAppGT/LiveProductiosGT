@@ -858,6 +858,12 @@ export default function TareasPage() {
   const dayDateByLabel: Record<string, Date> = {};
   dayGroupOrder.forEach((label, i) => { dayDateByLabel[label] = new Date(viewMonday.getTime() + i * 86400000); });
   function taskDaysInView(t: Task): string[] {
+    // Ocurrencia FUTURA (la que se regenera al completar una fija): no debe
+    // aparecer hasta que su semana entre en la vista (evita el bucle al completar).
+    if (t.dueDate) {
+      const dd = new Date(t.dueDate);
+      if (!isNaN(dd.getTime()) && toKeyGT(dd) > toKeyGT(viewSunday)) return [];
+    }
     if (isDailyFixed(t)) {
       if (!t.dueDate) return weekFromToday;
       const dd = new Date(t.dueDate);
