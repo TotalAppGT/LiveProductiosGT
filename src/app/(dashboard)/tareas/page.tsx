@@ -1667,7 +1667,7 @@ export default function TareasPage() {
                 </div>
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 {/* Cabecera de hoja de cálculo */}
-                <div className="grid grid-cols-12 gap-1 px-2 py-1.5 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 min-w-[720px] sticky top-0 z-10">
+                <div className="hidden md:grid grid-cols-12 gap-1 px-2 py-1.5 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 min-w-[720px] sticky top-0 z-10">
                   <div className="col-span-1 text-center">#</div>
                   <div className="col-span-5">Tarea</div>
                   <div className="col-span-3">Día / Hora</div>
@@ -1675,7 +1675,7 @@ export default function TareasPage() {
                   <div className="col-span-2 text-right">Acciones</div>
                 </div>
                 <div className="overflow-x-auto">
-                  <div className="min-w-[720px]">
+                  <div className="md:min-w-[720px]">
                     {sheetGroups.map((group, gi) => {
                       if (isSectionHidden(group.key)) return null;
                       return (
@@ -1724,9 +1724,9 @@ export default function TareasPage() {
                           </div>
                         </div>
                         {group.tasks.map((task, idx) => (
+                          <div key={task.id}>
                           <div
-                            key={task.id}
-                            className={`grid grid-cols-12 gap-1 px-2 py-1 text-[13px] items-center border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
+                            className={`hidden md:grid grid-cols-12 gap-1 px-2 py-1 text-[13px] items-center border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
                               task.status === "COMPLETADA" ? "bg-green-50/50 dark:bg-green-900/10" : idx % 2 === 1 ? "bg-gray-50/60 dark:bg-gray-800/30" : ""
                             }`}
                           >
@@ -1857,6 +1857,91 @@ export default function TareasPage() {
                                 </button>
                               )}
                             </div>
+                          </div>
+
+                          {/* ===== Vista MÓVIL: tarjeta legible; tocar para expandir la descripción ===== */}
+                          <div className="md:hidden border-b border-gray-100 dark:border-gray-800 px-3 py-2">
+                            <div className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedTasks.has(task.id)}
+                                onChange={() => toggleSelect(task.id)}
+                                className="mt-1 rounded border-gray-300 dark:border-gray-600 w-4 h-4 shrink-0 cursor-pointer"
+                                title="Seleccionar"
+                              />
+                              {task.status !== "COMPLETADA" ? (
+                                <button
+                                  onClick={() => updateTaskStatus(task.id, "COMPLETADA")}
+                                  className="mt-0.5 w-6 h-6 rounded-full border-2 border-green-400 hover:bg-green-100 flex items-center justify-center text-green-500 shrink-0"
+                                  title="Marcar realizado"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
+                                <CheckCircle2 className="mt-0.5 w-5 h-5 text-green-500 shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleExpand(task.id)}>
+                                <p className={`text-[14px] leading-snug font-medium whitespace-normal break-words ${task.status === "COMPLETADA" ? "line-through text-gray-400" : "text-gray-900 dark:text-white"}`}>
+                                  {task.title}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                                  <span className="font-medium text-gray-600 dark:text-gray-300">
+                                    {task.type === "FIJA"
+                                      ? (isDailyFixed(task) ? "🔁 Todos los días" : `🔁 ${task.dayOfWeek ? DOW_TO_LABEL[String(task.dayOfWeek).toUpperCase()] : "Fija"}`)
+                                      : (task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" }) : "Sin fecha")}
+                                  </span>
+                                  {task.dueDate && (
+                                    <span>{new Date(task.dueDate).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}</span>
+                                  )}
+                                  {task.assignedTo && <span>· {task.assignedTo.name.split(" ")[0]}</span>}
+                                  {isTaskOverdueLocal(task) && <span className="text-red-500 font-semibold">⚠️ vencida</span>}
+                                  <Badge size="sm" color={taskPriorityColor(task.priority)}>{taskPriorityLabel(task.priority)}</Badge>
+                                  <Badge size="sm" color={taskStatusColor(task.status)}>{taskStatusLabel(task.status)}</Badge>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => toggleExpand(task.id)}
+                                className="p-1 -mr-1 text-gray-400 shrink-0"
+                                title={expandedTasks.has(task.id) ? "Ocultar detalle" : "Ver detalle"}
+                              >
+                                {expandedTasks.has(task.id) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                              </button>
+                            </div>
+
+                            {expandedTasks.has(task.id) && (
+                              <div className="mt-2 ml-6 pl-3 border-l-2 border-blue-200 dark:border-blue-900 space-y-2">
+                                {task.description ? (
+                                  <div>
+                                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Descripción</p>
+                                    <p className="text-[13px] text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words">{task.description}</p>
+                                  </div>
+                                ) : (
+                                  <p className="text-[12px] text-gray-400 italic">Sin descripción</p>
+                                )}
+                                {task.comments && (
+                                  <div>
+                                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Comentarios</p>
+                                    <p className="text-[13px] text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words">{task.comments}</p>
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {task.status !== "COMPLETADA" && (
+                                    <Button variant="success" size="sm" onClick={() => updateTaskStatus(task.id, "COMPLETADA")}>Completar</Button>
+                                  )}
+                                  {task.status === "PENDIENTE" && (
+                                    <Button variant="outline" size="sm" onClick={() => updateTaskStatus(task.id, "EN_PROCESO")}>En proceso</Button>
+                                  )}
+                                  {task.status !== "COMPLETADA" && (
+                                    <Button variant="outline" size="sm" onClick={() => updateTaskStatus(task.id, "REPROGRAMADA")}>Posponer</Button>
+                                  )}
+                                  <Button variant="outline" size="sm" onClick={() => setEditingTask(task)}>Editar</Button>
+                                  <Button variant="ghost" size="sm" onClick={() => toggleTaskAsReminder(task)}>
+                                    {task.asReminder ? "🔔 Quitar" : "🔔 Recordar"}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                           </div>
                         ))}
                       </div>
