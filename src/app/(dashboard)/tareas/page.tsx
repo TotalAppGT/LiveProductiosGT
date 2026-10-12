@@ -310,23 +310,39 @@ export default function TareasPage() {
     fetchReminders();
   }, [fetchTasks, fetchUsers, fetchPurchases, fetchReminders]);
 
+  // Llama al endpoint de estado SIN refetch ni toast (para reusar en masivo)
+  async function putTaskStatus(taskId: string, status: TaskStatus): Promise<boolean> {
+    const res = await fetch(`/api/tasks/${taskId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status }),
+    });
+    const json: ApiResponse<Task> = await res.json().catch(() => ({ success: false } as ApiResponse<Task>));
+    return !!json.success;
+  }
+
+  // Quita del listado local las tareas que se completan/cancelan (feedback inmediato)
+  function removeLocally(ids: string[]) {
+    const set = new Set(ids);
+    setTasks((prev) => prev.filter((t) => !set.has(t.id)));
+    setSelectedTasks((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  }
+
   async function updateTaskStatus(taskId: string, status: TaskStatus) {
     try {
-      const res = await fetch(`/api/tasks/${taskId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status }),
-      });
-      const json: ApiResponse<Task> = await res.json();
-      if (json.success) {
-        toast.success("Tarea actualizada");
-        fetchTasks();
-      } else {
-        throw new Error(json.error || "Error");
-      }
+      const ok = await putTaskStatus(taskId, status);
+      if (!ok) throw new Error("Error al actualizar");
+      // Al completar (o cancelar), la tarea sale del listado de inmediato.
+      if (status === "COMPLETADA" || status === "CANCELADA") removeLocally([taskId]);
+      toast.success(status === "COMPLETADA" ? "Tarea completada ✅" : "Tarea actualizada");
+      fetchTasks();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al actualizar");
     }
@@ -355,12 +371,16 @@ export default function TareasPage() {
 
   async function batchUpdateStatus(status: TaskStatus) {
     if (selectedTasks.size === 0) return;
+    const ids = Array.from(selectedTasks);
     try {
-      await Promise.all(
-        Array.from(selectedTasks).map((id) => updateTaskStatus(id, status))
-      );
-      setSelectedTasks(new Set());
-      toast.success(`${selectedTasks.size} tareas actualizadas`);
+      // Un solo lote de PUTs (sin refetch por cada uno) → evita la carrera de N refetch
+      const results = await Promise.all(ids.map((id) => putTaskStatus(id, status)));
+      const okCount = results.filter(Boolean).length;
+      // Al completar/cancelar, salen del listado de inmediato; luego 1 solo refetch
+      if (status === "COMPLETADA" || status === "CANCELADA") removeLocally(ids);
+      else setSelectedTasks(new Set());
+      toast.success(`${okCount} tarea${okCount === 1 ? "" : "s"} actualizada${okCount === 1 ? "" : "s"}`);
+      fetchTasks();
     } catch {
       toast.error("Error en actualización masiva");
     }
@@ -369,14 +389,15 @@ export default function TareasPage() {
   async function batchDeleteTasks() {
     if (selectedTasks.size === 0) return;
     if (!confirm(`¿Eliminar ${selectedTasks.size} tareas seleccionadas?`)) return;
+    const ids = Array.from(selectedTasks);
     try {
       await Promise.all(
-        Array.from(selectedTasks).map((id) =>
+        ids.map((id) =>
           fetch(`/api/tasks/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
         )
       );
-      setSelectedTasks(new Set());
-      toast.success(`${selectedTasks.size} tareas eliminadas`);
+      removeLocally(ids);
+      toast.success(`${ids.length} tareas eliminadas`);
       fetchTasks();
     } catch {
       toast.error("Error al eliminar masivamente");
