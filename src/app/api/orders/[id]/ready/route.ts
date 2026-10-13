@@ -33,19 +33,9 @@ export async function POST(
       }
     }
 
-    // Descontar inventario
-    for (const item of order.items) {
-      if (item.inventoryItemId) {
-        await prisma.inventoryItem.update({
-          where: { id: item.inventoryItemId },
-          data: {
-            quantity: { decrement: item.quantity },
-            status: "ASIGNADO",
-          },
-        });
-      }
-    }
-
+    // El inventario NO se descuenta en el campo quantity: la disponibilidad se
+    // calcula por FECHAS desde los cuadros activos (motor de disponibilidad).
+    // Marcar el cuadro como LISTO lo vuelve "comprometido" en sus fechas.
     await prisma.order.update({
       where: { id },
       data: { status: "LISTO", sentAt: new Date(), readyById: auth.payload.userId },
@@ -57,7 +47,7 @@ export async function POST(
         action: "PEDIDO_LISTO",
         resource: "ORDER",
         resourceId: id,
-        details: `Pedido #${order.orderNumber} marcado como LISTO, inventario descontado`,
+        details: `Cuadro #${order.orderNumber} marcado como LISTO (inventario comprometido en sus fechas)`,
       },
     });
 
@@ -77,7 +67,7 @@ export async function POST(
       }
     }
 
-    return NextResponse.json({ success: true, message: "Pedido listo, inventario descontado y bodega notificada" });
+    return NextResponse.json({ success: true, message: "Cuadro listo, inventario comprometido y bodega notificada" });
   } catch (error) {
     console.error("Error en ready:", error);
     return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });

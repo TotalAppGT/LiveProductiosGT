@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
+import { parseGTInputDate } from "@/lib/task-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,7 +33,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { eventName, items, templateId } = body;
+    const {
+      eventName, items, templateId,
+      clientName, eventLocation, guestCount, eventDate, eventEndDate, contractNotes,
+    } = body;
 
     if (!eventName) {
       return NextResponse.json({ success: false, error: "Nombre del evento requerido" }, { status: 400 });
@@ -46,6 +50,12 @@ export async function POST(request: NextRequest) {
       data: {
         orderNumber,
         eventName,
+        clientName: clientName || null,
+        eventLocation: eventLocation || null,
+        guestCount: guestCount ? parseInt(String(guestCount), 10) : null,
+        eventDate: parseGTInputDate(eventDate),
+        eventEndDate: parseGTInputDate(eventEndDate),
+        contractNotes: contractNotes || null,
         templateId: templateId || null,
         createdById: auth.payload.userId,
         items: {

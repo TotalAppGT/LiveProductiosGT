@@ -32,6 +32,12 @@ export default function PedidosPage() {
 
   // Create form
   const [eventName, setEventName] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [eventLocation, setEventLocation] = useState("");
+  const [guestCount, setGuestCount] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [eventEndDate, setEventEndDate] = useState("");
+  const [contractNotes, setContractNotes] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("AUDIO");
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
   const [creating, setCreating] = useState(false);
@@ -70,13 +76,22 @@ export default function PedidosPage() {
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ eventName, items: selectedItems }),
+        body: JSON.stringify({
+          eventName, items: selectedItems,
+          clientName, eventLocation, guestCount, eventDate, eventEndDate, contractNotes,
+        }),
       });
       const json = await res.json();
       if (json.success) {
-        toast.success(`Pedido #${json.data.orderNumber} creado`);
+        toast.success(`Cuadro #${json.data.orderNumber} creado`);
         setShowCreate(false);
         setEventName("");
+        setClientName("");
+        setEventLocation("");
+        setGuestCount("");
+        setEventDate("");
+        setEventEndDate("");
+        setContractNotes("");
         setSelectedItems([]);
         fetchData();
       } else toast.error(json.error || "Error");
@@ -131,10 +146,10 @@ export default function PedidosPage() {
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Package className="w-6 h-6" /> Pedidos a Bodega
+          <Package className="w-6 h-6" /> Cuadros de Evento
         </h1>
         <Button onClick={() => setShowCreate(true)}>
-          <Plus className="w-4 h-4 mr-1" /> Nuevo Pedido
+          <Plus className="w-4 h-4 mr-1" /> Nuevo Cuadro
         </Button>
       </div>
 
@@ -178,9 +193,21 @@ export default function PedidosPage() {
       </div>
 
       {/* Modal crear pedido */}
-      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Nuevo Pedido a Bodega" size="lg">
+      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Nuevo Cuadro de Evento" size="lg">
         <div className="space-y-4 p-1">
           <Input label="Nombre del evento" value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="Ej: Boda Pérez - Sábado" />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input label="Cliente" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Nombre del cliente" />
+            <Input label="Lugar" value={eventLocation} onChange={(e) => setEventLocation(e.target.value)} placeholder="Lugar del evento" />
+            <Input label="Fecha" type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
+            <Input label="Fecha fin (opcional)" type="date" value={eventEndDate} onChange={(e) => setEventEndDate(e.target.value)} />
+            <Input label="Invitados" type="number" value={guestCount} onChange={(e) => setGuestCount(e.target.value)} placeholder="150" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Equipo contratado / notas</label>
+            <textarea value={contractNotes} onChange={(e) => setContractNotes(e.target.value)} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Ej: Dj completo, audio ceremonia, pista de baile 5x5..." />
+          </div>
 
           {templates.length > 0 && (
             <div>
@@ -275,6 +302,23 @@ export default function PedidosPage() {
 function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; onClose: () => void; token: string; onUpdated: () => void }) {
   const [items, setItems] = useState<any[]>(order.items || []);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(true);
+
+  const loadAnalysis = useCallback(async () => {
+    setAnalysisLoading(true);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/analysis`, { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) setAnalysis(json.data);
+    } catch {
+      // silencioso
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }, [order.id, token]);
+
+  useEffect(() => { loadAnalysis(); }, [loadAnalysis]);
 
   async function refresh() {
     const res = await fetch(`/api/orders/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -345,7 +389,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
       headers: { Authorization: `Bearer ${token}` },
     });
     const json = await res.json();
-    if (json.success) { toast.success(json.message); refresh(); onUpdated(); }
+    if (json.success) { toast.success(json.message); refresh(); loadAnalysis(); onUpdated(); }
     else toast.error(json.error || "Error");
   }
 
@@ -356,14 +400,14 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
       headers: { Authorization: `Bearer ${token}` },
     });
     const json = await res.json();
-    if (json.success) { toast.success(json.message); refresh(); onUpdated(); }
+    if (json.success) { toast.success(json.message); refresh(); loadAnalysis(); onUpdated(); }
     else toast.error(json.error || "Error");
   }
 
   const isPreparing = order.status === "BORRADOR" || order.status === "PREPARANDO";
 
   return (
-    <Modal isOpen onClose={onClose} title={`Pedido #${order.orderNumber} - ${order.eventName}`} size="lg">
+    <Modal isOpen onClose={onClose} title={`Cuadro #${order.orderNumber} - ${order.eventName}`} size="lg">
       <div className="space-y-4 p-1">
         <div className="flex gap-2">
           <a
@@ -374,6 +418,37 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
             🖨️ Imprimir / PDF
           </a>
         </div>
+
+        {analysisLoading ? (
+          <p className="text-xs text-gray-400">Analizando disponibilidad…</p>
+        ) : analysis ? (
+          <div className="border rounded-lg p-3 space-y-2 bg-gray-50 dark:bg-gray-800/50">
+            <p className="font-semibold text-sm">🧠 Análisis del cuadro</p>
+            {analysis.missing.length === 0 ? (
+              <p className="text-sm text-green-600">✅ Todo alcanza con el inventario para esas fechas.</p>
+            ) : (
+              <div className="space-y-1 text-sm">
+                <p className="text-red-600 font-medium">⚠️ Falta cubrir ({analysis.missing.length}):</p>
+                {analysis.missing.map((m: any, i: number) => (
+                  <p key={i} className="text-xs text-gray-700 dark:text-gray-300">
+                    • <b>{m.name}</b>: necesitás {m.needed}, disponible {m.available} → faltan <b>{m.shortfall}</b>
+                    {m.reusableFrom && m.reusableFrom.length > 0 && (
+                      <span className="text-blue-600"> · ♻️ reutilizable de {m.reusableFrom.map((r: any) => `#${r.orderNumber} ${r.eventName}`).join(", ")}</span>
+                    )}
+                  </p>
+                ))}
+              </div>
+            )}
+            <p className="text-sm">🚚 <b>Camión recomendado:</b> {analysis.truck.type} <span className="text-gray-400">({analysis.truck.reason})</span></p>
+            {analysis.extras.length > 0 && (
+              <p className="text-sm">➕ <b>Adicional sugerido:</b> {analysis.extras.join(", ")}</p>
+            )}
+            <p className="text-[11px] text-gray-400">
+              Disponibilidad calculada para {analysis.eventDate ? new Date(analysis.eventDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala" }) : "sin fecha"}.
+            </p>
+          </div>
+        ) : null}
+
         {items.map((item: any) => (
           <div key={item.id} className="border rounded-lg p-3">
             <div className="flex items-center justify-between">
@@ -448,7 +523,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
 
         {isPreparing && (
           <Button onClick={markReady} className="w-full">
-            <Check className="w-4 h-4 mr-1" /> Pedido Listo (descontar inventario)
+            <Check className="w-4 h-4 mr-1" /> Cuadro Listo (compromete inventario en sus fechas)
           </Button>
         )}
         {!isPreparing && order.status !== "DEVUELTO" && (

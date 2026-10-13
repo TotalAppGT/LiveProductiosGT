@@ -101,6 +101,11 @@ const navItems: NavItem[] = [
     icon: Package,
   },
   {
+    label: "Cuadros",
+    href: "/pedidos",
+    icon: ClipboardList,
+  },
+  {
     label: "Personal",
     href: "/personal",
     icon: Users,
@@ -119,11 +124,6 @@ const navItems: NavItem[] = [
     label: "Uso de Vehículos",
     href: "/bitacora-vehiculos",
     icon: Car,
-  },
-  {
-    label: "Pedidos",
-    href: "/pedidos",
-    icon: ClipboardList,
   },
   {
     label: "Taller",

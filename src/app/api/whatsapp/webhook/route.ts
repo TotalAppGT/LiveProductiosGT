@@ -625,6 +625,27 @@ function formatTaskList(tasks: any[], startNum: number = 1): string {
   return tasks.map((t, i) => formatTaskLine(t, startNum + i)).join("\n");
 }
 
+function formatCuadroAnalysisText(a: any): string {
+  const fecha = a.eventDate
+    ? new Date(a.eventDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })
+    : "sin fecha";
+  let msg = `🧠 *Análisis — ${a.eventName}*\n📅 ${fecha}\n\n`;
+  if (a.missing.length === 0) {
+    msg += "✅ Todo alcanza con el inventario para esas fechas.\n";
+  } else {
+    msg += `⚠️ *Falta cubrir (${a.missing.length}):*\n`;
+    msg += a.missing.map((m: any) => {
+      const reuse = (m.reusableFrom?.length)
+        ? ` · ♻️ reutilizable de ${m.reusableFrom.map((r: any) => `#${r.orderNumber} ${r.eventName}`).join(", ")}`
+        : " → comprar o alquilar";
+      return `• ${m.name}: necesitás ${m.needed}, disponible ${m.available} → faltan ${m.shortfall}${reuse}`;
+    }).join("\n") + "\n";
+  }
+  msg += `\n🚚 *Camión recomendado:* ${a.truck.type} (${a.truck.reason})`;
+  if (a.extras.length) msg += `\n➕ *Adicional sugerido:* ${a.extras.join(", ")}`;
+  return msg;
+}
+
 function parseReminderLocal(text: string, user: { id: string; name: string }) {
   const t = text.toLowerCase().trim();
 
@@ -2069,6 +2090,34 @@ async function handleCommand(
     return reply;
   }
 
+  if (
+    cmd === "logistica" || cmd === "logística" || cmd === "cuadros" ||
+    cmd === "comprar" || cmd === "que comprar" || cmd === "qué comprar" ||
+    cmd === "faltantes" || cmd === "me falta algo"
+  ) {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "La logística de cuadros está disponible para dueños, administradores y jefes.";
+    const { buildLogisticsSummary } = await import("@/lib/logistics-insights");
+    const days = 14;
+    const summary = await buildLogisticsSummary(days);
+    return `🧠 *Logística y proyección (${days} días)*\n\n${summary}\n\n_Consultá un evento: "evento <nombre>"_`;
+  }
+
+  if (cmd.startsWith("evento ") || cmd.startsWith("cuadro ")) {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "El análisis de cuadros está disponible para dueños, administradores y jefes.";
+    const q = cmd.replace(/^(evento|cuadro)\s+/i, "").trim();
+    const order = await prisma.order.findFirst({
+      where: { eventName: { contains: q, mode: "insensitive" } },
+      orderBy: { eventDate: "desc" },
+    });
+    if (!order) return `No encontré un cuadro/evento que coincida con "${q}".`;
+    const { analyzeCuadro } = await import("@/lib/inventory-availability");
+    const a = await analyzeCuadro(order.id);
+    if (!a) return "No pude analizar ese cuadro.";
+    return formatCuadroAnalysisText(a);
+  }
+
   if (cmd === "inventario" || cmd.startsWith("inventario ")) {
     const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
     if (!isAdmin) return "El inventario solo está disponible para dueños, administradores y jefes.";
@@ -2705,6 +2754,7 @@ function isKnownCommand(text: string): boolean {
     "que tengo", "que tengo para", "que hay", "tareas para mañana", "tareas del lunes", "tareas de la proxima semana", "tareas de la semana que viene",
     "ranking", "no ",
     "inventario", "vehiculos", "vehículos", "cobros", "empleados", "personal",
+    "cuadro", "cuadros", "logistica", "logística", "faltantes", "me falta", "que comprar", "qué comprar",
     "compra", "comprar", "compras", "comprado", "agrega compra", "agregar compra",
     "asigna", "asignar", "agrega tarea", "agregar tarea", "ponle", "deja",
     "mandale", "mándale", "manda", "envia", "enviale", "envíale", "mensaje",

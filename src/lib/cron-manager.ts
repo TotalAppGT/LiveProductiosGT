@@ -120,6 +120,25 @@ async function morningBriefing() {
 
   const users = await getActiveUsersWithWhatsApp();
 
+  // 🧠 Proyección logística (se calcula una vez): próximos cuadros con faltantes.
+  let logisticsProjection = "";
+  try {
+    const { getUpcomingCuadroInsights } = await import("@/lib/logistics-insights");
+    const insights = await getUpcomingCuadroInsights(14);
+    const withMissing = insights.filter((c) => c.missingCount > 0);
+    if (withMissing.length > 0) {
+      logisticsProjection = `🧠 *PROYECCIÓN DE CUADROS (faltantes)*\n${withMissing.slice(0, 6).map((c) => {
+        const f = c.eventDate
+          ? new Date(c.eventDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })
+          : "s/f";
+        const det = c.missing.slice(0, 3).map((m) => m.name).join(", ");
+        return `• ${f} — *${c.eventName}*: ${c.missingCount} por cubrir (${det}${c.missing.length > 3 ? "…" : ""})`;
+      }).join("\n")}`;
+    }
+  } catch (err) {
+    console.error("[Cron] Error proyección logística:", err);
+  }
+
   for (const user of users) {
     try {
       const wNow = getGuatemalaWallClock();
@@ -259,6 +278,9 @@ async function morningBriefing() {
       const adminPieces: string[] = [];
       if (purchasesLines) adminPieces.push(purchasesLines.trim());
       if (cobrosLines) adminPieces.push(cobrosLines.trim());
+      if (logisticsProjection && (user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE")) {
+        adminPieces.push(logisticsProjection);
+      }
       const msg3 = adminPieces.length > 0 ? `💼 *ADMINISTRACIÓN DEL DÍA*\n\n${adminPieces.join("\n\n")}` : "";
 
       const to = user.whatsappNumber || user.phone;

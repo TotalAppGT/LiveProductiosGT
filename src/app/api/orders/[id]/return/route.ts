@@ -35,17 +35,10 @@ export async function POST(
     const damagedItems: string[] = [];
     for (const item of order.items) {
       if (item.returnCondition === "BUENO") {
-        // Regresa al inventario
-        if (item.inventoryItemId) {
-          await prisma.inventoryItem.update({
-            where: { id: item.inventoryItemId },
-            data: {
-              quantity: { increment: item.quantity },
-              status: "DISPONIBLE",
-            },
-          });
-        }
-      } else if (item.returnCondition === "DANADO" || item.returnCondition === "PERDIDO") {
+        // Bueno: no se toca quantity (la disponibilidad se calcula por fechas).
+        continue;
+      }
+      if (item.returnCondition === "DANADO" || item.returnCondition === "PERDIDO") {
         damagedItems.push(item.name);
         // Va al taller
         await prisma.workshopItem.create({
@@ -55,14 +48,14 @@ export async function POST(
             issue: item.returnCondition === "DANADO" ? "Dañado en evento" : "Perdido en evento",
             status: "EN_REVISION",
             createdById: auth.payload.userId,
-            notes: `Devuelto del pedido #${order.orderNumber}`,
+            notes: `Devuelto del cuadro #${order.orderNumber}`,
           },
         });
-        // Si está dañado, no regresa a inventario
-        if (item.inventoryItemId && item.returnCondition === "DANADO") {
+        // Marca el ítem como dañado/perdido (el motor lo excluye de la disponibilidad)
+        if (item.inventoryItemId) {
           await prisma.inventoryItem.update({
             where: { id: item.inventoryItemId },
-            data: { status: "DANADO" },
+            data: { status: item.returnCondition === "PERDIDO" ? "PERDIDO" : "DANADO" },
           });
         }
       }
