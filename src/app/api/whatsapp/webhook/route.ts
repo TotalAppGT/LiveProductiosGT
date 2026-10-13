@@ -563,8 +563,8 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
       take: 8,
     });
     if (todayReminders.length > 0) {
-      out += `\n⏰ *Recordatorios de hoy (${todayReminders.length})*\n${todayReminders
-        .map((r) => `• ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
+      out += `\n⏰ *RECORDATORIOS DE HOY (${todayReminders.length})*\n${todayReminders
+        .map((r, i) => `${i + 1}. ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
         .join("\n")}\n`;
     }
   } catch {

@@ -899,8 +899,8 @@ export async function sendBihourlyReminders(): Promise<{
           take: 8,
         });
         if (todayReminders.length > 0) {
-          remindersBlock = `\n\n⏰ *Recordatorios de hoy (${todayReminders.length})*\n${todayReminders
-            .map((r) => `• ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
+          remindersBlock = `\n\n⏰ *RECORDATORIOS DE HOY (${todayReminders.length})*\n${todayReminders
+            .map((r, i) => `${i + 1}. ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
             .join("\n")}`;
         }
       } catch {
@@ -1166,10 +1166,12 @@ export async function fireTaskReminders(): Promise<{ fired: number }> {
       const hora = task.dueDate
         ? new Date(task.dueDate).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })
         : "";
-      await sendProactiveMessage(
-        to,
-        `🔔 *Recordatorio (tarea)*\n\n${task.title}${hora ? `\n🕐 ${hora}` : ""}\n\n_Esta tarea también funciona como recordatorio._`
-      ).catch(() => {});
+      const text = `🔔 *Recordatorio (tarea)*\n\n${task.title}${hora ? `\n🕐 ${hora}` : ""}\n\n_Esta tarea también funciona como recordatorio._`;
+      const res = await sendProactiveMessage(to, text).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+      // Registro para permitir el reintento por plantilla si Meta lo marca FAILED.
+      await prisma.whatsAppMessage.create({
+        data: { externalId: res.messageId, userId: task.assignedToId as string, toNumber: to, message: `[RECORDATORIO] ${text}`, type: "TASK_REMINDER", status: res.ok ? "SENT" : "FAILED" },
+      }).catch(() => {});
       await prisma.task.update({ where: { id: task.id }, data: { reminderSentAt: now } });
       fired++;
     }
@@ -1208,11 +1210,14 @@ export async function fireDueReminders(): Promise<{ fired: number; advanced: num
       try {
         const to = reminder.assignedTo?.whatsappNumber || reminder.assignedTo?.phone;
         if (to) {
-          await sendProactiveMessage(
-            to,
-            `⏰ *Recordatorio en unos minutos*\n\n${reminder.title}${reminder.description ? `\n_${reminder.description}_` : ""}\n\n🕐 Inicia a las ${reminder.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}. Preparate y te aviso puntual.`
-          );
-          advanced++;
+          const text = `⏰ *Recordatorio en unos minutos*\n\n${reminder.title}${reminder.description ? `\n_${reminder.description}_` : ""}\n\n🕐 Inicia a las ${reminder.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}. Preparate y te aviso puntual.`;
+          const res = await sendProactiveMessage(to, text).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+          // Se registra para que, si Meta lo marca FAILED (fuera de la ventana
+          // de 24h), el webhook lo reintente por la PLANTILLA aprobada.
+          await prisma.whatsAppMessage.create({
+            data: { externalId: res.messageId, userId: reminder.assignedToId, toNumber: to, message: `[RECORDATORIO] ${text}`, type: "ALERT", status: res.ok ? "SENT" : "FAILED" },
+          }).catch(() => {});
+          if (res.ok) advanced++;
         }
         await prisma.reminder.update({ where: { id: reminder.id }, data: { advanceNotified: true } });
       } catch (e) {
@@ -1234,11 +1239,14 @@ export async function fireDueReminders(): Promise<{ fired: number; advanced: num
       try {
         const to = reminder.assignedTo?.whatsappNumber || reminder.assignedTo?.phone;
         if (to) {
-          await sendProactiveMessage(
-            to,
-            `⏰ *RECORDATORIO*\n\n${reminder.title}${reminder.description ? `\n_${reminder.description}_` : ""}\n\n📅 Programado para: ${reminder.remindAt.toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`
-          );
-          fired++;
+          const text = `⏰ *RECORDATORIO*\n\n${reminder.title}${reminder.description ? `\n_${reminder.description}_` : ""}\n\n📅 Programado para: ${reminder.remindAt.toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`;
+          const res = await sendProactiveMessage(to, text).catch(() => ({ ok: false, via: "none" as const, messageId: undefined as string | undefined }));
+          // Se registra para que, si Meta lo marca FAILED (fuera de la ventana
+          // de 24h), el webhook lo reintente por la PLANTILLA aprobada.
+          await prisma.whatsAppMessage.create({
+            data: { externalId: res.messageId, userId: reminder.assignedToId, toNumber: to, message: `[RECORDATORIO] ${text}`, type: "ALERT", status: res.ok ? "SENT" : "FAILED" },
+          }).catch(() => {});
+          if (res.ok) fired++;
         }
 
         await prisma.reminder.update({

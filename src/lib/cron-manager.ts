@@ -192,8 +192,8 @@ async function morningBriefing() {
           take: 8,
         });
         if (todayReminders.length > 0) {
-          remindersLines = `\n\n⏰ *Recordatorios de hoy (${todayReminders.length})*\n${todayReminders
-            .map((r) => `• ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
+          remindersLines = `\n\n⏰ *RECORDATORIOS DE HOY (${todayReminders.length})*\n${todayReminders
+            .map((r, i) => `${i + 1}. ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
             .join("\n")}`;
         }
       } catch {
