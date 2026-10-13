@@ -195,6 +195,7 @@ export interface Event {
 export interface InventoryItem {
   id: string;
   name: string;
+  section?: string | null;
   category: InventoryCategory;
   quantity: number;
   assignedToId?: string | null;

@@ -12,6 +12,7 @@ import {
   Filter,
   ChevronDown,
   ChevronUp,
+  Upload,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,6 +56,38 @@ export default function InventarioPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<"append" | "replace">("append");
+  const [importing, setImporting] = useState(false);
+
+  async function runImport() {
+    if (!importFile) return toast.error("Seleccioná un archivo");
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      fd.append("mode", importMode);
+      const res = await fetch("/api/inventory/import", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(json.message || "Importado");
+        setShowImportModal(false);
+        setImportFile(null);
+        fetchItems();
+      } else {
+        toast.error(json.error || "Error");
+      }
+    } catch {
+      toast.error("Error al importar");
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const fetchItems = useCallback(async () => {
     if (!token) return;
@@ -125,6 +158,9 @@ export default function InventarioPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" leftIcon={<Upload className="h-4 w-4" />} onClick={() => setShowImportModal(true)}>
+            Importar
+          </Button>
           <Button variant="outline" size="sm" leftIcon={<Download className="h-4 w-4" />}>
             Exportar
           </Button>
@@ -315,6 +351,9 @@ export default function InventarioPage() {
                   >
                     <td className="px-4 py-3">
                       <div>
+                        {item.section && (
+                          <p className="text-[10px] uppercase tracking-wide text-gray-400">{item.section}</p>
+                        )}
                         <p className="text-sm font-medium text-gray-900 dark:text-white">
                           {item.name}
                         </p>
@@ -387,6 +426,9 @@ export default function InventarioPage() {
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
+                  {item.section && (
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">{item.section}</p>
+                  )}
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{item.name}</p>
                   {item.serialNumber && (
                     <p className="text-xs text-gray-400">SN: {item.serialNumber}</p>
@@ -427,6 +469,37 @@ export default function InventarioPage() {
         </div>
       </>
       )}
+
+      <Modal isOpen={showImportModal} onClose={() => setShowImportModal(false)} title="Importar inventario" size="lg">
+        <div className="space-y-4 p-1">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Subí el Excel/CSV del inventario (mismo formato: <b>sección</b> + <b>cantidad</b> + <b>ítem</b>).
+          </p>
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+            className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 p-2"
+          />
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" checked={importMode === "append"} onChange={() => setImportMode("append")} />
+              Agregar a lo existente
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" checked={importMode === "replace"} onChange={() => setImportMode("replace")} />
+              Reemplazar todo
+            </label>
+          </div>
+          {importMode === "replace" && (
+            <p className="text-xs text-red-500">⚠️ Se borrará el inventario actual y se cargará el del archivo.</p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setShowImportModal(false)}>Cancelar</Button>
+            <Button onClick={runImport} isLoading={importing} disabled={!importFile}>Importar</Button>
+          </div>
+        </div>
+      </Modal>
 
       <InventoryFormModal
         isOpen={showAddModal || !!editingItem}

@@ -299,6 +299,7 @@ model Event {
 model InventoryItem {
   id            String            @id @default(cuid())
   name          String
+  section       String?
   category      InventoryCategory @default(OTRO)
   quantity      Int               @default(1)
   assignedToId  String?
