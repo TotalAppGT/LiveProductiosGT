@@ -51,6 +51,7 @@ export function categoryForSection(section?: string | null): InventoryCategory {
 // Similitud de descripciones (para alinear duplicados).
 const _norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.,()"']/g, "");
 const _tokens = (s: string) => new Set(_norm(s).split(" ").filter((w) => w.length > 1));
+const _numbers = (s: string) => (_norm(s).match(/\d+(\.\d+)?/g) || []).join(",");
 function jaccard(a: string, b: string) {
   const A = _tokens(a), B = _tokens(b);
   if (!A.size || !B.size) return 0;
@@ -68,7 +69,8 @@ export function findSimilarGroups<T extends { id: string; name: string }>(items:
     const group: T[] = [items[i]];
     for (let j = i + 1; j < items.length; j++) {
       if (used.has(items[j].id)) continue;
-      if (jaccard(items[i].name, items[j].name) >= threshold) {
+      // Distinta cantidad/medida => NO es duplicado (ej: Cat5 vs Cat6, Truss 1mt vs 2mt).
+      if (jaccard(items[i].name, items[j].name) >= threshold && _numbers(items[i].name) === _numbers(items[j].name)) {
         group.push(items[j]);
         used.add(items[j].id);
       }
