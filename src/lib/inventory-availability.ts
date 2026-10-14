@@ -136,16 +136,26 @@ export async function analyzeCuadro(orderId: string): Promise<CuadroAnalysis | n
   const itemNames = new Set<string>();
   let totalUnits = 0;
 
-  const items: CuadroAnalysisItem[] = order.items.map((it) => {
+  // Agrupar por inventario (o nombre): el cuadro repite el mismo equipo en varias
+  // secciones, así que se suma el total antes de comparar con la disponibilidad.
+  const agg = new Map<string, { name: string; inventoryItemId: string | null; needed: number }>();
+  for (const it of order.items) {
+    const key = it.inventoryItemId || `name:${it.name.toLowerCase()}`;
+    const cur = agg.get(key) || { name: it.name, inventoryItemId: it.inventoryItemId || null, needed: 0 };
+    cur.needed += it.quantity;
+    agg.set(key, cur);
+  }
+
+  const items: CuadroAnalysisItem[] = Array.from(agg.values()).map((it) => {
     const a = (it.inventoryItemId && byId.get(it.inventoryItemId)) || byName.get(it.name.toLowerCase());
     const total = a?.total ?? 0;
     const committed = a?.committed ?? 0;
     const available = a?.available ?? 0;
-    const shortfall = Math.max(0, it.quantity - available);
+    const shortfall = Math.max(0, it.needed - available);
     if (a?.section) sections.add(a.section.toUpperCase());
     itemNames.add(it.name.toLowerCase());
-    totalUnits += it.quantity;
-    return { name: it.name, section: a?.section ?? null, needed: it.quantity, total, committed, available, shortfall };
+    totalUnits += it.needed;
+    return { name: it.name, section: a?.section ?? null, needed: it.needed, total, committed, available, shortfall };
   });
 
   // Trasiego: para los faltantes, ver cuadros activos que TERMINAN antes de que empiece este evento.

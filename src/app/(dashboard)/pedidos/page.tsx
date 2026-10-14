@@ -136,6 +136,26 @@ export default function PedidosPage() {
     toast.success(`Cuadro "${t.name}" cargado`);
   }
 
+  async function downloadReport(path: string, filename: string) {
+    try {
+      toast.loading("Generando reporte…", { id: "rep" });
+      const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { toast.error("Error al generar el reporte", { id: "rep" }); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Reporte descargado", { id: "rep" });
+    } catch {
+      toast.error("Error al descargar", { id: "rep" });
+    }
+  }
+
   const filteredOrders = orders.filter((o) =>
     !search || String(o.orderNumber).includes(search) || o.eventName.toLowerCase().includes(search.toLowerCase())
   );
@@ -148,9 +168,17 @@ export default function PedidosPage() {
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Package className="w-6 h-6" /> Cuadros de Evento
         </h1>
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus className="w-4 h-4 mr-1" /> Nuevo Cuadro
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => downloadReport("/api/orders/report?format=xlsx", "reporte-general-cuadros.xlsx")}>
+            📊 Reporte general (Excel)
+          </Button>
+          <Button variant="outline" onClick={() => downloadReport("/api/orders/report?format=pdf", "reporte-general-cuadros.pdf")}>
+            📄 (PDF)
+          </Button>
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="w-4 h-4 mr-1" /> Nuevo Cuadro
+          </Button>
+        </div>
       </div>
 
       <div className="mb-4 flex gap-2">
@@ -320,6 +348,24 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
 
   useEffect(() => { loadAnalysis(); }, [loadAnalysis]);
 
+  async function downloadReport(format: "pdf" | "xlsx") {
+    try {
+      const res = await fetch(`/api/orders/${order.id}/report?format=${format}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { toast.error("Error al generar el reporte"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cuadro-${order.orderNumber}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Error al descargar");
+    }
+  }
+
   async function refresh() {
     const res = await fetch(`/api/orders/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json();
@@ -415,8 +461,20 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
             target="_blank"
             className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg"
           >
-            🖨️ Imprimir / PDF
+            🖨️ Imprimir
           </a>
+          <button
+            onClick={() => downloadReport("xlsx")}
+            className="text-xs bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-lg"
+          >
+            📊 Reporte Excel
+          </button>
+          <button
+            onClick={() => downloadReport("pdf")}
+            className="text-xs bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1.5 rounded-lg"
+          >
+            📄 Reporte PDF
+          </button>
         </div>
 
         {analysisLoading ? (
