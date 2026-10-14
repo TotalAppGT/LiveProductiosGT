@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
       assignedToId,
       status,
       location,
+      warehouse,
       notes,
       serialNumber,
     } = body;
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest) {
         assignedToId: assignedToId || null,
         status: status || "DISPONIBLE",
         location: location || "Bodega Elgin",
+        warehouse: warehouse || "Bodega Elgin",
         notes: notes || null,
         serialNumber: serialNumber || null,
         lastCheckedAt: new Date(),

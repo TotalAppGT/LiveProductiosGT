@@ -305,14 +305,33 @@ model InventoryItem {
   assignedToId  String?
   status        InventoryStatus   @default(DISPONIBLE)
   location      String            @default("Bodega Elgin")
+  warehouse     String?           @default("Bodega Elgin")
   notes         String?
   lastCheckedAt DateTime?
   serialNumber  String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  assignedTo  User?            @relation(fields: [assignedToId], references: [id])
+  assignedTo  User?               @relation(fields: [assignedToId], references: [id])
   attachments FileAttachment[]
+  movements   InventoryMovement[]
+}
+
+model InventoryMovement {
+  id              String   @id @default(cuid())
+  inventoryItemId String?
+  itemName        String
+  type            String   @default("TRANSFERENCIA") // ENTRADA | SALIDA | TRANSFERENCIA | AJUSTE
+  fromWarehouse   String?
+  toWarehouse     String?
+  quantity        Int      @default(0)
+  note            String?
+  userId          String?
+  createdAt       DateTime @default(now())
+
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+
+  @@index([createdAt])
 }
 
 model Vehicle {

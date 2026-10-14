@@ -41,8 +41,13 @@ export default function PedidosPage() {
   const [selectedCategory, setSelectedCategory] = useState("AUDIO");
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
   const [creating, setCreating] = useState(false);
-  const [templateName, setTemplateName] = useState("");
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [tab, setTab] = useState<"cuadros" | "plantillas">("cuadros");
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadItems, setUploadItems] = useState<any[] | null>(null);
+  const [uploadDiscrepancies, setUploadDiscrepancies] = useState<any[]>([]);
+  const [uploadEvent, setUploadEvent] = useState({ eventName: "", clientName: "", eventLocation: "", eventDate: "" });
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -156,6 +161,69 @@ export default function PedidosPage() {
     }
   }
 
+  async function doUpload(file: File) {
+    setUploading(true);
+    setUploadItems(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/orders/import", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const json = await res.json();
+      if (json.success) {
+        setUploadItems(json.data.items);
+        setUploadDiscrepancies(json.data.discrepancies);
+        toast.success(`${json.data.total} ítems detectados (${json.data.discrepancies.length} con discrepancia)`);
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al subir el cuadro");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function createFromUpload() {
+    if (!uploadEvent.eventName.trim()) return toast.error("Nombre del evento requerido");
+    if (!uploadItems || uploadItems.length === 0) return toast.error("Sin ítems para cargar");
+    setCreating(true);
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          eventName: uploadEvent.eventName,
+          clientName: uploadEvent.clientName,
+          eventLocation: uploadEvent.eventLocation,
+          eventDate: uploadEvent.eventDate,
+          items: uploadItems.map((i) => ({ name: i.matchedName || i.name, quantity: i.quantity, inventoryItemId: i.inventoryItemId, category: "OTRO" })),
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(`Cuadro #${json.data.orderNumber} creado desde archivo`);
+        setShowUpload(false);
+        setUploadItems(null);
+        setUploadDiscrepancies([]);
+        setUploadEvent({ eventName: "", clientName: "", eventLocation: "", eventDate: "" });
+        fetchData();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al crear");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function deleteTemplate(id: string) {
+    if (!confirm("¿Eliminar esta plantilla?")) return;
+    await fetch(`/api/templates/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    fetchData();
+  }
+
+  function useTemplate(t: any) {
+    setSelectedItems((t.items || []).map((it: any) => ({ name: it.name, category: it.category, quantity: it.quantity || 1, inventoryItemId: it.inventoryItemId || null })));
+    setShowCreate(true);
+  }
+
   const filteredOrders = orders.filter((o) =>
     !search || String(o.orderNumber).includes(search) || o.eventName.toLowerCase().includes(search.toLowerCase())
   );
@@ -175,12 +243,21 @@ export default function PedidosPage() {
           <Button variant="outline" onClick={() => downloadReport("/api/orders/report?format=pdf", "reporte-general-cuadros.pdf")}>
             📄 (PDF)
           </Button>
+          <Button variant="outline" onClick={() => setShowUpload(true)}>
+            ⬆️ Subir cuadro
+          </Button>
           <Button onClick={() => setShowCreate(true)}>
             <Plus className="w-4 h-4 mr-1" /> Nuevo Cuadro
           </Button>
         </div>
       </div>
 
+      <div className="flex gap-1 mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
+        <button onClick={() => setTab("cuadros")} className={`px-4 py-2 rounded-md text-sm font-medium ${tab === "cuadros" ? "bg-white dark:bg-gray-700 shadow" : "text-gray-600 dark:text-gray-300"}`}>📋 Cuadros</button>
+        <button onClick={() => setTab("plantillas")} className={`px-4 py-2 rounded-md text-sm font-medium ${tab === "plantillas" ? "bg-white dark:bg-gray-700 shadow" : "text-gray-600 dark:text-gray-300"}`}>📁 Plantillas ({templates.length})</button>
+      </div>
+
+      {tab === "cuadros" && (<>
       <div className="mb-4 flex gap-2">
         <Input
           placeholder="Buscar por # o evento"
@@ -216,9 +293,74 @@ export default function PedidosPage() {
           </Card>
         ))}
         {filteredOrders.length === 0 && (
-          <p className="text-center text-gray-400 py-8">No hay pedidos. Crea el primero con "Nuevo Pedido".</p>
+          <p className="text-center text-gray-400 py-8">No hay cuadros. Creá el primero con "Nuevo Cuadro".</p>
         )}
       </div>
+      </>)}
+
+      {tab === "plantillas" && (
+        <div className="grid gap-3">
+          {templates.length === 0 && (
+            <p className="text-center text-gray-400 py-8">No hay plantillas. Guardá un cuadro como plantilla desde "Nuevo Cuadro" (💾 Guardar Cuadro).</p>
+          )}
+          {templates.map((t: any) => (
+            <Card key={t.id} className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">{t.name}</h3>
+                  <p className="text-xs text-gray-400">{(t.items || []).length} ítems</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => useTemplate(t)}>Usar</Button>
+                  <Button variant="ghost" size="sm" onClick={() => deleteTemplate(t.id)}>🗑️</Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Modal isOpen={showUpload} onClose={() => setShowUpload(false)} title="Subir cuadro realizado" size="lg">
+        <div className="space-y-4 p-1">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Subí un Excel/CSV del cuadro (sección + cantidad + ítem). El sistema lo compara con el inventario y marca las <b>discrepancias</b> de descripción.
+          </p>
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={(e) => e.target.files?.[0] && doUpload(e.target.files[0])}
+            className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 p-2"
+          />
+          {uploading && <p className="text-xs text-gray-400">Procesando…</p>}
+          {uploadItems && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input label="Evento" value={uploadEvent.eventName} onChange={(e) => setUploadEvent({ ...uploadEvent, eventName: e.target.value })} />
+                <Input label="Cliente" value={uploadEvent.clientName} onChange={(e) => setUploadEvent({ ...uploadEvent, clientName: e.target.value })} />
+                <Input label="Lugar" value={uploadEvent.eventLocation} onChange={(e) => setUploadEvent({ ...uploadEvent, eventLocation: e.target.value })} />
+                <Input label="Fecha" type="date" value={uploadEvent.eventDate} onChange={(e) => setUploadEvent({ ...uploadEvent, eventDate: e.target.value })} />
+              </div>
+              <div className="text-xs">
+                <p className="font-medium">{uploadItems.length} ítems · <span className="text-red-600">{uploadDiscrepancies.length} discrepancias</span></p>
+                <div className="max-h-56 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg mt-1 divide-y divide-gray-100 dark:divide-gray-800">
+                  {uploadItems.map((it, i) => (
+                    <div key={i} className="flex items-center justify-between px-2 py-1">
+                      <span className="truncate">{it.quantity}× {it.name}</span>
+                      <span className={`shrink-0 ml-2 text-[10px] ${it.matchType === "exact" ? "text-green-600" : it.matchType === "partial" ? "text-yellow-600" : "text-red-600"}`}>
+                        {it.matchType === "exact" ? "✓" : it.matchType === "partial" ? `~ ${it.matchedName}` : "✗ sin match"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setShowUpload(false)}>Cerrar</Button>
+                <Button onClick={createFromUpload} isLoading={creating}>Crear cuadro</Button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
 
       {/* Modal crear pedido */}
       <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Nuevo Cuadro de Evento" size="lg">

@@ -1,5 +1,8 @@
 import type { InventoryCategory } from "@prisma/client";
 
+// Bodegas / ubicaciones de logística.
+export const WAREHOUSES = ["Bodega Elgin", "Bodega PP", "En evento", "En renta", "Taller"];
+
 // Secciones de inventario (agrupación fina, como en el Excel maestro).
 export const INVENTORY_SECTIONS = [
   "CONSOLAS", "AUDIO", "TELEFONO", "PEDESTALES", "MICROFONIA", "ILUMINACION",

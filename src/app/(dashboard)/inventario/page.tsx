@@ -24,6 +24,7 @@ import { Badge, inventoryStatusLabel, inventoryStatusColor } from "@/components/
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, cn } from "@/lib/utils";
+import { WAREHOUSES } from "@/lib/inventory";
 import type { InventoryItem, ApiResponse, PaginatedResponse } from "@/types";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -60,6 +61,44 @@ export default function InventarioPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importMode, setImportMode] = useState<"append" | "replace">("append");
   const [importing, setImporting] = useState(false);
+  const [showLogistics, setShowLogistics] = useState(false);
+  const [movements, setMovements] = useState<any[]>([]);
+  const [mov, setMov] = useState({ inventoryItemId: "", type: "TRANSFERENCIA", fromWarehouse: "Bodega Elgin", toWarehouse: "Bodega PP", quantity: "", note: "" });
+  const [savingMov, setSavingMov] = useState(false);
+
+  const loadMovements = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/inventory/movements?limit=50", { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) setMovements(json.data);
+    } catch {
+      // silencioso
+    }
+  }, [token]);
+
+  async function saveMovement() {
+    if (!mov.inventoryItemId) return toast.error("Elegí un ítem");
+    setSavingMov(true);
+    try {
+      const res = await fetch("/api/inventory/movements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(mov),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Movimiento registrado");
+        setMov({ ...mov, inventoryItemId: "", quantity: "", note: "" });
+        loadMovements();
+        fetchItems();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al registrar");
+    } finally {
+      setSavingMov(false);
+    }
+  }
 
   async function runImport() {
     if (!importFile) return toast.error("Seleccioná un archivo");
@@ -160,6 +199,9 @@ export default function InventarioPage() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" leftIcon={<Upload className="h-4 w-4" />} onClick={() => setShowImportModal(true)}>
             Importar
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { setShowLogistics(true); loadMovements(); }}>
+            🚚 Logística
           </Button>
           <Button variant="outline" size="sm" leftIcon={<Download className="h-4 w-4" />}>
             Exportar
@@ -501,6 +543,61 @@ export default function InventarioPage() {
         </div>
       </Modal>
 
+      <Modal isOpen={showLogistics} onClose={() => setShowLogistics(false)} title="Logística / Movimientos" size="lg">
+        <div className="space-y-4 p-1">
+          <p className="text-xs text-gray-500">Registrá entradas, salidas o transferencias entre bodegas. Al transferir, el ítem cambia de bodega.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium mb-1">Ítem</label>
+              <select value={mov.inventoryItemId} onChange={(e) => setMov({ ...mov, inventoryItemId: e.target.value })} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white">
+                <option value="">Seleccionar ítem…</option>
+                {items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Tipo</label>
+              <select value={mov.type} onChange={(e) => setMov({ ...mov, type: e.target.value })} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white">
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="ENTRADA">Entrada</option>
+                <option value="SALIDA">Salida</option>
+                <option value="AJUSTE">Ajuste</option>
+              </select>
+            </div>
+            <Input label="Cantidad" type="number" value={mov.quantity} onChange={(e) => setMov({ ...mov, quantity: e.target.value })} />
+            <div>
+              <label className="block text-xs font-medium mb-1">Desde</label>
+              <select value={mov.fromWarehouse} onChange={(e) => setMov({ ...mov, fromWarehouse: e.target.value })} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white">
+                {WAREHOUSES.map((w) => <option key={w} value={w}>{w}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Hacia</label>
+              <select value={mov.toWarehouse} onChange={(e) => setMov({ ...mov, toWarehouse: e.target.value })} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white">
+                {WAREHOUSES.map((w) => <option key={w} value={w}>{w}</option>)}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <Input label="Nota" value={mov.note} onChange={(e) => setMov({ ...mov, note: e.target.value })} />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={saveMovement} isLoading={savingMov}>Registrar movimiento</Button>
+          </div>
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+            <p className="text-sm font-medium mb-2">Últimos movimientos</p>
+            <div className="max-h-64 overflow-y-auto space-y-1">
+              {movements.length === 0 && <p className="text-xs text-gray-400">Sin movimientos registrados.</p>}
+              {movements.map((m) => (
+                <div key={m.id} className="text-xs flex justify-between gap-2 border-b border-gray-100 dark:border-gray-800 py-1">
+                  <span className="truncate">{m.type} · {m.itemName}{m.toWarehouse ? ` (${m.fromWarehouse || "—"} → ${m.toWarehouse})` : ""}</span>
+                  <span className="text-gray-400 shrink-0">{new Date(m.createdAt).toLocaleDateString("es-GT")} · {m.quantity}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       <InventoryFormModal
         isOpen={showAddModal || !!editingItem}
         onClose={() => {
@@ -534,6 +631,7 @@ function InventoryFormModal({
   const [quantity, setQuantity] = useState(String(item?.quantity || 1));
   const [status, setStatus] = useState(item?.status || "DISPONIBLE");
   const [location, setLocation] = useState(item?.location || "Bodega Elgin");
+  const [warehouse, setWarehouse] = useState(item?.warehouse || "Bodega Elgin");
   const [serialNumber, setSerialNumber] = useState(item?.serialNumber || "");
   const [notes, setNotes] = useState(item?.notes || "");
   const [saving, setSaving] = useState(false);
@@ -557,6 +655,7 @@ function InventoryFormModal({
           quantity: parseInt(quantity) || 1,
           status,
           location,
+          warehouse,
           serialNumber: serialNumber.trim() || undefined,
           notes: notes.trim() || undefined,
         }),
@@ -632,21 +731,17 @@ function InventoryFormModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Ubicación
+              Bodega
             </label>
-            <input
-              list="location-options"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Ej: Bodega Elgin, Bodega PP..."
+            <select
+              value={warehouse}
+              onChange={(e) => { setWarehouse(e.target.value); setLocation(e.target.value); }}
               className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            />
-            <datalist id="location-options">
-              <option value="Bodega Elgin" />
-              <option value="Bodega PP" />
-              <option value="En evento" />
-              <option value="En renta" />
-            </datalist>
+            >
+              {WAREHOUSES.map((w) => (
+                <option key={w} value={w}>{w}</option>
+              ))}
+            </select>
           </div>
         </div>
         <Input
@@ -656,7 +751,7 @@ function InventoryFormModal({
         />
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Notas
+            Descripción / Notas
           </label>
           <textarea
             value={notes}

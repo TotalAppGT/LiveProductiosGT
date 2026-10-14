@@ -196,6 +196,7 @@ export interface InventoryItem {
   id: string;
   name: string;
   section?: string | null;
+  warehouse?: string | null;
   category: InventoryCategory;
   quantity: number;
   assignedToId?: string | null;
