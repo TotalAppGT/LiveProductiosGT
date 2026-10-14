@@ -130,7 +130,7 @@ export async function buildCuadroReport(orderId: string): Promise<CuadroReport |
   const aggregated = aggregate(order.items, byId, byName);
   const rows = aggregated
     .map((a) => row(a.name, a.inv?.section ?? null, a.inv, a.needed))
-    .sort((x, y) => y.faltante - x.faltante || x.name.localeCompare(y.name));
+    .sort((x, y) => sectionRank(x.section) - sectionRank(y.section) || x.name.localeCompare(y.name));
   const faltantes = rows.filter((r) => r.faltante > 0);
   return {
     kind: "cuadro",
@@ -235,19 +235,61 @@ function newDoc() {
   return { doc, done };
 }
 
-function tableHeader(doc: any, cols: { w: number; t: string }[]) {
+// Recorta el texto al ancho disponible (evita que se encime con la otra columna).
+function fitText(doc: any, text: any, maxW: number): string {
+  const s = String(text ?? "");
+  if (!s) return "";
+  if (doc.widthOfString(s) <= maxW) return s;
+  let t = s;
+  while (t.length > 1 && doc.widthOfString(t + "…") > maxW) t = t.slice(0, -1);
+  return t + "…";
+}
+
+interface Cell { v: string; color?: string; bold?: boolean; }
+interface Col { w: number; t: string; align?: "left" | "right" | "center"; }
+
+function drawTable(doc: any, cols: Col[], rows: Cell[][]) {
   const x0 = doc.page.margins.left;
-  const total = cols.reduce((s, c) => s + c.w, 0);
-  doc.rect(x0, doc.y, total, 16).fill("#1e40af");
-  let x = x0 + 4; const y = doc.y + 4;
-  doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#ffffff");
-  for (const c of cols) { doc.text(c.t, x, y, { width: c.w - 6, lineBreak: false, ellipsis: true }); x += c.w; }
-  doc.moveDown(1.2);
+  const pad = 7;
+  const rowH = 14;
+  const totalW = cols.reduce((s, c) => s + c.w, 0);
+
+  const drawHead = () => {
+    const y = doc.y;
+    doc.rect(x0, y, totalW, 16).fill("#1e40af");
+    doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#ffffff");
+    let x = x0;
+    for (const c of cols) {
+      doc.text(fitText(doc, c.t, c.w - pad * 2), x + pad, y + 4, { width: c.w - pad * 2, align: c.align || "left", lineBreak: false });
+      x += c.w;
+    }
+    doc.y = y + 16;
+  };
+  drawHead();
+
+  let alt = false;
+  for (const row of rows) {
+    if (doc.y > doc.page.height - doc.page.margins.bottom - rowH - 4) { doc.addPage(); drawHead(); alt = false; }
+    const y = doc.y;
+    if (alt) doc.rect(x0, y, totalW, rowH).fill("#f3f4f6");
+    alt = !alt;
+    let x = x0;
+    row.forEach((cell, i) => {
+      const c = cols[i];
+      doc.fillColor(cell.color || "#222").font(cell.bold ? "Helvetica-Bold" : "Helvetica").fontSize(8.5);
+      doc.text(fitText(doc, cell.v, c.w - pad * 2), x + pad, y + 3, { width: c.w - pad * 2, align: c.align || "left", lineBreak: false });
+      x += c.w;
+    });
+    doc.moveTo(x0, y + rowH).lineTo(x0 + totalW, y + rowH).lineWidth(0.3).strokeColor("#e5e7eb").stroke();
+    doc.y = y + rowH;
+  }
+  doc.y += 6;
 }
 
 export async function reportPdf(report: CuadroReport | GeneralReport): Promise<Buffer> {
   const { doc, done } = newDoc();
-  doc.font("Helvetica-Bold").fontSize(16).fillColor("#1e40af").text("Live Productions GT");
+  const blue = "#1e40af";
+  doc.font("Helvetica-Bold").fontSize(16).fillColor(blue).text("Live Productions GT");
   doc.font("Helvetica").fontSize(8).fillColor("#888").text(`Generado ${new Date().toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`);
 
   if (report.kind === "cuadro") {
@@ -258,19 +300,15 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
     doc.moveDown(0.2);
     doc.fontSize(9).fillColor("#111").text(`Ítems: ${report.totalRows} · Faltantes: ${report.faltantes.length} · Camión: ${report.truck}`);
     doc.moveDown(0.6);
-    const cols = [{ w: 200, t: "Ítem" }, { w: 50, t: "Nec." }, { w: 50, t: "Stock" }, { w: 60, t: "Disp." }, { w: 55, t: "Faltan" }, { w: 60, t: "Acción" }];
-    tableHeader(doc, cols);
-    doc.font("Helvetica").fontSize(8.5);
-    for (const r of report.rows) {
-      if (doc.y > doc.page.height - 50) { doc.addPage(); tableHeader(doc, cols); doc.font("Helvetica").fontSize(8.5); }
-      const y = doc.y; let x = doc.page.margins.left + 4;
-      [r.name, String(r.needed), String(r.stock), String(r.available), String(r.faltante), r.faltante > 0 ? r.action : ""].forEach((v, i) => {
-        doc.fillColor(i === 4 && r.faltante > 0 ? "#b91c1c" : "#222").font(i === 4 && r.faltante > 0 ? "Helvetica-Bold" : "Helvetica");
-        doc.text(v, x, y, { width: cols[i].w - 6, lineBreak: false, ellipsis: true });
-        x += cols[i].w;
-      });
-      doc.moveDown(0.9);
-    }
+    const cols: Col[] = [{ w: 205, t: "Ítem" }, { w: 48, t: "Nec.", align: "right" }, { w: 48, t: "Stock", align: "right" }, { w: 55, t: "Disp.", align: "right" }, { w: 52, t: "Faltan", align: "right" }, { w: 70, t: "Acción" }];
+    drawTable(doc, cols, report.rows.map((r) => ([
+      { v: r.name },
+      { v: String(r.needed) },
+      { v: String(r.stock) },
+      { v: String(r.available) },
+      { v: String(r.faltante), color: r.faltante > 0 ? "#b91c1c" : "#222", bold: r.faltante > 0 },
+      { v: r.faltante > 0 ? r.action : "" },
+    ])));
     doc.end();
     return done;
   }
@@ -279,39 +317,47 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
   doc.moveDown(0.4);
   doc.font("Helvetica-Bold").fontSize(14).fillColor("#111").text("Reporte general de cuadros");
   doc.moveDown(0.3);
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#1e40af").text("RESUMEN GENERAL");
+  doc.font("Helvetica-Bold").fontSize(10).fillColor(blue).text("RESUMEN GENERAL");
   doc.font("Helvetica").fontSize(9).fillColor("#222");
   doc.text(`Cuadros: ${report.totals.orders}   ·   Ítems distintos: ${report.totals.items}   ·   Demanda total: ${report.totals.demand} unidades`);
   doc.text(`A comprar: ${report.totals.comprar} ítems   ·   A alquilar: ${report.totals.alquilar} ítems   ·   Total faltantes: ${report.totals.faltantes}`);
   doc.moveDown(0.6);
 
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#1e40af").text("POR EVENTO");
-  const evCols = [{ w: 150, t: "Evento" }, { w: 60, t: "Fecha" }, { w: 110, t: "Lugar" }, { w: 45, t: "Inv." }, { w: 45, t: "Ítems" }, { w: 50, t: "Faltan" }, { w: 70, t: "Camión" }];
-  tableHeader(doc, evCols);
-  doc.font("Helvetica").fontSize(8.5);
-  for (const e of report.events) {
-    if (doc.y > doc.page.height - 60) { doc.addPage(); tableHeader(doc, evCols); doc.font("Helvetica").fontSize(8.5); }
-    const y = doc.y; let x = doc.page.margins.left + 4;
-    [`#${e.orderNumber} ${e.eventName}`, fmtDate(e.eventDate), e.location || "—", String(e.guests ?? "—"), String(e.itemCount), String(e.faltantes), e.truck].forEach((v, i) => {
-      doc.fillColor("#222").font("Helvetica").text(v, x, y, { width: evCols[i].w - 6, lineBreak: false, ellipsis: true });
-      x += evCols[i].w;
-    });
-    doc.moveDown(0.9);
-  }
+  doc.font("Helvetica-Bold").fontSize(10).fillColor(blue).text("POR EVENTO");
+  const evCols: Col[] = [{ w: 148, t: "Evento" }, { w: 55, t: "Fecha" }, { w: 104, t: "Lugar" }, { w: 42, t: "Inv.", align: "right" }, { w: 46, t: "Ítems", align: "right" }, { w: 52, t: "Faltan", align: "right" }, { w: 72, t: "Camión" }];
+  drawTable(doc, evCols, report.events.map((e) => ([
+    { v: `#${e.orderNumber} ${e.eventName}` },
+    { v: fmtDate(e.eventDate) },
+    { v: e.location || "—" },
+    { v: String(e.guests ?? "—") },
+    { v: String(e.itemCount) },
+    { v: String(e.faltantes), color: e.faltantes > 0 ? "#b91c1c" : "#222", bold: e.faltantes > 0 },
+    { v: e.truck },
+  ])));
 
   doc.moveDown(0.6);
   doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text(`RESUMEN DE RENTA / COMPRA (${report.faltantes.length})`);
-  const rcCols = [{ w: 250, t: "Equipo" }, { w: 55, t: "Total" }, { w: 65, t: "Inventario" }, { w: 55, t: "Saldo" }, { w: 60, t: "Comprar/Rentar" }, { w: 60, t: "Acción" }];
-  tableHeader(doc, rcCols);
-  doc.font("Helvetica").fontSize(8.5);
-  for (const m of report.faltantes) {
-    if (doc.y > doc.page.height - 50) { doc.addPage(); tableHeader(doc, rcCols); doc.font("Helvetica").fontSize(8.5); }
-    const y = doc.y; let x = doc.page.margins.left + 4;
-    [m.name, String(m.total), String(Math.max(0, m.stock - m.repair)), String(m.saldo), String(m.faltante), m.action].forEach((v, i) => {
-      doc.fillColor(i === 4 ? "#b91c1c" : "#222").font(i === 4 ? "Helvetica-Bold" : "Helvetica").text(v, x, y, { width: rcCols[i].w - 6, lineBreak: false, ellipsis: true });
-      x += rcCols[i].w;
-    });
-    doc.moveDown(0.9);
+  const rcCols: Col[] = [{ w: 230, t: "Equipo" }, { w: 50, t: "Total", align: "right" }, { w: 62, t: "Inventario", align: "right" }, { w: 50, t: "Saldo", align: "right" }, { w: 60, t: "Comprar", align: "right" }, { w: 60, t: "Acción" }];
+  drawTable(doc, rcCols, report.faltantes.map((m) => ([
+    { v: m.name },
+    { v: String(m.total) },
+    { v: String(Math.max(0, m.stock - m.repair)) },
+    { v: String(m.saldo) },
+    { v: String(m.faltante), color: "#b91c1c", bold: true },
+    { v: m.action },
+  ])));
+
+  if (report.warehouseStock && report.warehouseStock.length > 0) {
+    doc.moveDown(0.6);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor(blue).text("STOCK POR BODEGA");
+    const wCols: Col[] = [{ w: 180, t: "Bodega" }, { w: 70, t: "Ítems", align: "right" }, { w: 82, t: "Unidades", align: "right" }, { w: 95, t: "Disponibles", align: "right" }, { w: 95, t: "Reparación", align: "right" }];
+    drawTable(doc, wCols, report.warehouseStock.map((w) => ([
+      { v: w.warehouse },
+      { v: String(w.items) },
+      { v: String(w.units) },
+      { v: String(w.available) },
+      { v: String(w.repair) },
+    ])));
   }
 
   doc.end();
