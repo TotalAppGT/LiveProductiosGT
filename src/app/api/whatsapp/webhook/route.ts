@@ -2118,6 +2118,27 @@ async function handleCommand(
     return formatCuadroAnalysisText(a);
   }
 
+  if (cmd === "bodegas" || cmd === "stock" || cmd === "stock por bodega" || cmd === "inventario por bodega") {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "El stock por bodega está disponible para dueños, administradores y jefes.";
+    const { buildWarehouseSummary } = await import("@/lib/logistics-insights");
+    return await buildWarehouseSummary();
+  }
+
+  if (cmd === "movimientos" || cmd === "movimientos bodega" || cmd === "logistica bodega" || cmd === "movimiento") {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "Los movimientos están disponibles para dueños, administradores y jefes.";
+    const { buildMovementsSummary } = await import("@/lib/logistics-insights");
+    return await buildMovementsSummary();
+  }
+
+  if (cmd === "duplicados" || cmd === "alinear" || cmd === "desalineados" || cmd === "descripciones") {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "La alineación de descripciones está disponible para dueños, administradores y jefes.";
+    const { buildDuplicatesSummary } = await import("@/lib/logistics-insights");
+    return await buildDuplicatesSummary();
+  }
+
   if (cmd === "inventario" || cmd.startsWith("inventario ")) {
     const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
     if (!isAdmin) return "El inventario solo está disponible para dueños, administradores y jefes.";
@@ -2755,6 +2776,7 @@ function isKnownCommand(text: string): boolean {
     "ranking", "no ",
     "inventario", "vehiculos", "vehículos", "cobros", "empleados", "personal",
     "cuadro", "cuadros", "logistica", "logística", "faltantes", "me falta", "que comprar", "qué comprar",
+    "bodegas", "stock", "movimientos", "duplicados", "alinear", "descripciones",
     "compra", "comprar", "compras", "comprado", "agrega compra", "agregar compra",
     "asigna", "asignar", "agrega tarea", "agregar tarea", "ponle", "deja",
     "mandale", "mándale", "manda", "envia", "enviale", "envíale", "mensaje",

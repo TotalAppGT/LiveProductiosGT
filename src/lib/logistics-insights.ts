@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { analyzeCuadro } from "@/lib/inventory-availability";
+import { findSimilarGroups } from "@/lib/inventory";
 
 export interface UpcomingCuadroInsight {
   orderId: string;
@@ -86,4 +87,39 @@ export async function buildLogisticsSummary(days = 14): Promise<string> {
     lines.push(`🛒 *Por comprar (0 unidades):* ${health.zero.map((z) => z.name).join(", ")}.`);
   }
   return lines.join("\n");
+}
+
+// Stock resumido por bodega.
+export async function buildWarehouseSummary(): Promise<string> {
+  const items = await prisma.inventoryItem.findMany({ select: { quantity: true, warehouse: true, status: true } });
+  const map = new Map<string, { items: number; units: number; available: number; repair: number }>();
+  for (const it of items) {
+    const w = it.warehouse || "Sin bodega";
+    const cur = map.get(w) || { items: 0, units: 0, available: 0, repair: 0 };
+    const rep = it.status === "EN_REPARACION" || it.status === "DANADO" || it.status === "PERDIDO";
+    cur.items++;
+    cur.units += it.quantity;
+    if (rep) cur.repair += it.quantity; else cur.available += it.quantity;
+    map.set(w, cur);
+  }
+  const lines = Array.from(map.entries())
+    .sort((a, b) => b[1].units - a[1].units)
+    .map(([w, c]) => `• *${w}*: ${c.units} unidades — ${c.items} ítems · ✅ ${c.available} disp · 🔧 ${c.repair}`);
+  return `🏢 *Stock por bodega*\n${lines.join("\n")}`;
+}
+
+export async function buildMovementsSummary(limit = 12): Promise<string> {
+  const mv = await prisma.inventoryMovement.findMany({ orderBy: { createdAt: "desc" }, take: limit });
+  if (!mv.length) return "🚚 Sin movimientos registrados todavía.";
+  return `🚚 *Últimos movimientos*\n${mv
+    .map((m) => `• ${m.type} *${m.itemName}*${m.toWarehouse ? ` (${m.fromWarehouse || "—"} → ${m.toWarehouse})` : ""} · ${m.quantity}`)
+    .join("\n")}`;
+}
+
+export async function buildDuplicatesSummary(): Promise<string> {
+  const items = await prisma.inventoryItem.findMany({ select: { id: true, name: true, quantity: true, section: true } });
+  const groups = findSimilarGroups(items, 0.6);
+  if (!groups.length) return "✅ No hay descripciones duplicadas ni desalineadas.";
+  const lines = groups.slice(0, 8).map((g, i) => `${i + 1}. ${g.length} parecidos: ${g.map((x) => `"${x.name}"`).join(" · ")}`);
+  return `🔎 *Descripciones a alinear (${groups.length} grupos)*\n${lines.join("\n")}\n\n_Revisalos en Inventario → 🔎 Alinear._`;
 }

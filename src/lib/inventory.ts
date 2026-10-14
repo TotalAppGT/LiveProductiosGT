@@ -3,6 +3,12 @@ import type { InventoryCategory } from "@prisma/client";
 // Bodegas / ubicaciones de logística.
 export const WAREHOUSES = ["Bodega Elgin", "Bodega PP", "En evento", "En renta", "Taller"];
 
+// Ubicación de bodegas (coordenadas aproximadas, editables) para el mapa.
+export const WAREHOUSE_COORDS: Record<string, { lat: number; lng: number; address: string }> = {
+  "Bodega Elgin": { lat: 14.594, lng: -90.5, address: "16 avenida A 28-76 zona 13 Elgin, Guatemala" },
+  "Bodega PP": { lat: 14.63, lng: -90.55, address: "Piedra Parada (aproximado, editable)" },
+};
+
 // Secciones de inventario (agrupación fina, como en el Excel maestro).
 export const INVENTORY_SECTIONS = [
   "CONSOLAS", "AUDIO", "TELEFONO", "PEDESTALES", "MICROFONIA", "ILUMINACION",
@@ -40,6 +46,39 @@ export function categoryForSection(section?: string | null): InventoryCategory {
   if (key.includes("ESTRUCTURA") || key.includes("TARIMA") || key.includes("PEDESTAL") || key.includes("MOBILIAR")) return "MOBILIARIO";
   if (key.includes("LIMPI") || key.includes("CONSUM")) return "CONSUMIBLE";
   return "OTRO";
+}
+
+// Similitud de descripciones (para alinear duplicados).
+const _norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.,()"']/g, "");
+const _tokens = (s: string) => new Set(_norm(s).split(" ").filter((w) => w.length > 1));
+function jaccard(a: string, b: string) {
+  const A = _tokens(a), B = _tokens(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const x of A) if (B.has(x)) inter++;
+  return inter / (A.size + B.size - inter);
+}
+
+// Agrupa ítems con descripciones parecidas (posibles duplicados).
+export function findSimilarGroups<T extends { id: string; name: string }>(items: T[], threshold = 0.6): T[][] {
+  const groups: T[][] = [];
+  const used = new Set<string>();
+  for (let i = 0; i < items.length; i++) {
+    if (used.has(items[i].id)) continue;
+    const group: T[] = [items[i]];
+    for (let j = i + 1; j < items.length; j++) {
+      if (used.has(items[j].id)) continue;
+      if (jaccard(items[i].name, items[j].name) >= threshold) {
+        group.push(items[j]);
+        used.add(items[j].id);
+      }
+    }
+    if (group.length >= 2) {
+      used.add(items[i].id);
+      groups.push(group);
+    }
+  }
+  return groups;
 }
 
 export interface ParsedInventoryItem {

@@ -30,6 +30,7 @@ import {
   FolderOpen,
   TrendingUp,
   NotebookPen,
+  MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -104,6 +105,11 @@ const navItems: NavItem[] = [
     label: "Cuadros",
     href: "/pedidos",
     icon: ClipboardList,
+  },
+  {
+    label: "Mapa",
+    href: "/mapa",
+    icon: MapPin,
   },
   {
     label: "Personal",

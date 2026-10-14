@@ -65,6 +65,49 @@ export default function InventarioPage() {
   const [movements, setMovements] = useState<any[]>([]);
   const [mov, setMov] = useState({ inventoryItemId: "", type: "TRANSFERENCIA", fromWarehouse: "Bodega Elgin", toWarehouse: "Bodega PP", quantity: "", note: "" });
   const [savingMov, setSavingMov] = useState(false);
+  const [byWarehouse, setByWarehouse] = useState<any[]>([]);
+  const [showAlign, setShowAlign] = useState(false);
+  const [alignGroups, setAlignGroups] = useState<any[]>([]);
+  const [alignLoading, setAlignLoading] = useState(false);
+  const [alignChoice, setAlignChoice] = useState<Record<number, string>>({});
+
+  const loadByWarehouse = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/inventory/by-warehouse", { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) setByWarehouse(json.data);
+    } catch {
+      // silencioso
+    }
+  }, [token]);
+
+  const loadAlign = useCallback(async () => {
+    setAlignLoading(true);
+    try {
+      const res = await fetch("/api/inventory/align", { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) { setAlignGroups(json.data); setAlignChoice({}); }
+    } catch {
+      // silencioso
+    } finally {
+      setAlignLoading(false);
+    }
+  }, [token]);
+
+  async function mergeGroup(gi: number, group: any[]) {
+    const canonicalId = alignChoice[gi] || group[0].id;
+    const mergeIds = group.map((g) => g.id);
+    if (!confirm("¿Fusionar estos ítems en el seleccionado? Se suman cantidades y se borran los duplicados.")) return;
+    const res = await fetch("/api/inventory/merge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ canonicalId, mergeIds }),
+    });
+    const json = await res.json();
+    if (json.success) { toast.success(json.message); loadAlign(); fetchItems(); loadByWarehouse(); }
+    else toast.error(json.error || "Error");
+  }
 
   const loadMovements = useCallback(async () => {
     if (!token) return;
@@ -157,7 +200,8 @@ export default function InventarioPage() {
 
   useEffect(() => {
     fetchItems();
-  }, [fetchItems]);
+    loadByWarehouse();
+  }, [fetchItems, loadByWarehouse]);
 
   const stats = {
     total: items.length,
@@ -203,6 +247,9 @@ export default function InventarioPage() {
           <Button variant="outline" size="sm" onClick={() => { setShowLogistics(true); loadMovements(); }}>
             🚚 Logística
           </Button>
+          <Button variant="outline" size="sm" onClick={() => { setShowAlign(true); loadAlign(); }}>
+            🔎 Alinear
+          </Button>
           <Button variant="outline" size="sm" leftIcon={<Download className="h-4 w-4" />}>
             Exportar
           </Button>
@@ -231,6 +278,24 @@ export default function InventarioPage() {
           </Card>
         ))}
       </div>
+
+      {byWarehouse.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">🏢 Stock por bodega</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {byWarehouse.map((w) => (
+              <Card key={w.warehouse} variant="bordered" className="p-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-sm">{w.warehouse}</p>
+                  <span className="text-xs text-gray-400">{w.items} ítems</span>
+                </div>
+                <p className="text-2xl font-bold mt-1">{w.units} <span className="text-sm font-normal text-gray-400">unidades</span></p>
+                <p className="text-xs text-gray-500 mt-0.5">✅ {w.available} disponibles · 🔧 {w.repair} en reparación</p>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {damagedItems.length > 0 && (
         <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl p-4">
@@ -595,6 +660,42 @@ export default function InventarioPage() {
               ))}
             </div>
           </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showAlign} onClose={() => setShowAlign(false)} title="Alinear descripciones (duplicados)" size="lg">
+        <div className="space-y-4 p-1">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Grupos de ítems con descripciones parecidas. Elegí el **nombre canónico** y fusioná (se suma la cantidad y se borran los duplicados).
+          </p>
+          {alignLoading ? (
+            <p className="text-xs text-gray-400">Analizando inventario…</p>
+          ) : alignGroups.length === 0 ? (
+            <p className="text-sm text-green-600">✅ No se detectaron duplicados ni desalineaciones.</p>
+          ) : (
+            <div className="space-y-3 max-h-[62vh] overflow-y-auto">
+              {alignGroups.map((group: any[], gi: number) => (
+                <div key={gi} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                  <p className="text-xs font-medium mb-2 text-gray-500">{group.length} ítems parecidos — elegí el canónico:</p>
+                  {group.map((it: any) => (
+                    <label key={it.id} className="flex items-center gap-2 text-sm py-0.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`g${gi}`}
+                        checked={(alignChoice[gi] || group[0].id) === it.id}
+                        onChange={() => setAlignChoice({ ...alignChoice, [gi]: it.id })}
+                      />
+                      <span className="truncate">{it.name}</span>
+                      <span className="text-xs text-gray-400 ml-auto shrink-0">{it.quantity} u · {it.section || "-"} · {it.warehouse || "-"}</span>
+                    </label>
+                  ))}
+                  <div className="flex justify-end mt-2">
+                    <Button size="sm" onClick={() => mergeGroup(gi, group)}>Fusionar en el seleccionado</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </Modal>
 
