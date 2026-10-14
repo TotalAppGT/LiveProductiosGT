@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import {
   Plus,
   Search,
@@ -54,6 +54,7 @@ export default function InventarioPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -199,6 +200,7 @@ export default function InventarioPage() {
       if (statusFilter) params.set("status", statusFilter);
       if (locationFilter) params.set("location", locationFilter);
       if (search) params.set("search", search);
+      params.set("limit", "1000");
       const res = await fetch(`/api/inventory?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -232,6 +234,20 @@ export default function InventarioPage() {
   const damagedItems = items.filter(
     (i) => i.status === "DANADO" || i.status === "PERDIDO"
   );
+
+  const sections = Array.from(new Set(items.map((i) => i.section).filter(Boolean) as string[])).sort();
+  const displayItems = sectionFilter ? items.filter((i) => (i.section || "") === sectionFilter) : items;
+  const grouped: { section: string; rows: InventoryItem[] }[] = (() => {
+    const map = new Map<string, InventoryItem[]>();
+    for (const it of displayItems) {
+      const s = it.section || "Sin sección";
+      if (!map.has(s)) map.set(s, []);
+      map.get(s)!.push(it);
+    }
+    return Array.from(map.entries())
+      .map(([section, rows]) => ({ section, rows }))
+      .sort((a, b) => a.section.localeCompare(b.section));
+  })();
 
   async function deleteItem(id: string) {
     if (!confirm("¿Estás seguro de eliminar este ítem?")) return;
@@ -391,6 +407,16 @@ export default function InventarioPage() {
                 <option key={k} value={k}>{v}</option>
               ))}
             </select>
+            <select
+              value={sectionFilter}
+              onChange={(e) => setSectionFilter(e.target.value)}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todas las secciones</option>
+              {sections.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -465,7 +491,14 @@ export default function InventarioPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {items.map((item) => (
+                {grouped.map((grp) => (
+                  <Fragment key={grp.section}>
+                  <tr className="bg-gray-100 dark:bg-gray-800/70">
+                    <td colSpan={7} className="px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                      {grp.section} <span className="text-gray-400 font-normal">({grp.rows.length})</span>
+                    </td>
+                  </tr>
+                  {grp.rows.map((item) => (
                   <tr
                     key={item.id}
                     className={cn(
@@ -533,6 +566,8 @@ export default function InventarioPage() {
                       </div>
                     </td>
                   </tr>
+                  ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -540,7 +575,10 @@ export default function InventarioPage() {
         </Card>
 
         <div className="md:hidden space-y-3">
-          {items.map((item) => (
+          {grouped.map((grp) => (
+            <div key={grp.section} className="space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wide text-gray-500 px-1 pt-2">{grp.section} ({grp.rows.length})</p>
+              {grp.rows.map((item) => (
             <Card
               key={item.id}
               variant="bordered"
@@ -590,6 +628,8 @@ export default function InventarioPage() {
                 </Button>
               </div>
             </Card>
+              ))}
+            </div>
           ))}
         </div>
       </>
@@ -756,6 +796,21 @@ function InventoryFormModal({
   const [serialNumber, setSerialNumber] = useState(item?.serialNumber || "");
   const [notes, setNotes] = useState(item?.notes || "");
   const [saving, setSaving] = useState(false);
+
+  // Recarga los campos al abrir/editar (evita que el nombre se borre o quede el del ítem anterior).
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(item?.name || "");
+    setCategory(item?.category || "AUDIO");
+    setQuantity(String(item?.quantity ?? 1));
+    setStatus(item?.status || "DISPONIBLE");
+    setLocation(item?.location || "Bodega Elgin");
+    setWarehouse(item?.warehouse || "Bodega Elgin");
+    setSection(item?.section || "");
+    setSerialNumber(item?.serialNumber || "");
+    setNotes(item?.notes || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, item]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
