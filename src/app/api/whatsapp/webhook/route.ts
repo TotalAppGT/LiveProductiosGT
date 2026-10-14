@@ -2139,6 +2139,13 @@ async function handleCommand(
     return await buildDuplicatesSummary();
   }
 
+  if (cmd === "sugerencias" || cmd === "recomendaciones" || cmd === "recomiendame" || cmd === "recomiéndame" || cmd === "luna recomienda" || cmd === "que hago") {
+    const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
+    if (!isAdmin) return "Las sugerencias están disponibles para dueños, administradores y jefes.";
+    const { buildLunaSuggestions } = await import("@/lib/logistics-insights");
+    return await buildLunaSuggestions(14);
+  }
+
   if (cmd === "inventario" || cmd.startsWith("inventario ")) {
     const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
     if (!isAdmin) return "El inventario solo está disponible para dueños, administradores y jefes.";
@@ -2777,6 +2784,7 @@ function isKnownCommand(text: string): boolean {
     "inventario", "vehiculos", "vehículos", "cobros", "empleados", "personal",
     "cuadro", "cuadros", "logistica", "logística", "faltantes", "me falta", "que comprar", "qué comprar",
     "bodegas", "stock", "movimientos", "duplicados", "alinear", "descripciones",
+    "sugerencias", "recomendaciones", "recomiendame", "recomiéndame", "luna recomienda", "que hago",
     "compra", "comprar", "compras", "comprado", "agrega compra", "agregar compra",
     "asigna", "asignar", "agrega tarea", "agregar tarea", "ponle", "deja",
     "mandale", "mándale", "manda", "envia", "enviale", "envíale", "mensaje",

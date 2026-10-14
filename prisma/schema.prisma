@@ -741,3 +741,16 @@ model ScheduledAlert {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
+
+model Place {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  lat       Float
+  lng       Float
+  type      String   @default("EVENTO")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+}

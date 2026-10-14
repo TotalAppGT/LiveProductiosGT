@@ -116,6 +116,16 @@ export async function buildMovementsSummary(limit = 12): Promise<string> {
     .join("\n")}`;
 }
 
+// Sugerencias proactivas de LUNA: logística/cuadros + descripciones + bodegas.
+export async function buildLunaSuggestions(days = 14): Promise<string> {
+  const [logi, dup, wh] = await Promise.all([
+    buildLogisticsSummary(days),
+    buildDuplicatesSummary(),
+    buildWarehouseSummary(),
+  ]);
+  return `🌙 *Sugerencias de LUNA (proyección ${days} días)*\n\n${logi}\n\n${dup}\n\n${wh}\n\n_Recomendaciones: revisá los faltantes para comprar/alquilar o reutilizar (trasiego); unificá las descripciones duplicadas; y transferí equipo entre bodegas para optimizar._`;
+}
+
 export async function buildDuplicatesSummary(): Promise<string> {
   const items = await prisma.inventoryItem.findMany({ select: { id: true, name: true, quantity: true, section: true } });
   const groups = findSimilarGroups(items, 0.8);

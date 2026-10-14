@@ -5,8 +5,8 @@ export const WAREHOUSES = ["Bodega Elgin", "Bodega PP", "En evento", "En renta",
 
 // Ubicación de bodegas (coordenadas aproximadas, editables) para el mapa.
 export const WAREHOUSE_COORDS: Record<string, { lat: number; lng: number; address: string }> = {
-  "Bodega Elgin": { lat: 14.594, lng: -90.5, address: "16 avenida A 28-76 zona 13 Elgin, Guatemala" },
-  "Bodega PP": { lat: 14.63, lng: -90.55, address: "Piedra Parada (aproximado, editable)" },
+  "Bodega Elgin": { lat: 14.5569333, lng: -90.5287741, address: "16 avenida A 28-76 zona 13 Elgin, Guatemala" },
+  "Bodega PP": { lat: 14.5931719, lng: -90.4592617, address: "Carretera a Piedra Parada, Zona 16, Guatemala (editable)" },
 };
 
 // Secciones de inventario (agrupación fina, como en el Excel maestro).
