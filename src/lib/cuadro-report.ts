@@ -267,11 +267,14 @@ function drawTable(doc: any, cols: Col[], rows: Cell[][]) {
   };
   drawHead();
 
+  // Línea de guía bajo el encabezado
+  doc.moveTo(x0, doc.y).lineTo(x0 + totalW, doc.y).lineWidth(0.8).strokeColor("#1e40af").stroke();
+
   let alt = false;
   for (const row of rows) {
-    if (doc.y > doc.page.height - doc.page.margins.bottom - rowH - 4) { doc.addPage(); drawHead(); alt = false; }
+    if (doc.y > doc.page.height - doc.page.margins.bottom - rowH - 4) { doc.addPage(); drawHead(); doc.moveTo(x0, doc.y).lineTo(x0 + totalW, doc.y).lineWidth(0.8).strokeColor("#1e40af").stroke(); alt = false; }
     const y = doc.y;
-    if (alt) doc.rect(x0, y, totalW, rowH).fill("#f3f4f6");
+    if (alt) doc.rect(x0, y + 0.6, totalW, rowH - 1.2).fill("#f3f4f6");
     alt = !alt;
     let x = x0;
     row.forEach((cell, i) => {
@@ -280,7 +283,8 @@ function drawTable(doc: any, cols: Col[], rows: Cell[][]) {
       doc.text(fitText(doc, cell.v, c.w - pad * 2), x + pad, y + 3, { width: c.w - pad * 2, align: c.align || "left", lineBreak: false });
       x += c.w;
     });
-    doc.moveTo(x0, y + rowH).lineTo(x0 + totalW, y + rowH).lineWidth(0.3).strokeColor("#e5e7eb").stroke();
+    // Línea de guía al pie de cada fila
+    doc.moveTo(x0, y + rowH).lineTo(x0 + totalW, y + rowH).lineWidth(0.6).strokeColor("#9ca3af").stroke();
     doc.y = y + rowH;
   }
   doc.y += 6;
