@@ -251,9 +251,10 @@ interface Col { w: number; t: string; align?: "left" | "right" | "center"; }
 function drawTable(doc: any, cols: Col[], rows: Cell[][]) {
   const x0 = doc.page.margins.left;
   const pad = 7;
-  const rowH = 14;
+  const minRowH = 14;
   const totalW = cols.reduce((s, c) => s + c.w, 0);
 
+  const headLine = () => doc.moveTo(x0, doc.y).lineTo(x0 + totalW, doc.y).lineWidth(0.8).strokeColor("#1e40af").stroke();
   const drawHead = () => {
     const y = doc.y;
     doc.rect(x0, y, totalW, 16).fill("#1e40af");
@@ -264,15 +265,24 @@ function drawTable(doc: any, cols: Col[], rows: Cell[][]) {
       x += c.w;
     }
     doc.y = y + 16;
+    headLine();
   };
   drawHead();
 
-  // Línea de guía bajo el encabezado
-  doc.moveTo(x0, doc.y).lineTo(x0 + totalW, doc.y).lineWidth(0.8).strokeColor("#1e40af").stroke();
-
   let alt = false;
   for (const row of rows) {
-    if (doc.y > doc.page.height - doc.page.margins.bottom - rowH - 4) { doc.addPage(); drawHead(); doc.moveTo(x0, doc.y).lineTo(x0 + totalW, doc.y).lineWidth(0.8).strokeColor("#1e40af").stroke(); alt = false; }
+    // Alto de fila según el texto más largo → se ve TODO el texto (con salto de línea)
+    doc.font("Helvetica").fontSize(8.5);
+    const lh = doc.currentLineHeight();
+    let lines = 1;
+    for (let i = 0; i < row.length; i++) {
+      const w = cols[i].w - pad * 2;
+      const h = doc.heightOfString(String(row[i]?.v ?? ""), { width: w });
+      lines = Math.max(lines, Math.max(1, Math.round(h / lh)));
+    }
+    const rowH = Math.max(minRowH, lines * lh + 5);
+
+    if (doc.y > doc.page.height - doc.page.margins.bottom - rowH - 4) { doc.addPage(); drawHead(); alt = false; }
     const y = doc.y;
     if (alt) doc.rect(x0, y + 0.6, totalW, rowH - 1.2).fill("#f3f4f6");
     alt = !alt;
@@ -280,7 +290,7 @@ function drawTable(doc: any, cols: Col[], rows: Cell[][]) {
     row.forEach((cell, i) => {
       const c = cols[i];
       doc.fillColor(cell.color || "#222").font(cell.bold ? "Helvetica-Bold" : "Helvetica").fontSize(8.5);
-      doc.text(fitText(doc, cell.v, c.w - pad * 2), x + pad, y + 3, { width: c.w - pad * 2, align: c.align || "left", lineBreak: false });
+      doc.text(String(cell.v ?? ""), x + pad, y + 3, { width: c.w - pad * 2, align: c.align || "left" });
       x += c.w;
     });
     // Línea de guía al pie de cada fila
