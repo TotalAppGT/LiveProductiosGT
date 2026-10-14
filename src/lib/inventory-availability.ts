@@ -91,7 +91,7 @@ export interface CuadroAnalysis {
 
 const HEAVY_SECTIONS = ["ESTRUCTURA LUCES", "ESTRUCTURA LUCES PEQUEÑA", "ESTRUCTURA DJ", "TARIMA Y PISTA"];
 
-function recommendTruck(sections: Set<string>, totalUnits: number): { type: string; reason: string } {
+export function recommendTruck(sections: Set<string>, totalUnits: number): { type: string; reason: string } {
   const heavy = HEAVY_SECTIONS.some((s) => sections.has(s));
   const hasAudio = sections.has("AUDIO") || sections.has("CONSOLAS") || sections.has("MICROFONIA");
   const hasIlum = sections.has("ILUMINACION");
