@@ -219,6 +219,14 @@ export default function PedidosPage() {
     fetchData();
   }
 
+  async function deleteOrder(id: string, orderNumber: number) {
+    if (!confirm(`¿Eliminar el cuadro #${orderNumber}? Esta acción no se puede deshacer.`)) return;
+    const res = await fetch(`/api/orders/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    const json = await res.json().catch(() => ({ success: false }));
+    if (json.success) { toast.success("Cuadro eliminado"); fetchData(); }
+    else toast.error(json.error || "Error al eliminar");
+  }
+
   function useTemplate(t: any) {
     setSelectedItems((t.items || []).map((it: any) => ({ name: it.name, category: it.category, quantity: it.quantity || 1, inventoryItemId: it.inventoryItemId || null })));
     setShowCreate(true);
@@ -308,10 +316,20 @@ export default function PedidosPage() {
                 </div>
                 <h3 className="font-semibold mt-1">{o.eventName}</h3>
                 <p className="text-xs text-gray-400">
+                  {o.eventDate ? new Date(o.eventDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "short", year: "numeric" }) + " · " : ""}
                   {o.items?.length || 0} items · Creado por {o.createdBy?.name}
                 </p>
               </div>
-              <ClipboardList className="w-5 h-5 text-gray-400" />
+              <div className="flex items-center gap-1">
+                <ClipboardList className="w-5 h-5 text-gray-400" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); deleteOrder(o.id, o.orderNumber); }}
+                  className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  title="Eliminar cuadro"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </Card>
         ))}
@@ -664,6 +682,14 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
     setEditItems((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  async function removeOrder() {
+    if (!confirm(`¿Eliminar el cuadro #${order.orderNumber} "${order.eventName}"? No se puede deshacer.`)) return;
+    const res = await fetch(`/api/orders/${order.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    const json = await res.json().catch(() => ({ success: false }));
+    if (json.success) { toast.success("Cuadro eliminado"); onUpdated(); onClose(); }
+    else toast.error(json.error || "Error al eliminar");
+  }
+
   async function saveEdit() {
     setSavingEdit(true);
     try {
@@ -724,6 +750,11 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
                 Cancelar
               </button>
             </>
+          )}
+          {!editing && (
+            <button onClick={removeOrder} className="text-xs bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1.5 rounded-lg">
+              🗑️ Eliminar
+            </button>
           )}
         </div>
 

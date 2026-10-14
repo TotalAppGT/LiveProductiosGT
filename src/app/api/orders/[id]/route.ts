@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticateRequest } from "@/lib/auth";
+import { authenticateRequest, hasMinRole } from "@/lib/auth";
 import { parseGTInputDate } from "@/lib/task-utils";
 
 export async function GET(
@@ -79,6 +79,40 @@ export async function PUT(
     return NextResponse.json({ success: true, data: order, message: "Cuadro actualizado" });
   } catch (error) {
     console.error("Error order PUT:", error);
+    return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });
+  }
+}
+
+// Eliminar un cuadro (y sus items por cascada).
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const auth = authenticateRequest(request);
+    if ("error" in auth) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+    if (!hasMinRole(auth.payload, "JEFE")) {
+      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
+    }
+    const { id } = await params;
+    const existing = await prisma.order.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ success: false, error: "Cuadro no encontrado" }, { status: 404 });
+
+    await prisma.order.delete({ where: { id } });
+
+    await prisma.activity.create({
+      data: {
+        userId: auth.payload.userId,
+        action: "ELIMINAR_CUADRO",
+        resource: "ORDER",
+        resourceId: id,
+        details: `Cuadro #${existing.orderNumber} "${existing.eventName}" eliminado`,
+      },
+    }).catch(() => {});
+
+    return NextResponse.json({ success: true, message: "Cuadro eliminado" });
+  } catch (error) {
+    console.error("Error order DELETE:", error);
     return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });
   }
 }
