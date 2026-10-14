@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    const groups = findSimilarGroups(items, 0.6);
+    const groups = findSimilarGroups(items, 0.8);
     return NextResponse.json({ success: true, data: groups, total: groups.length });
   } catch (error) {
     console.error("Error align:", error);

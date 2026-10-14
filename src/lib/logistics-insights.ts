@@ -118,7 +118,7 @@ export async function buildMovementsSummary(limit = 12): Promise<string> {
 
 export async function buildDuplicatesSummary(): Promise<string> {
   const items = await prisma.inventoryItem.findMany({ select: { id: true, name: true, quantity: true, section: true } });
-  const groups = findSimilarGroups(items, 0.6);
+  const groups = findSimilarGroups(items, 0.8);
   if (!groups.length) return "✅ No hay descripciones duplicadas ni desalineadas.";
   const lines = groups.slice(0, 8).map((g, i) => `${i + 1}. ${g.length} parecidos: ${g.map((x) => `"${x.name}"`).join(" · ")}`);
   return `🔎 *Descripciones a alinear (${groups.length} grupos)*\n${lines.join("\n")}\n\n_Revisalos en Inventario → 🔎 Alinear._`;
