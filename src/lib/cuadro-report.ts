@@ -29,6 +29,7 @@ export interface ReportRow {
   repair: number;
   available: number;
   faltante: number;
+  action: string;
 }
 
 export interface EventSummary {
@@ -79,16 +80,17 @@ export interface GeneralReport {
   events: EventSummary[];
   items: MatrixRow[];
   faltantes: MatrixRow[];
+  warehouseStock: { warehouse: string; items: number; units: number; available: number; repair: number }[];
   totals: { orders: number; items: number; demand: number; faltantes: number; comprar: number; alquilar: number };
 }
 
 async function getInventoryIndex() {
   const items = await prisma.inventoryItem.findMany({
-    select: { id: true, name: true, section: true, quantity: true, status: true },
+    select: { id: true, name: true, section: true, quantity: true, status: true, warehouse: true },
   });
   const byId = new Map(items.map((i) => [i.id, i]));
   const byName = new Map(items.map((i) => [norm(i.name), i]));
-  return { byId, byName };
+  return { items, byId, byName };
 }
 
 function aggregate(orderItems: { name: string; quantity: number; inventoryItemId: string | null }[], byId: Map<string, any>, byName: Map<string, any>) {
@@ -107,7 +109,8 @@ function row(name: string, section: string | null, inv: any, needed: number): Re
   const stock = inv?.quantity ?? 0;
   const repair = inv && (inv.status === "EN_REPARACION" || inv.status === "DANADO" || inv.status === "PERDIDO") ? inv.quantity : 0;
   const available = Math.max(0, stock - repair);
-  return { name, section, needed, stock, repair, available, faltante: Math.max(0, needed - available) };
+  const faltante = Math.max(0, needed - available);
+  return { name, section, needed, stock, repair, available, faltante, action: faltante > 0 ? actionFor(section) : "—" };
 }
 
 function truckForEvent(aggregated: { inv: any; needed: number }[]) {
@@ -154,7 +157,20 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
     include: { items: true },
   });
   if (orders.length === 0) return null;
-  const { byId, byName } = await getInventoryIndex();
+  const { items: invItems, byId, byName } = await getInventoryIndex();
+
+  // Stock por bodega (de todo el inventario)
+  const wmap = new Map<string, { warehouse: string; items: number; units: number; available: number; repair: number }>();
+  for (const it of invItems) {
+    const w = (it as any).warehouse || "Sin bodega";
+    const cur = wmap.get(w) || { warehouse: w, items: 0, units: 0, available: 0, repair: 0 };
+    const rep = it.status === "EN_REPARACION" || it.status === "DANADO" || it.status === "PERDIDO";
+    cur.items++;
+    cur.units += it.quantity;
+    if (rep) cur.repair += it.quantity; else cur.available += it.quantity;
+    wmap.set(w, cur);
+  }
+  const warehouseStock = Array.from(wmap.values()).sort((a, b) => b.units - a.units);
 
   const events: EventSummary[] = [];
   const matrix = new Map<string, MatrixRow>();
@@ -207,7 +223,7 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
     alquilar: faltantes.filter((m) => m.action === "Alquilar").length,
   };
 
-  return { kind: "general", generatedAt: new Date().toISOString(), events, items, faltantes, totals };
+  return { kind: "general", generatedAt: new Date().toISOString(), events, items, faltantes, warehouseStock, totals };
 }
 
 // ================= PDF =================
@@ -242,13 +258,13 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
     doc.moveDown(0.2);
     doc.fontSize(9).fillColor("#111").text(`Ítems: ${report.totalRows} · Faltantes: ${report.faltantes.length} · Camión: ${report.truck}`);
     doc.moveDown(0.6);
-    const cols = [{ w: 250, t: "Ítem" }, { w: 55, t: "Nec." }, { w: 55, t: "Stock" }, { w: 65, t: "Disp." }, { w: 60, t: "Faltan" }];
+    const cols = [{ w: 200, t: "Ítem" }, { w: 50, t: "Nec." }, { w: 50, t: "Stock" }, { w: 60, t: "Disp." }, { w: 55, t: "Faltan" }, { w: 60, t: "Acción" }];
     tableHeader(doc, cols);
     doc.font("Helvetica").fontSize(8.5);
     for (const r of report.rows) {
       if (doc.y > doc.page.height - 50) { doc.addPage(); tableHeader(doc, cols); doc.font("Helvetica").fontSize(8.5); }
       const y = doc.y; let x = doc.page.margins.left + 4;
-      [r.name, String(r.needed), String(r.stock), String(r.available), String(r.faltante)].forEach((v, i) => {
+      [r.name, String(r.needed), String(r.stock), String(r.available), String(r.faltante), r.faltante > 0 ? r.action : ""].forEach((v, i) => {
         doc.fillColor(i === 4 && r.faltante > 0 ? "#b91c1c" : "#222").font(i === 4 && r.faltante > 0 ? "Helvetica-Bold" : "Helvetica");
         doc.text(v, x, y, { width: cols[i].w - 6, lineBreak: false, ellipsis: true });
         x += cols[i].w;
@@ -316,6 +332,7 @@ export function reportXlsx(report: CuadroReport | GeneralReport): Buffer {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(info), "Resumen");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(report.rows.map((r) => ({
       Ítem: r.name, Sección: r.section || "", Necesito: r.needed, Stock: r.stock, Disponible: r.available, Falta: r.faltante,
+      "Acción": r.faltante > 0 ? r.action : "",
     }))), "Detalle");
     return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
   }
@@ -364,6 +381,14 @@ export function reportXlsx(report: CuadroReport | GeneralReport): Buffer {
     ...report.faltantes.map((m) => [m.name, m.section || "", m.total, Math.max(0, m.stock - m.repair), m.saldo, m.faltante, m.action]),
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rc), "Renta-Compra");
+
+  // Stock por bodega
+  const wsStock: any[][] = [
+    ["STOCK POR BODEGA"], [],
+    ["Bodega", "Ítems", "Unidades", "Disponibles", "En reparación"],
+    ...report.warehouseStock.map((w) => [w.warehouse, w.items, w.units, w.available, w.repair]),
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsStock), "Stock por bodega");
 
   // Detalle por evento (desde perEvent de cada ítem)
   const detalle: any[][] = [["Evento", "Fecha", "Ítem", "Sección", "Cantidad", "Inventario"]];

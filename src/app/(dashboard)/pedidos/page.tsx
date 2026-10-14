@@ -224,6 +224,29 @@ export default function PedidosPage() {
     setShowCreate(true);
   }
 
+  async function uploadTemplate(file: File) {
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/orders/import", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const json = await res.json();
+      if (!json.success) return toast.error(json.error || "Error");
+      const name = prompt(`Nombre de la plantilla (${json.data.total} ítems detectados):`);
+      if (!name) return;
+      const tItems = json.data.items.map((i: any) => ({ name: i.matchedName || i.name, quantity: i.quantity, category: "OTRO", inventoryItemId: i.inventoryItemId }));
+      const t = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name, items: tItems }),
+      });
+      const tj = await t.json();
+      if (tj.success) { toast.success("Plantilla guardada"); fetchData(); }
+      else toast.error(tj.error || "Error");
+    } catch {
+      toast.error("Error al subir la plantilla");
+    }
+  }
+
   const filteredOrders = orders.filter((o) =>
     !search || String(o.orderNumber).includes(search) || o.eventName.toLowerCase().includes(search.toLowerCase())
   );
@@ -300,6 +323,12 @@ export default function PedidosPage() {
 
       {tab === "plantillas" && (
         <div className="grid gap-3">
+          <div className="flex justify-end">
+            <label className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg cursor-pointer">
+              ⬆️ Subir Excel como plantilla
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => e.target.files?.[0] && uploadTemplate(e.target.files[0])} />
+            </label>
+          </div>
           {templates.length === 0 && (
             <p className="text-center text-gray-400 py-8">No hay plantillas. Guardá un cuadro como plantilla desde "Nuevo Cuadro" (💾 Guardar Cuadro).</p>
           )}
@@ -594,10 +623,75 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
 
   const isPreparing = order.status === "BORRADOR" || order.status === "PREPARANDO";
 
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
+  const [editItems, setEditItems] = useState<any[]>([]);
+  const [invList, setInvList] = useState<any[]>([]);
+  const [addSel, setAddSel] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  async function startEdit() {
+    setEditForm({
+      eventName: order.eventName || "",
+      clientName: order.clientName || "",
+      eventLocation: order.eventLocation || "",
+      guestCount: order.guestCount || "",
+      eventDate: order.eventDate ? new Date(order.eventDate).toISOString().slice(0, 10) : "",
+      eventEndDate: order.eventEndDate ? new Date(order.eventEndDate).toISOString().slice(0, 10) : "",
+      contractNotes: order.contractNotes || "",
+    });
+    setEditItems(items.map((it) => ({ name: it.name, quantity: it.quantity, category: it.category, inventoryItemId: it.inventoryItemId })));
+    setEditing(true);
+    try {
+      const res = await fetch("/api/inventory?limit=1000", { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) setInvList(json.data);
+    } catch {
+      // silencioso
+    }
+  }
+
+  function addFromInv(id: string) {
+    const it = invList.find((x) => x.id === id);
+    if (!it) return;
+    setEditItems((prev) => [...prev, { name: it.name, quantity: 1, category: it.category, inventoryItemId: it.id }]);
+    setAddSel("");
+  }
+  function addExtraRow() {
+    setEditItems((prev) => [...prev, { name: "", quantity: 1, category: "OTRO", inventoryItemId: null }]);
+  }
+  function removeRow(i: number) {
+    setEditItems((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function saveEdit() {
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ...editForm, items: editItems.filter((i) => String(i.name).trim()) }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Cuadro actualizado");
+        setItems(json.data.items);
+        setEditing(false);
+        refresh();
+        loadAnalysis();
+        onUpdated();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al guardar");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   return (
     <Modal isOpen onClose={onClose} title={`Cuadro #${order.orderNumber} - ${order.eventName}`} size="lg">
       <div className="space-y-4 p-1">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <a
             href={`/api/orders/${order.id}/print`}
             target="_blank"
@@ -617,7 +711,70 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
           >
             📄 Reporte PDF
           </button>
+          {!editing ? (
+            <button onClick={startEdit} className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-lg">
+              ✏️ Editar
+            </button>
+          ) : (
+            <>
+              <button onClick={saveEdit} disabled={savingEdit} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg">
+                {savingEdit ? "Guardando…" : "💾 Guardar"}
+              </button>
+              <button onClick={() => setEditing(false)} className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg">
+                Cancelar
+              </button>
+            </>
+          )}
         </div>
+
+        {editing && (
+          <div className="border rounded-lg p-3 space-y-2 bg-blue-50/40 dark:bg-blue-900/10">
+            <p className="text-sm font-semibold">Editar cuadro</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Input label="Evento" value={editForm.eventName} onChange={(e) => setEditForm({ ...editForm, eventName: e.target.value })} />
+              <Input label="Cliente" value={editForm.clientName} onChange={(e) => setEditForm({ ...editForm, clientName: e.target.value })} />
+              <Input label="Lugar" value={editForm.eventLocation} onChange={(e) => setEditForm({ ...editForm, eventLocation: e.target.value })} />
+              <Input label="Invitados" type="number" value={editForm.guestCount} onChange={(e) => setEditForm({ ...editForm, guestCount: e.target.value })} />
+              <Input label="Fecha" type="date" value={editForm.eventDate} onChange={(e) => setEditForm({ ...editForm, eventDate: e.target.value })} />
+              <Input label="Fecha fin" type="date" value={editForm.eventEndDate} onChange={(e) => setEditForm({ ...editForm, eventEndDate: e.target.value })} />
+            </div>
+            <textarea
+              value={editForm.contractNotes}
+              onChange={(e) => setEditForm({ ...editForm, contractNotes: e.target.value })}
+              placeholder="Equipo contratado / notas"
+              rows={2}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+            />
+            <div className="text-sm font-medium">Ítems ({editItems.length})</div>
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {editItems.map((it, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    value={it.name}
+                    onChange={(e) => setEditItems((prev) => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))}
+                    className="flex-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm"
+                    placeholder="Ítem / extra"
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    value={it.quantity}
+                    onChange={(e) => setEditItems((prev) => prev.map((x, idx) => idx === i ? { ...x, quantity: parseInt(e.target.value) || 1 } : x))}
+                    className="w-16 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm"
+                  />
+                  <button onClick={() => removeRow(i)} className="text-red-500 text-sm">✕</button>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <select value={addSel} onChange={(e) => addFromInv(e.target.value)} className="flex-1 min-w-[200px] rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 text-sm">
+                <option value="">+ Agregar del inventario…</option>
+                {invList.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+              </select>
+              <Button variant="outline" size="sm" onClick={addExtraRow}>+ Extra libre</Button>
+            </div>
+          </div>
+        )}
 
         {analysisLoading ? (
           <p className="text-xs text-gray-400">Analizando disponibilidad…</p>
@@ -649,6 +806,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
           </div>
         ) : null}
 
+        {!editing && (<>
         {items.map((item: any) => (
           <div key={item.id} className="border rounded-lg p-3">
             <div className="flex items-center justify-between">
@@ -734,6 +892,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
         {order.status === "DEVUELTO" && (
           <p className="text-center text-sm text-green-600 font-medium">✅ Pedido devuelto y procesado</p>
         )}
+        </>)}
       </div>
     </Modal>
   );

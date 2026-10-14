@@ -24,7 +24,7 @@ import { Badge, inventoryStatusLabel, inventoryStatusColor } from "@/components/
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, cn } from "@/lib/utils";
-import { WAREHOUSES } from "@/lib/inventory";
+import { WAREHOUSES, INVENTORY_SECTIONS } from "@/lib/inventory";
 import type { InventoryItem, ApiResponse, PaginatedResponse } from "@/types";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -119,6 +119,24 @@ export default function InventarioPage() {
       // silencioso
     }
   }, [token]);
+
+  async function downloadMovements() {
+    try {
+      const res = await fetch("/api/inventory/movements/report?days=90", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { toast.error("Error al generar"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "movimientos.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Error al descargar");
+    }
+  }
 
   async function saveMovement() {
     if (!mov.inventoryItemId) return toast.error("Elegí un ítem");
@@ -645,7 +663,8 @@ export default function InventarioPage() {
               <Input label="Nota" value={mov.note} onChange={(e) => setMov({ ...mov, note: e.target.value })} />
             </div>
           </div>
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={downloadMovements}>📊 Exportar movimientos</Button>
             <Button onClick={saveMovement} isLoading={savingMov}>Registrar movimiento</Button>
           </div>
           <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
@@ -733,6 +752,7 @@ function InventoryFormModal({
   const [status, setStatus] = useState(item?.status || "DISPONIBLE");
   const [location, setLocation] = useState(item?.location || "Bodega Elgin");
   const [warehouse, setWarehouse] = useState(item?.warehouse || "Bodega Elgin");
+  const [section, setSection] = useState(item?.section || "");
   const [serialNumber, setSerialNumber] = useState(item?.serialNumber || "");
   const [notes, setNotes] = useState(item?.notes || "");
   const [saving, setSaving] = useState(false);
@@ -757,6 +777,7 @@ function InventoryFormModal({
           status,
           location,
           warehouse,
+          section: section.trim() || undefined,
           serialNumber: serialNumber.trim() || undefined,
           notes: notes.trim() || undefined,
         }),
@@ -845,11 +866,28 @@ function InventoryFormModal({
             </select>
           </div>
         </div>
-        <Input
-          label="Número de serie"
-          value={serialNumber}
-          onChange={(e) => setSerialNumber(e.target.value)}
-        />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Sección
+            </label>
+            <input
+              list="section-options"
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+              placeholder="Ej: CONSOLAS, AUDIO…"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            />
+            <datalist id="section-options">
+              {INVENTORY_SECTIONS.map((s) => <option key={s} value={s} />)}
+            </datalist>
+          </div>
+          <Input
+            label="Número de serie"
+            value={serialNumber}
+            onChange={(e) => setSerialNumber(e.target.value)}
+          />
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Descripción / Notas
