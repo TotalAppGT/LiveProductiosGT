@@ -19,6 +19,7 @@
     "@tailwindcss/postcss": "^4.3.3",
     "bcryptjs": "^2.4.3",
     "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
     "firebase": "^11.4.0",
     "firebase-admin": "^13.2.0",
     "jsonwebtoken": "^9.0.2",

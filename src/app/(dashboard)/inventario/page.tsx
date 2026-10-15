@@ -74,11 +74,16 @@ export default function InventarioPage() {
   const [alignName, setAlignName] = useState<Record<number, string>>({});
   const [showReport, setShowReport] = useState(false);
   const [reportStatus, setReportStatus] = useState("ALL");
+  const [reportWarehouse, setReportWarehouse] = useState("");
+  const [reportSection, setReportSection] = useState("");
 
   async function downloadInventoryReport(format: "xlsx" | "pdf") {
     try {
       toast.loading("Generando reporte…", { id: "inrep" });
-      const res = await fetch(`/api/inventory/report?format=${format}&status=${reportStatus}`, { headers: { Authorization: `Bearer ${token}` } });
+      const qs = new URLSearchParams({ format, status: reportStatus });
+      if (reportWarehouse) qs.set("warehouse", reportWarehouse);
+      if (reportSection) qs.set("section", reportSection);
+      const res = await fetch(`/api/inventory/report?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) { toast.error("Error al generar", { id: "inrep" }); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -848,6 +853,34 @@ export default function InventarioPage() {
               <option value="REPARACION">En reparación</option>
               <option value="DANADO">Dañado / Perdido</option>
             </select>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Bodega (opcional)</label>
+              <select
+                value={reportWarehouse}
+                onChange={(e) => setReportWarehouse(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+              >
+                <option value="">Todas las bodegas</option>
+                {Array.from(new Set(items.map((i) => i.warehouse).filter(Boolean))).sort().map((w) => (
+                  <option key={w as string} value={w as string}>{w}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Sección (opcional)</label>
+              <select
+                value={reportSection}
+                onChange={(e) => setReportSection(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+              >
+                <option value="">Todas las secciones</option>
+                {Array.from(new Set(items.map((i) => i.section).filter(Boolean))).sort().map((s) => (
+                  <option key={s as string} value={s as string}>{s}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2 justify-end">
             <Button variant="outline" onClick={() => downloadInventoryReport("xlsx")}>📊 Descargar Excel</Button>
