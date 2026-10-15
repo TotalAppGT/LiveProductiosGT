@@ -21,6 +21,9 @@ const mapItem = (i: any) => ({
   "Serie": i.serialNumber || "",
 });
 
+// Excel no permite ciertos caracteres en el nombre de hoja ( \ / ? * [ ] : ). Los reemplaza.
+const safeSheet = (s: string) => s.replace(/[\\/?*[\]:]/g, "-").slice(0, 31);
+
 export async function GET(request: NextRequest) {
   try {
     const auth = authenticateRequest(request);
@@ -96,8 +99,8 @@ export async function GET(request: NextRequest) {
     for (const [, g] of Object.entries(groups)) {
       const arr = all.filter((i) => g.statuses.includes(i.status));
       const sheet = XLSX.utils.json_to_sheet(arr.length ? arr.map(mapItem) : [{ "Ítem": "— sin ítems —" }]);
-      // nombre de hoja válido (máx 31)
-      XLSX.utils.book_append_sheet(wb, sheet, g.label.slice(0, 31));
+      // nombre de hoja válido (sin caracteres prohibidos, máx 31)
+      XLSX.utils.book_append_sheet(wb, sheet, safeSheet(g.label));
     }
     if (statusParam === "ALL") XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(all.map(mapItem)), "Todo");
 
