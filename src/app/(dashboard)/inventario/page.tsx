@@ -71,6 +71,28 @@ export default function InventarioPage() {
   const [alignGroups, setAlignGroups] = useState<any[]>([]);
   const [alignLoading, setAlignLoading] = useState(false);
   const [alignChoice, setAlignChoice] = useState<Record<number, string>>({});
+  const [showReport, setShowReport] = useState(false);
+  const [reportStatus, setReportStatus] = useState("ALL");
+
+  async function downloadInventoryReport(format: "xlsx" | "pdf") {
+    try {
+      toast.loading("Generando reporte…", { id: "inrep" });
+      const res = await fetch(`/api/inventory/report?format=${format}&status=${reportStatus}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { toast.error("Error al generar", { id: "inrep" }); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `inventario-${reportStatus.toLowerCase()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Reporte descargado", { id: "inrep" });
+    } catch {
+      toast.error("Error al descargar", { id: "inrep" });
+    }
+  }
 
   const loadByWarehouse = useCallback(async () => {
     if (!token) return;
@@ -283,6 +305,9 @@ export default function InventarioPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => { setShowAlign(true); loadAlign(); }}>
             🔎 Alinear
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowReport(true)}>
+            📊 Reportes
           </Button>
           <Button variant="outline" size="sm" leftIcon={<Download className="h-4 w-4" />}>
             Exportar
@@ -755,6 +780,29 @@ export default function InventarioPage() {
               ))}
             </div>
           )}
+        </div>
+      </Modal>
+
+      <Modal isOpen={showReport} onClose={() => setShowReport(false)} title="Reportes de inventario" size="lg">
+        <div className="space-y-4 p-1">
+          <div>
+            <label className="block text-sm font-medium mb-1">¿Qué reporte querés?</label>
+            <select
+              value={reportStatus}
+              onChange={(e) => setReportStatus(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+            >
+              <option value="ALL">Todo el inventario (resumen + todas las hojas)</option>
+              <option value="DISPONIBLE">Disponible</option>
+              <option value="ASIGNADO">Asignado</option>
+              <option value="REPARACION">En reparación</option>
+              <option value="DANADO">Dañado / Perdido</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-2 justify-end">
+            <Button variant="outline" onClick={() => downloadInventoryReport("xlsx")}>📊 Descargar Excel</Button>
+            <Button variant="outline" onClick={() => downloadInventoryReport("pdf")}>📄 Descargar PDF</Button>
+          </div>
         </div>
       </Modal>
 
