@@ -71,6 +71,7 @@ export default function InventarioPage() {
   const [alignGroups, setAlignGroups] = useState<any[]>([]);
   const [alignLoading, setAlignLoading] = useState(false);
   const [alignChoice, setAlignChoice] = useState<Record<number, string>>({});
+  const [alignName, setAlignName] = useState<Record<number, string>>({});
   const [showReport, setShowReport] = useState(false);
   const [reportStatus, setReportStatus] = useState("ALL");
 
@@ -118,18 +119,48 @@ export default function InventarioPage() {
     }
   }, [token]);
 
-  async function mergeGroup(gi: number, group: any[]) {
+  async function mergeGroup(gi: number, group: any[], opts?: { silent?: boolean }) {
     const canonicalId = alignChoice[gi] || group[0].id;
     const mergeIds = group.map((g) => g.id);
-    if (!confirm("¿Fusionar estos ítems en el seleccionado? Se suman cantidades y se borran los duplicados.")) return;
+    const sel = group.find((g) => g.id === canonicalId) || group[0];
+    const newName = (alignName[gi] ?? sel.name)?.trim() || sel.name;
+    if (!opts?.silent && !confirm(`¿Alinear en "${newName}"? Se suman cantidades, se reasignan cuadros/movimientos y se borran los duplicados.`)) return;
     const res = await fetch("/api/inventory/merge", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ canonicalId, mergeIds }),
+      body: JSON.stringify({ canonicalId, mergeIds, newName }),
     });
     const json = await res.json();
-    if (json.success) { toast.success(json.message); loadAlign(); fetchItems(); loadByWarehouse(); }
-    else toast.error(json.error || "Error");
+    if (json.success) { if (!opts?.silent) { toast.success(json.message); loadAlign(); fetchItems(); loadByWarehouse(); } return true; }
+    toast.error(json.error || "Error");
+    return false;
+  }
+
+  async function mergeAll() {
+    if (!confirm(`¿Alinear TODOS los grupos (${alignGroups.length})? En cada grupo se conserva el nombre más completo/editable. Esta acción no se puede deshacer.`)) return;
+    let n = 0;
+    for (let gi = 0; gi < alignGroups.length; gi++) {
+      const group = alignGroups[gi];
+      // Elige como canónico el ítem con el nombre más largo (más descriptivo) si no se eligió otro.
+      const longest = [...group].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0))[0];
+      const cid = alignChoice[gi] || longest.id;
+      const sel = group.find((g: any) => g.id === cid) || longest;
+      const nm = (alignName[gi] ?? sel.name)?.trim() || sel.name;
+      const ok = await fetch("/api/inventory/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ canonicalId: cid, mergeIds: group.map((g: any) => g.id), newName: nm }),
+      }).then((r) => r.json()).then((j) => j.success).catch(() => false);
+      if (ok) n++;
+    }
+    toast.success(`Alineados ${n} grupos`);
+    loadAlign(); fetchItems(); loadByWarehouse();
+  }
+
+  function pickCanonical(gi: number, group: any[], id: string) {
+    const it = group.find((g) => g.id === id);
+    setAlignChoice({ ...alignChoice, [gi]: id });
+    setAlignName({ ...alignName, [gi]: it?.name || "" });
   }
 
   const loadMovements = useCallback(async () => {
@@ -750,35 +781,54 @@ export default function InventarioPage() {
       <Modal isOpen={showAlign} onClose={() => setShowAlign(false)} title="Alinear descripciones (duplicados)" size="lg">
         <div className="space-y-4 p-1">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Grupos de ítems con descripciones parecidas. Elegí el **nombre canónico** y fusioná (se suma la cantidad y se borran los duplicados).
+            Grupos de ítems con descripciones parecidas. Elegí con cuál quedarte o <b>editá el nombre</b> con nomenclatura formal;
+            al alinear se suman cantidades, se reasignan los cuadros/movimientos y se borran los duplicados (afecta a todo el sistema).
           </p>
           {alignLoading ? (
             <p className="text-xs text-gray-400">Analizando inventario…</p>
           ) : alignGroups.length === 0 ? (
             <p className="text-sm text-green-600">✅ No se detectaron duplicados ni desalineaciones.</p>
           ) : (
-            <div className="space-y-3 max-h-[62vh] overflow-y-auto">
-              {alignGroups.map((group: any[], gi: number) => (
-                <div key={gi} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-                  <p className="text-xs font-medium mb-2 text-gray-500">{group.length} ítems parecidos — elegí el canónico:</p>
-                  {group.map((it: any) => (
-                    <label key={it.id} className="flex items-center gap-2 text-sm py-0.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`g${gi}`}
-                        checked={(alignChoice[gi] || group[0].id) === it.id}
-                        onChange={() => setAlignChoice({ ...alignChoice, [gi]: it.id })}
-                      />
-                      <span className="truncate">{it.name}</span>
-                      <span className="text-xs text-gray-400 ml-auto shrink-0">{it.quantity} u · {it.section || "-"} · {it.warehouse || "-"}</span>
-                    </label>
-                  ))}
-                  <div className="flex justify-end mt-2">
-                    <Button size="sm" onClick={() => mergeGroup(gi, group)}>Fusionar en el seleccionado</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-gray-500">{alignGroups.length} grupo(s) detectado(s)</span>
+                <Button size="sm" variant="outline" onClick={mergeAll}>⚡ Alinear todos (nombre más completo)</Button>
+              </div>
+              <div className="space-y-3 max-h-[58vh] overflow-y-auto">
+                {alignGroups.map((group: any[], gi: number) => {
+                  const cid = alignChoice[gi] || group[0].id;
+                  const cur = alignName[gi] ?? (group.find((g) => g.id === cid)?.name || group[0].name);
+                  return (
+                    <div key={gi} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                      <p className="text-xs font-medium mb-2 text-gray-500">{group.length} ítems parecidos — elegí con cuál quedarte:</p>
+                      {group.map((it: any) => (
+                        <label key={it.id} className="flex items-center gap-2 text-sm py-0.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`g${gi}`}
+                            checked={cid === it.id}
+                            onChange={() => pickCanonical(gi, group, it.id)}
+                          />
+                          <span className="truncate">{it.name}</span>
+                          <span className="text-xs text-gray-400 ml-auto shrink-0">{it.quantity} u · {it.section || "-"} · {it.warehouse || "-"}</span>
+                        </label>
+                      ))}
+                      <div className="mt-2">
+                        <label className="block text-[11px] text-gray-500 mb-1">Nombre final (nomenclatura formal):</label>
+                        <input
+                          value={cur}
+                          onChange={(e) => setAlignName({ ...alignName, [gi]: e.target.value })}
+                          className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div className="flex justify-end mt-2">
+                        <Button size="sm" onClick={() => mergeGroup(gi, group)}>Alinear</Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </Modal>
