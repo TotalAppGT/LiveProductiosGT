@@ -168,6 +168,7 @@ model User {
   active          Boolean  @default(true)
   position        String   @default("")
   modules         String   @default("")
+  lastInboundAt   DateTime?
   tenantId       String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

@@ -2972,6 +2972,9 @@ export async function POST(request: NextRequest) {
                 if (user) {
                   console.log(`[WhatsApp] Usuario encontrado: ${user.name} (${user.role}) id=${user.id}`);
 
+                  // Marca la ventana de 24h: el usuario escribió ahora → mensajes libres permitidos.
+                  prisma.user.update({ where: { id: user.id }, data: { lastInboundAt: new Date() } }).catch(() => {});
+
                   const conv = getConversation(normalizedFrom);
                   const isBareNumber = /^\d+$/.test(text.toLowerCase().trim());
 

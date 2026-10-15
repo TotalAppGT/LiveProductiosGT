@@ -253,10 +253,33 @@ export async function sendProactiveMessage(
   to: string,
   message: string
 ): Promise<{ ok: boolean; via: "text" | "template" | "none"; messageId?: string }> {
-  const sent = await sendMessage(to, message).catch(() => null);
-  if (sent) return { ok: true, via: "text", messageId: sent.messages?.[0]?.id };
+  // ¿La ventana de 24h está abierta? (el usuario nos escribió en las últimas ~23h)
+  let windowOpen = false;
+  try {
+    const digits = normalizeGTPhone(to).replace(/\D/g, "");
+    const u = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { whatsappNumber: to }, { whatsappNumber: digits }, { whatsappNumber: `+${digits}` },
+          { phone: to }, { phone: digits }, { phone: `+${digits}` },
+        ],
+      },
+      select: { lastInboundAt: true },
+    });
+    if (u?.lastInboundAt) {
+      windowOpen = Date.now() - new Date(u.lastInboundAt).getTime() < 23 * 3600 * 1000;
+    }
+  } catch {
+    // si falla la consulta, se asume ventana cerrada → se usa plantilla
+  }
 
-  // Fuera de ventana / error: intentar con la PLANTILLA aprobada.
+  // Ventana abierta → mensaje libre (con formato completo).
+  if (windowOpen) {
+    const sent = await sendMessage(to, message).catch(() => null);
+    if (sent) return { ok: true, via: "text", messageId: sent.messages?.[0]?.id };
+  }
+
+  // Ventana cerrada (o falló el libre) → PLANTILLA aprobada, que entrega siempre.
   const tpl = await sendViaTemplate(to, message);
   return tpl.ok
     ? { ok: true, via: "template", messageId: tpl.messageId }
