@@ -191,6 +191,7 @@ model User {
   remindersCreated  Reminder[]
   remindersAssigned Reminder[]           @relation("ReminderAssignee")
   pushTokens        PushToken[]
+  attendance        AttendanceRecord[]
   createdGroups     Group[]              @relation("GroupCreator")
   groupMemberships  GroupMember[]
   createdAlerts     ScheduledAlert[]     @relation("AlertCreator")
@@ -744,14 +745,39 @@ model ScheduledAlert {
 }
 
 model Place {
-  id        String   @id @default(cuid())
-  name      String
-  address   String?
-  lat       Float
-  lng       Float
-  type      String   @default("EVENTO")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  address       String?
+  lat           Float
+  lng           Float
+  type          String   @default("EVENTO") // EVENTO | BODEGA
+  isAttendance  Boolean  @default(false)
+  radiusM       Int      @default(150)
+  entryTime     String?  // "08:00" hora de entrada esperada
+  exitTime      String?  // "17:00" hora de salida esperada
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([type])
+}
+
+model AttendanceRecord {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  type         String   @default("ENTRADA") // ENTRADA | SALIDA
+  locationName String?
+  lat          Float?
+  lng          Float?
+  distanceM    Int?
+  inRange      Boolean  @default(false)
+  onTime       Boolean  @default(true)
+  valid        Boolean  @default(false)
+  source       String   @default("WHATSAPP") // WHATSAPP | APP
+  photoUrl     String?
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }

@@ -2118,6 +2118,20 @@ async function handleCommand(
     return formatCuadroAnalysisText(a);
   }
 
+  if (cmd === "entrada" || cmd.startsWith("entrada ") || cmd === "llegue" || cmd === "llegué") {
+    const place = cmd.replace(/^(entrada|llegue|llegué)\s*/i, "").trim();
+    return `📍 *Marcar ENTRADA*${place ? ` en *${place}*` : ""}\n\nCompartí tu *ubicación* (clip → Ubicación). Si estás en el sitio y en hora, cuenta como puntual ✅`;
+  }
+
+  if (cmd === "salida" || cmd.startsWith("salida ")) {
+    const place = cmd.replace(/^salida\s*/i, "").trim();
+    return `📍 *Marcar SALIDA*${place ? ` de *${place}*` : ""}\n\nCompartí tu *ubicación* y registro tu salida.`;
+  }
+
+  if (cmd === "asistencia" || cmd === "mi asistencia" || cmd === "marcar") {
+    return `🕵️ *Asistencia*\nPara marcar tu ingreso: escribí *entrada* (o *entrada nómada*) y compartí tu *ubicación*.\nPara tu salida: *salida*.`;
+  }
+
   if (cmd === "bodegas" || cmd === "stock" || cmd === "stock por bodega" || cmd === "inventario por bodega") {
     const isAdmin = user.role === "DUENO" || user.role === "ADMIN" || user.role === "JEFE";
     if (!isAdmin) return "El stock por bodega está disponible para dueños, administradores y jefes.";
@@ -2785,6 +2799,7 @@ function isKnownCommand(text: string): boolean {
     "cuadro", "cuadros", "logistica", "logística", "faltantes", "me falta", "que comprar", "qué comprar",
     "bodegas", "stock", "movimientos", "duplicados", "alinear", "descripciones",
     "sugerencias", "recomendaciones", "recomiendame", "recomiéndame", "luna recomienda", "que hago",
+    "entrada", "salida", "llegue", "llegué", "asistencia", "mi asistencia", "marcar",
     "compra", "comprar", "compras", "comprado", "agrega compra", "agregar compra",
     "asigna", "asignar", "agrega tarea", "agregar tarea", "ponle", "deja",
     "mandale", "mándale", "manda", "envia", "enviale", "envíale", "mensaje",
@@ -2909,6 +2924,33 @@ export async function POST(request: NextRequest) {
                     await sendMessage(fromNumber, "🎤 Lo siento, no pude procesar tu audio en este momento. Escríbeme por texto.").catch(() => {});
                     continue;
                   }
+                } else if (messageType === "location" && message.location) {
+                  // Asistencia / ingreso a instalaciones por ubicación.
+                  const lat = Number(message.location.latitude);
+                  const lng = Number(message.location.longitude);
+                  const nFrom = normalizeGTPhone(fromNumber);
+                  const nDigits = nFrom.replace(/\D/g, "");
+                  const u = await prisma.user.findFirst({
+                    where: { OR: [{ whatsappNumber: nFrom }, { whatsappNumber: nDigits }, { whatsappNumber: fromNumber }, { phone: nFrom }, { phone: nDigits }, { phone: fromNumber }] },
+                    select: { id: true, name: true },
+                  });
+                  if (!u) {
+                    await sendMessage(fromNumber, "Tu número no está registrado. Pedí a tu administrador que te agregue.").catch(() => {});
+                    continue;
+                  }
+                  prisma.user.update({ where: { id: u.id }, data: { lastInboundAt: new Date() } }).catch(() => {});
+                  const conv = getConversation(nFrom);
+                  const atype = (conv?.data?.type as string) || "ENTRADA";
+                  const placeName = (conv?.data?.place as string) || null;
+                  const { registerAttendance } = await import("@/lib/attendance");
+                  const res = await registerAttendance({ userId: u.id, lat, lng, type: atype, placeName, source: "WHATSAPP" });
+                  conversations.delete(nFrom);
+                  const sys = await getSystemUserId();
+                  if (sys) {
+                    await prisma.whatsAppMessage.create({ data: { userId: sys, toNumber: fromNumber, message: `[ASISTENCIA] ${atype} ${res.place?.name || "?"} valid=${res.valid}`, type: "CHAT", status: "DELIVERED" } }).catch(() => {});
+                  }
+                  await sendMessage(fromNumber, res.message).catch(() => {});
+                  continue;
                 } else {
                   const mediaTypeLabels: Record<string, string> = {
                     audio: "audio",
@@ -3079,6 +3121,12 @@ export async function POST(request: NextRequest) {
                       setConversation(normalizedFrom, "waiting_postpone", {});
                     } else if (["crea tarea", "crear tarea", "nueva tarea"].includes(cmdLower)) {
                       setConversation(normalizedFrom, "task_create_title", {});
+                    } else if (/^entrada\b/.test(cmdLower) || cmdLower === "llegue" || cmdLower === "llegué") {
+                      const place = cmdLower.replace(/^entrada\s*/, "").replace(/^(llegue|llegué)\s*/, "").trim() || null;
+                      setConversation(normalizedFrom, "await_location", { type: "ENTRADA", place });
+                    } else if (/^salida\b/.test(cmdLower)) {
+                      const place = cmdLower.replace(/^salida\s*/, "").trim() || null;
+                      setConversation(normalizedFrom, "await_location", { type: "SALIDA", place });
                     }
                   } else {
                     const suggestion = suggestCommand(text);

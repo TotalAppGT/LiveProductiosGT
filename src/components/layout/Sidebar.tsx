@@ -112,6 +112,12 @@ const navItems: NavItem[] = [
     icon: MapPin,
   },
   {
+    label: "Asistencia",
+    href: "/asistencia",
+    icon: UserCheck,
+    roles: ["DUENO", "ADMIN", "JEFE"],
+  },
+  {
     label: "Personal",
     href: "/personal",
     icon: Users,
