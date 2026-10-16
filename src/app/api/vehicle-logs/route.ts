@@ -38,6 +38,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Placa, vehículo y kilometraje son requeridos" }, { status: 400 });
     }
 
+    // Un vehículo no puede tener dos usos abiertos a la vez.
+    if (vehicleId) {
+      const openLog = await prisma.vehicleLog.findFirst({
+        where: { vehicleId, status: "EN_USO" },
+        select: { id: true, driver: { select: { name: true } } },
+      });
+      if (openLog) {
+        return NextResponse.json(
+          { success: false, error: `Ese vehículo ya tiene un uso abierto (${openLog.driver?.name || "otro conductor"}). Finalizá esa bitácora primero.` },
+          { status: 409 }
+        );
+      }
+    }
+
     const log = await prisma.vehicleLog.create({
       data: {
         vehicleId: vehicleId || null,
@@ -51,6 +65,11 @@ export async function POST(request: NextRequest) {
         startComment: startComment || null,
       },
     });
+
+    // El vehículo pasa a EN_USO automáticamente.
+    if (vehicleId) {
+      await prisma.vehicle.update({ where: { id: vehicleId }, data: { status: "EN_USO" } }).catch(() => {});
+    }
 
     return NextResponse.json({ success: true, data: log });
   } catch (error) {

@@ -78,6 +78,14 @@ export async function PUT(
       assignedToId,
       mileage,
       fuelLevel,
+      brand,
+      model,
+      year,
+      color,
+      vin,
+      insuranceExpiry,
+      circulationExpiry,
+      photo,
       lastMaintenanceAt,
       notes,
     } = body;
@@ -90,6 +98,14 @@ export async function PUT(
     if (assignedToId !== undefined) updateData.assignedToId = assignedToId;
     if (mileage !== undefined) updateData.mileage = mileage;
     if (fuelLevel !== undefined) updateData.fuelLevel = fuelLevel;
+    if (brand !== undefined) updateData.brand = brand || null;
+    if (model !== undefined) updateData.model = model || null;
+    if (year !== undefined) updateData.year = year ? parseInt(year) : null;
+    if (color !== undefined) updateData.color = color || null;
+    if (vin !== undefined) updateData.vin = vin || null;
+    if (insuranceExpiry !== undefined) updateData.insuranceExpiry = insuranceExpiry ? new Date(insuranceExpiry) : null;
+    if (circulationExpiry !== undefined) updateData.circulationExpiry = circulationExpiry ? new Date(circulationExpiry) : null;
+    if (photo !== undefined) updateData.photo = photo || null;
     if (lastMaintenanceAt !== undefined)
       updateData.lastMaintenanceAt = lastMaintenanceAt ? new Date(lastMaintenanceAt) : null;
     if (notes !== undefined) updateData.notes = notes;

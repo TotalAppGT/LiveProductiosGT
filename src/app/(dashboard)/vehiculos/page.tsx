@@ -33,6 +33,44 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
   OTRO: "Otro",
 };
 
+// Avisos de vencimiento (seguro / tarjeta de circulación): vencido o por vencer (≤30 días).
+function expiryWarnings(v: Vehicle): string[] {
+  const out: string[] = [];
+  const check = (label: string, d?: string | null) => {
+    if (!d) return;
+    const days = Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
+    if (days < 0) out.push(`${label} vencida (${new Date(d).toLocaleDateString("es-GT")})`);
+    else if (days <= 30) out.push(`${label} vence en ${days} día(s)`);
+  };
+  check("Seguro", v.insuranceExpiry);
+  check("Tarjeta de circulación", v.circulationExpiry);
+  return out;
+}
+
+// Lee una imagen y la devuelve comprimida como data URL (para la foto del vehículo).
+async function fileToCompressedDataUrl(file: File, maxSize = 1280, quality = 0.72): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        if (width > height && width > maxSize) { height *= maxSize / width; width = maxSize; }
+        else if (height > maxSize) { width *= maxSize / height; height = maxSize; }
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = reader.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function VehiculosPage() {
   const { user, token } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -181,18 +219,34 @@ export default function VehiculosPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {vehicles.map((vehicle) => (
-            <Card key={vehicle.id} variant="bordered" className="p-4">
+            <Card key={vehicle.id} variant="bordered" className="p-4 overflow-hidden">
+              {vehicle.photo && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={vehicle.photo} alt={vehicle.name} className="h-32 w-full object-cover rounded-lg mb-3" />
+              )}
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
                     {vehicle.name}
                   </h3>
                   <p className="text-xs text-gray-500">{vehicle.plate}</p>
+                  {(vehicle.brand || vehicle.model || vehicle.year) && (
+                    <p className="text-xs text-gray-400">
+                      {[vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(" ")}
+                      {vehicle.color ? ` · ${vehicle.color}` : ""}
+                    </p>
+                  )}
                 </div>
                 <Badge size="sm" color={vehicleStatusColor(vehicle.status)} dot>
                   {vehicleStatusLabel(vehicle.status)}
                 </Badge>
               </div>
+
+              {expiryWarnings(vehicle).length > 0 && (
+                <div className="mb-2 text-xs text-red-600 dark:text-red-400">
+                  {expiryWarnings(vehicle).map((w) => <p key={w}>⚠️ {w}</p>)}
+                </div>
+              )}
 
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
@@ -321,6 +375,14 @@ function VehicleFormModal({
   const [status, setStatus] = useState(vehicle?.status || "DISPONIBLE");
   const [mileage, setMileage] = useState(vehicle?.mileage?.toString() || "");
   const [fuelLevel, setFuelLevel] = useState(vehicle?.fuelLevel?.toString() || "");
+  const [brand, setBrand] = useState(vehicle?.brand || "");
+  const [model, setModel] = useState(vehicle?.model || "");
+  const [year, setYear] = useState(vehicle?.year?.toString() || "");
+  const [color, setColor] = useState(vehicle?.color || "");
+  const [vin, setVin] = useState(vehicle?.vin || "");
+  const [insuranceExpiry, setInsuranceExpiry] = useState(vehicle?.insuranceExpiry ? String(vehicle.insuranceExpiry).slice(0, 10) : "");
+  const [circulationExpiry, setCirculationExpiry] = useState(vehicle?.circulationExpiry ? String(vehicle.circulationExpiry).slice(0, 10) : "");
+  const [photo, setPhoto] = useState(vehicle?.photo || "");
   const [notes, setNotes] = useState(vehicle?.notes || "");
   const [saving, setSaving] = useState(false);
 
@@ -344,6 +406,14 @@ function VehicleFormModal({
           status,
           mileage: mileage ? parseInt(mileage) : undefined,
           fuelLevel: fuelLevel ? parseInt(fuelLevel) : undefined,
+          brand: brand.trim(),
+          model: model.trim(),
+          year: year ? parseInt(year) : undefined,
+          color: color.trim(),
+          vin: vin.trim(),
+          insuranceExpiry: insuranceExpiry || undefined,
+          circulationExpiry: circulationExpiry || undefined,
+          photo: photo || undefined,
           notes: notes.trim() || undefined,
         }),
       });
@@ -399,6 +469,45 @@ function VehicleFormModal({
         <div className="grid grid-cols-2 gap-4">
           <Input label="Kilometraje" type="number" value={mileage} onChange={(e) => setMileage(e.target.value)} />
           <Input label="Nivel combustible (%)" type="number" min="0" max="100" value={fuelLevel} onChange={(e) => setFuelLevel(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Input label="Marca" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Toyota, Isuzu..." />
+          <Input label="Modelo" value={model} onChange={(e) => setModel(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <Input label="Año" type="number" value={year} onChange={(e) => setYear(e.target.value)} />
+          <Input label="Color" value={color} onChange={(e) => setColor(e.target.value)} />
+          <Input label="VIN / Chasis" value={vin} onChange={(e) => setVin(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Input label="Vence seguro" type="date" value={insuranceExpiry} onChange={(e) => setInsuranceExpiry(e.target.value)} />
+          <Input label="Vence tarjeta de circulación" type="date" value={circulationExpiry} onChange={(e) => setCirculationExpiry(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Foto del vehículo</label>
+          <div className="flex items-center gap-3">
+            {photo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={photo} alt="Vehículo" className="h-20 w-28 object-cover rounded-lg border border-gray-300 dark:border-gray-600" />
+            ) : (
+              <div className="h-20 w-28 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-xs text-gray-400">Sin foto</div>
+            )}
+            <label className="cursor-pointer text-sm text-blue-600 dark:text-blue-400 font-medium">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  try { setPhoto(await fileToCompressedDataUrl(f)); }
+                  catch { toast.error("No se pudo procesar la imagen"); }
+                }}
+              />
+              {photo ? "Cambiar foto" : "Subir foto"}
+            </label>
+            {photo && <button type="button" onClick={() => setPhoto("")} className="text-xs text-red-500">Quitar</button>}
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notas</label>

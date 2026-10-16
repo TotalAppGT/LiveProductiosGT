@@ -219,6 +219,14 @@ export interface Vehicle {
   assignedToId?: string | null;
   mileage?: number | null;
   fuelLevel?: number | null;
+  brand?: string | null;
+  model?: string | null;
+  year?: number | null;
+  color?: string | null;
+  vin?: string | null;
+  insuranceExpiry?: string | null;
+  circulationExpiry?: string | null;
+  photo?: string | null;
   lastMaintenanceAt?: string | null;
   notes?: string | null;
   tenantId?: string | null;
@@ -495,6 +503,14 @@ export interface CreateVehicleDTO {
   assignedToId?: string;
   mileage?: number;
   fuelLevel?: number;
+  brand?: string;
+  model?: string;
+  year?: number;
+  color?: string;
+  vin?: string;
+  insuranceExpiry?: string;
+  circulationExpiry?: string;
+  photo?: string;
   notes?: string;
 }
 
@@ -506,6 +522,14 @@ export interface UpdateVehicleDTO {
   assignedToId?: string;
   mileage?: number;
   fuelLevel?: number;
+  brand?: string;
+  model?: string;
+  year?: number;
+  color?: string;
+  vin?: string;
+  insuranceExpiry?: string;
+  circulationExpiry?: string;
+  photo?: string;
   lastMaintenanceAt?: string;
   notes?: string;
 }

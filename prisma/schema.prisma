@@ -337,19 +337,27 @@ model InventoryMovement {
 }
 
 model Vehicle {
-  id                String        @id @default(cuid())
-  name              String
-  plate             String        @unique
-  type              VehicleType   @default(OTRO)
-  status            VehicleStatus @default(DISPONIBLE)
-  assignedToId      String?
-  mileage           Int?
-  fuelLevel         Int?
-  lastMaintenanceAt DateTime?
-  notes             String?
-  tenantId          String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                 String        @id @default(cuid())
+  name               String
+  plate              String        @unique
+  type               VehicleType   @default(OTRO)
+  status             VehicleStatus @default(DISPONIBLE)
+  assignedToId       String?
+  mileage            Int?
+  fuelLevel          Int?
+  brand              String?
+  model              String?
+  year               Int?
+  color              String?
+  vin                String?
+  insuranceExpiry    DateTime?
+  circulationExpiry  DateTime?
+  photo              String?       @db.Text
+  lastMaintenanceAt  DateTime?
+  notes              String?
+  tenantId           String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   assignedTo         User?                @relation(fields: [assignedToId], references: [id])
   tenant             Tenant?              @relation(fields: [tenantId], references: [id])

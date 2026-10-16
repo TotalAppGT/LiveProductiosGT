@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
+    const limit = parseInt(searchParams.get("limit") || "200");
     const status = searchParams.get("status") || undefined;
     const search = searchParams.get("search") || "";
     const skip = (page - 1) * limit;
@@ -92,6 +92,14 @@ export async function POST(request: NextRequest) {
       assignedToId,
       mileage,
       fuelLevel,
+      brand,
+      model,
+      year,
+      color,
+      vin,
+      insuranceExpiry,
+      circulationExpiry,
+      photo,
       notes,
     } = body;
 
@@ -121,6 +129,14 @@ export async function POST(request: NextRequest) {
         assignedToId: assignedToId || null,
         mileage: mileage || null,
         fuelLevel: fuelLevel || null,
+        brand: brand || null,
+        model: model || null,
+        year: year ? parseInt(year) : null,
+        color: color || null,
+        vin: vin || null,
+        insuranceExpiry: insuranceExpiry ? new Date(insuranceExpiry) : null,
+        circulationExpiry: circulationExpiry ? new Date(circulationExpiry) : null,
+        photo: photo || null,
         notes: notes || null,
         tenantId: auth.payload.tenantId,
       },

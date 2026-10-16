@@ -37,12 +37,12 @@ export async function POST(
       },
     });
 
-    // Actualizar kilometraje del vehículo
+    // Actualizar kilometraje del vehículo y devolverlo a DISPONIBLE
     if (log.vehicleId) {
       await prisma.vehicle.update({
         where: { id: log.vehicleId },
-        data: { mileage: parseInt(endKm) },
-      });
+        data: { mileage: parseInt(endKm), status: "DISPONIBLE" },
+      }).catch(() => {});
     }
 
     await prisma.activity.create({

@@ -16,6 +16,8 @@ export default function BitacoraVehiculosPage() {
   const [loading, setLoading] = useState(true);
   const [showStart, setShowStart] = useState(false);
   const [activeLog, setActiveLog] = useState<any | null>(null);
+  const [vehicleFilter, setVehicleFilter] = useState("");
+  const [search, setSearch] = useState("");
 
   // Start form
   const [vehicleId, setVehicleId] = useState("");
@@ -118,6 +120,15 @@ export default function BitacoraVehiculosPage() {
     setStartWater("Normal"); setStartOil("Normal"); setStartPhotos([]); setStartComment("");
   }
 
+  const filteredLogs = logs.filter((l) => {
+    if (vehicleFilter && l.vehicleId !== vehicleFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!String(l.plate || "").toLowerCase().includes(q) && !String(l.vehicleType || "").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
   return (
@@ -131,8 +142,29 @@ export default function BitacoraVehiculosPage() {
         </Button>
       </div>
 
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="relative flex-1">
+          <input
+            placeholder="Buscar por placa o tipo..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+          />
+        </div>
+        <select
+          value={vehicleFilter}
+          onChange={(e) => setVehicleFilter(e.target.value)}
+          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+        >
+          <option value="">Todos los vehículos</option>
+          {vehicles.map((v) => (
+            <option key={v.id} value={v.id}>{v.plate} — {v.name}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="grid gap-3">
-        {logs.map((log) => (
+        {filteredLogs.map((log) => (
           <Card key={log.id} className="p-4 cursor-pointer hover:border-blue-400" onClick={() => setActiveLog(log)}>
             <div className="flex items-center justify-between">
               <div>
@@ -148,12 +180,17 @@ export default function BitacoraVehiculosPage() {
                 <p className="text-xs text-gray-400">
                   {log.driver?.name} · Salida: {new Date(log.startAt).toLocaleString("es-GT")} · {log.startKm} km
                 </p>
+                <p className="text-xs text-gray-400">
+                  {log.status === "FINALIZADO" && log.endKm != null ? `${(log.endKm - log.startKm).toLocaleString()} km recorridos · ` : ""}
+                  {log.endAt ? `Duración: ${Math.max(0, Math.round(((new Date(log.endAt).getTime() - new Date(log.startAt).getTime()) / 3600000) * 10) / 10)} h · ` : ""}
+                  {(log.startPhotos?.length || 0) + (log.endPhotos?.length || 0) + (log.fuelEntries?.reduce((s: number, f: any) => s + (f.photos?.length || 0), 0) || 0)} fotos
+                </p>
               </div>
               <Car className="w-5 h-5 text-gray-400" />
             </div>
           </Card>
         ))}
-        {logs.length === 0 && <p className="text-center text-gray-400 py-8">No hay bitácoras. Inicia una con "Iniciar Uso".</p>}
+        {filteredLogs.length === 0 && <p className="text-center text-gray-400 py-8">No hay bitácoras. Inicia una con "Iniciar Uso".</p>}
       </div>
 
       {/* Modal inicio */}
