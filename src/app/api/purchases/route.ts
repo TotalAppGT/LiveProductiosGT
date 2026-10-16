@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
       include: {
         assignedTo: { select: { id: true, name: true } },
         assignedBy: { select: { id: true, name: true } },
+        supplier: { select: { id: true, name: true } },
         documents: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, amount, advance, provider, category, status, dueDate, priority, invoiceNumber, invoiceDate, paymentMethod, assignedToId } = body;
+    const { title, description, amount, advance, provider, category, status, dueDate, priority, invoiceNumber, invoiceDate, paymentMethod, supplierId, assignedToId } = body;
 
     if (!title || !title.trim()) {
       return NextResponse.json({ success: false, error: "El título es requerido" }, { status: 400 });
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
         invoiceNumber: invoiceNumber || null,
         invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
         paymentMethod: paymentMethod || null,
+        supplierId: supplierId || null,
         assignedToId: assignedToId || auth.payload.userId,
         assignedById: auth.payload.userId,
       },

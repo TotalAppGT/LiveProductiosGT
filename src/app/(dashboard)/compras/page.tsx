@@ -26,6 +26,8 @@ export default function ComprasPage() {
   const { user, token } = useAuth();
   const [purchases, setPurchases] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [showSuppliers, setShowSuppliers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -42,15 +44,18 @@ export default function ComprasPage() {
       if (statusFilter) params.set("status", statusFilter);
       if (categoryFilter) params.set("category", categoryFilter);
       if (search) params.set("search", search);
-      const [pRes, uRes] = await Promise.all([
+      const [pRes, uRes, sRes] = await Promise.all([
         fetch(`/api/purchases?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/users`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/suppliers`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       const pJson = await pRes.json();
       const uJson = await uRes.json().catch(() => ({ data: [] }));
+      const sJson = await sRes.json().catch(() => ({ data: [] }));
       if (pJson.success) setPurchases(pJson.data);
       const list = Array.isArray(uJson.data) ? uJson.data : uJson.data?.data || [];
       setUsers(list);
+      if (sJson.success) setSuppliers(sJson.data);
     } catch {
       toast.error("Error al cargar compras");
     } finally {
@@ -77,6 +82,23 @@ export default function ComprasPage() {
     else toast.error("Error al eliminar");
   }
 
+  async function downloadReport(format: "pdf" | "xlsx") {
+    try {
+      toast.loading("Generando reporte…", { id: "prep" });
+      const first = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+      const last = new Date().toISOString().slice(0, 10);
+      const res = await fetch(`/api/purchases/report?format=${format}&from=${first}&to=${last}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { toast.error("Error al generar", { id: "prep" }); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `compras-mes.${format}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Reporte descargado", { id: "prep" });
+    } catch { toast.error("Error al descargar", { id: "prep" }); }
+  }
+
   const pendientes = purchases.filter((p) => p.status === "PENDIENTE");
   const now = new Date();
   const compradoMes = purchases.filter((p) => p.status === "COMPRADO" && (() => {
@@ -96,9 +118,14 @@ export default function ComprasPage() {
           </h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Solicitudes, gastos y documentos de compras</p>
         </div>
-        <Button variant="primary" size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => { setEditing(null); setShowForm(true); }}>
-          Nueva Compra
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowSuppliers(true)}>Proveedores</Button>
+          <Button variant="outline" size="sm" onClick={() => downloadReport("pdf")}>📄 Reporte PDF</Button>
+          <Button variant="outline" size="sm" onClick={() => downloadReport("xlsx")}>📊 Reporte Excel</Button>
+          <Button variant="primary" size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => { setEditing(null); setShowForm(true); }}>
+            Nueva Compra
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -179,8 +206,11 @@ export default function ComprasPage() {
         token={token || ""}
         purchase={editing}
         users={users}
+        suppliers={suppliers}
         onSaved={fetchData}
       />
+
+      <SuppliersModal isOpen={showSuppliers} onClose={() => setShowSuppliers(false)} token={token || ""} suppliers={suppliers} onChanged={fetchData} />
 
       {detail && (
         <PurchaseDetail
@@ -197,7 +227,7 @@ export default function ComprasPage() {
   );
 }
 
-function PurchaseFormModal({ isOpen, onClose, token, purchase, users, onSaved }: any) {
+function PurchaseFormModal({ isOpen, onClose, token, purchase, users, suppliers, onSaved }: any) {
   const isEditing = !!purchase;
   const [f, setF] = useState<any>({
     title: purchase?.title || "",
@@ -212,6 +242,7 @@ function PurchaseFormModal({ isOpen, onClose, token, purchase, users, onSaved }:
     invoiceNumber: purchase?.invoiceNumber || "",
     invoiceDate: purchase?.invoiceDate ? String(purchase.invoiceDate).slice(0, 10) : "",
     paymentMethod: purchase?.paymentMethod || "",
+    supplierId: purchase?.supplierId || "",
     assignedToId: purchase?.assignedToId || "",
   });
   const [saving, setSaving] = useState(false);
@@ -246,8 +277,15 @@ function PurchaseFormModal({ isOpen, onClose, token, purchase, users, onSaved }:
           <Input label="Monto (Q)" type="number" value={f.amount} onChange={(e) => set("amount", e.target.value)} />
           <Input label="Anticipo (Q)" type="number" value={f.advance} onChange={(e) => set("advance", e.target.value)} />
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proveedor (del catálogo)</label>
+          <select value={f.supplierId} onChange={(e) => set("supplierId", e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white">
+            <option value="">—</option>
+            {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
         <div className="grid grid-cols-2 gap-3">
-          <Input label="Proveedor" value={f.provider} onChange={(e) => set("provider", e.target.value)} />
+          <Input label="Proveedor (texto libre)" value={f.provider} onChange={(e) => set("provider", e.target.value)} />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoría</label>
             <select value={f.category} onChange={(e) => set("category", e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white">
@@ -302,13 +340,38 @@ function PurchaseFormModal({ isOpen, onClose, token, purchase, users, onSaved }:
 
 function PurchaseDetail({ purchase, token, onClose, onChanged, onDelete, canManage, quickStatus }: any) {
   const [docs, setDocs] = useState<any[]>(purchase.documents || []);
+  const [items, setItems] = useState<any[]>(purchase.items || []);
   const [kind, setKind] = useState("FACTURA");
   const [uploading, setUploading] = useState(false);
+  const [ni, setNi] = useState({ description: "", quantity: "1", unitPrice: "" });
 
   async function loadDocs() {
     const res = await fetch(`/api/purchases/${purchase.id}/documents`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()).catch(() => null);
     if (res?.success) setDocs(res.data);
   }
+
+  async function loadItems() {
+    const res = await fetch(`/api/purchases/${purchase.id}/items`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()).catch(() => null);
+    if (res?.success) setItems(res.data);
+  }
+
+  async function addItem() {
+    if (!ni.description.trim()) return toast.error("Escribí la descripción del ítem");
+    const res = await fetch(`/api/purchases/${purchase.id}/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(ni),
+    }).then((r) => r.json()).catch(() => ({ success: false }));
+    if (res.success) { setNi({ description: "", quantity: "1", unitPrice: "" }); loadItems(); toast.success("Ítem agregado"); }
+    else toast.error("Error al agregar");
+  }
+
+  async function removeItem(itemId: string) {
+    const res = await fetch(`/api/purchases/${purchase.id}/items?itemId=${itemId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()).catch(() => ({ success: false }));
+    if (res.success) loadItems();
+  }
+
+  const itemsTotal = items.reduce((s, it) => s + (Number(it.unitPrice || 0) * Number(it.quantity || 0)), 0);
 
   async function upload(file: File) {
     setUploading(true);
@@ -344,9 +407,30 @@ function PurchaseDetail({ purchase, token, onClose, onChanged, onDelete, canMana
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {purchase.status === "PENDIENTE" && <Button size="sm" variant="outline" onClick={() => quickStatus(purchase.id, "APROBADA")}>Aprobar</Button>}
           {purchase.status !== "COMPRADO" && <Button size="sm" onClick={() => quickStatus(purchase.id, "COMPRADO")}><Check className="h-3 w-3 mr-1" /> Marcar comprado</Button>}
           {purchase.status !== "CANCELADO" && <Button size="sm" variant="outline" onClick={() => quickStatus(purchase.id, "CANCELADO")}><X className="h-3 w-3 mr-1" /> Cancelar</Button>}
           {canManage && <Button size="sm" variant="ghost" onClick={onDelete}><Trash2 className="h-3 w-3 mr-1" /> Eliminar</Button>}
+        </div>
+
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-3 space-y-3">
+          <p className="font-medium text-sm text-gray-700 dark:text-gray-300">Ítems ({items.length}){itemsTotal > 0 ? ` · ${q2(itemsTotal)}` : ""}</p>
+          <div className="grid grid-cols-12 gap-2">
+            <input placeholder="Descripción del ítem" value={ni.description} onChange={(e) => setNi({ ...ni, description: e.target.value })} className="col-span-6 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 text-sm text-gray-900 dark:text-white" />
+            <input placeholder="Cant." type="number" value={ni.quantity} onChange={(e) => setNi({ ...ni, quantity: e.target.value })} className="col-span-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 text-sm text-gray-900 dark:text-white" />
+            <input placeholder="P. unit. Q" type="number" value={ni.unitPrice} onChange={(e) => setNi({ ...ni, unitPrice: e.target.value })} className="col-span-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 text-sm text-gray-900 dark:text-white" />
+            <Button size="sm" className="col-span-1" onClick={addItem}>+</Button>
+          </div>
+          {items.length > 0 && (
+            <div className="space-y-1">
+              {items.map((it) => (
+                <div key={it.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded p-2 text-sm">
+                  <span className="truncate">{it.quantity}× {it.description}{it.unitPrice ? ` — ${q2(Number(it.unitPrice) * Number(it.quantity))}` : ""}</span>
+                  <button onClick={() => removeItem(it.id)} className="text-red-500 text-xs px-2">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="border-t border-gray-200 dark:border-gray-700 pt-3 space-y-3">
@@ -375,6 +459,60 @@ function PurchaseDetail({ purchase, token, onClose, onChanged, onDelete, canMana
               ))}
             </div>
           )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function SuppliersModal({ isOpen, onClose, token, suppliers, onChanged }: any) {
+  const [f, setF] = useState({ name: "", contactName: "", phone: "", nit: "", notes: "" });
+  const [saving, setSaving] = useState(false);
+
+  async function add() {
+    if (!f.name.trim()) return toast.error("Nombre requerido");
+    setSaving(true);
+    try {
+      const res = await fetch("/api/suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(f),
+      });
+      const json = await res.json();
+      if (json.success) { toast.success("Proveedor agregado"); setF({ name: "", contactName: "", phone: "", nit: "", notes: "" }); onChanged(); }
+      else toast.error(json.error || "Error");
+    } finally { setSaving(false); }
+  }
+
+  async function del(id: string) {
+    if (!confirm("¿Eliminar proveedor?")) return;
+    const res = await fetch(`/api/suppliers/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()).catch(() => ({ success: false }));
+    if (res.success) { toast.success("Proveedor eliminado"); onChanged(); } else toast.error("Error");
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Proveedores" size="lg">
+      <div className="space-y-4 p-1">
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Nombre" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <Input label="Contacto" value={f.contactName} onChange={(e) => setF({ ...f, contactName: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Teléfono" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+          <Input label="NIT" value={f.nit} onChange={(e) => setF({ ...f, nit: e.target.value })} />
+        </div>
+        <Button variant="primary" onClick={add} isLoading={saving} className="w-full"><Plus className="h-4 w-4 mr-1" /> Agregar proveedor</Button>
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+          <p className="text-sm font-medium mb-2">Catálogo ({suppliers.length})</p>
+          <div className="space-y-1 max-h-60 overflow-y-auto">
+            {suppliers.map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded p-2 text-sm">
+                <span>{s.name}{s.contactName ? ` · ${s.contactName}` : ""}{s.phone ? ` · ${s.phone}` : ""}</span>
+                <button onClick={() => del(s.id)} className="text-red-500 text-xs px-2">✕</button>
+              </div>
+            ))}
+            {suppliers.length === 0 && <p className="text-xs text-gray-400">Sin proveedores. Agregá el primero arriba.</p>}
+          </div>
         </div>
       </div>
     </Modal>

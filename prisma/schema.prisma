@@ -206,6 +206,7 @@ model User {
   personalNotes     PersonalNote[] @relation("PersonalNoteOwner")
   createdPurchases   Purchase[]         @relation("PurchaseCreator")
   assignedPurchases  Purchase[]         @relation("PurchaseAssignee")
+  approvedPurchases  Purchase[]         @relation("PurchaseApprover")
   purchaseDocuments  PurchaseDocument[] @relation("PurchaseDocUploader")
 }
 
@@ -627,6 +628,9 @@ model Purchase {
   invoiceDate   DateTime?
   paymentMethod String?
   receivedAt    DateTime?
+  approvedById  String?
+  approvedAt    DateTime?
+  supplierId    String?
   assignedToId  String?
   assignedById  String?
   createdAt     DateTime  @default(now())
@@ -634,11 +638,37 @@ model Purchase {
 
   assignedTo User?             @relation("PurchaseAssignee", fields: [assignedToId], references: [id])
   assignedBy User?             @relation("PurchaseCreator", fields: [assignedById], references: [id])
+  approvedBy User?             @relation("PurchaseApprover", fields: [approvedById], references: [id])
+  supplier   Supplier?         @relation(fields: [supplierId], references: [id])
   documents  PurchaseDocument[]
+  items      PurchaseItem[]
 
   @@index([status])
   @@index([assignedToId])
   @@index([category])
+}
+
+model PurchaseItem {
+  id          String   @id @default(cuid())
+  purchaseId  String
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int      @default(1)
+  unitPrice   Decimal? @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+
+  @@index([purchaseId])
+}
+
+model Supplier {
+  id          String     @id @default(cuid())
+  name        String
+  contactName String?
+  phone       String?
+  nit         String?
+  notes       String?
+  createdAt   DateTime   @default(now())
+  purchases   Purchase[]
 }
 
 model PurchaseDocument {

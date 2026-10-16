@@ -34,6 +34,12 @@ export async function PATCH(
     if (body.invoiceDate !== undefined) data.invoiceDate = body.invoiceDate ? new Date(body.invoiceDate) : null;
     if (body.paymentMethod !== undefined) data.paymentMethod = body.paymentMethod || null;
     if (body.receivedAt !== undefined) data.receivedAt = body.receivedAt ? new Date(body.receivedAt) : null;
+    if (body.supplierId !== undefined) data.supplierId = body.supplierId || null;
+    // Aprobación automática al pasar a APROBADA.
+    if (body.status === "APROBADA" && existing.status !== "APROBADA") {
+      data.approvedById = auth.payload.userId;
+      data.approvedAt = new Date();
+    }
 
     const purchase = await prisma.purchase.update({
       where: { id },
@@ -41,7 +47,10 @@ export async function PATCH(
       include: {
         assignedTo: { select: { id: true, name: true } },
         assignedBy: { select: { id: true, name: true } },
+        approvedBy: { select: { id: true, name: true } },
+        supplier: true,
         documents: { orderBy: { createdAt: "desc" } },
+        items: { orderBy: { createdAt: "asc" } },
       },
     });
 

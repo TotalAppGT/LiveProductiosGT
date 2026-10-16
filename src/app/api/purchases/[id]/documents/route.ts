@@ -49,10 +49,12 @@ export async function POST(
     const fileType = (file as File).type || "application/octet-stream";
 
     let fileUrl: string;
-    if (storageConfigured()) {
+    let stored = "db";
+    if (await storageConfigured()) {
       const key = buildKey(`purchases/${id}`, fileName);
       const up = await uploadFile(arrayBuf, key, fileType);
       fileUrl = up.url;
+      stored = "r2";
     } else {
       // Respaldo temporal: guardar como data URL en la base (hasta configurar R2).
       fileUrl = `data:${fileType};base64,${arrayBuf.toString("base64")}`;
@@ -70,7 +72,7 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({ success: true, data: doc, storage: storageConfigured() ? "r2" : "db" }, { status: 201 });
+    return NextResponse.json({ success: true, data: doc, storage: stored }, { status: 201 });
   } catch (error) {
     console.error("Error subiendo documento:", error);
     return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });
