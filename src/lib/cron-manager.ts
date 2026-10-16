@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendProactiveMessage, sendProactiveChunked } from "@/lib/whatsapp";
 import { checkDailyAccessRequirement, sendEndOfDayAlerts, sendBihourlyReminders, fireDueReminders, fireTaskReminders, fireScheduledAlerts, fireScheduledMessages } from "@/lib/smart-scheduler";
-import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate, isTaskOverdue, ACCESS_ACTIONS, guatemalaDate } from "@/lib/task-utils";
+import { carryOverUncompletedTasks, getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, gtNow, isTaskDueOnDate, isTaskOverdue, partitionTasksByDay, ACCESS_ACTIONS, guatemalaDate } from "@/lib/task-utils";
 
 interface CronJob {
   name: string;
@@ -169,8 +169,8 @@ async function morningBriefing() {
       const { formatTaskHierarchy } = await import("@/lib/task-view");
 
       // Mensaje diario = SOLO lo de HOY (lo demás se consulta con `tareas`).
-      const todayTasks = tasks.filter((t) => isTaskDueOnDate(t, startOfToday));
-      const stillOverdue = tasks.filter((t) => isTaskOverdue(t, startOfToday));
+      // Vencidas y de hoy SIN solaparse (una tarea no aparece dos veces).
+      const { overdue: stillOverdue, today: todayTasks } = partitionTasksByDay(tasks, startOfToday);
       const todayLabel = startOfToday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
 
       // Numeración continua entre mensajes (vencidas primero, luego las de hoy).

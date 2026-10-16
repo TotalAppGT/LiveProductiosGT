@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
-import { parseGTInputDate, nextFixedDueDate } from "@/lib/task-utils";
+import { parseGTInputDate, nextFixedDueDate, hasActiveFixedOccurrence } from "@/lib/task-utils";
 
 export async function GET(
   request: NextRequest,
@@ -178,24 +178,28 @@ export async function PUT(
     }
 
     if (status === "COMPLETADA" && existingTask.type === "FIJA") {
-      const nextDueDate = nextFixedDueDate(existingTask);
+      // No duplicar: si ya hay una ocurrencia activa de la misma serie, no se crea otra.
+      const alreadyActive = await hasActiveFixedOccurrence(existingTask);
+      if (!alreadyActive) {
+        const nextDueDate = nextFixedDueDate(existingTask);
 
-      await prisma.task.create({
-        data: {
-          title: existingTask.title,
-          description: existingTask.description,
-          type: "FIJA",
-          frequency: existingTask.frequency,
-          dayOfWeek: existingTask.dayOfWeek,
-          dueDate: nextDueDate,
-          priority: existingTask.priority,
-          category: existingTask.category,
-          assignedToId: existingTask.assignedToId,
-          assignedById: existingTask.assignedById || auth.payload.userId,
-          eventId: existingTask.eventId,
-          requiresConfirmation: existingTask.requiresConfirmation,
-        },
-      });
+        await prisma.task.create({
+          data: {
+            title: existingTask.title,
+            description: existingTask.description,
+            type: "FIJA",
+            frequency: existingTask.frequency,
+            dayOfWeek: existingTask.dayOfWeek,
+            dueDate: nextDueDate,
+            priority: existingTask.priority,
+            category: existingTask.category,
+            assignedToId: existingTask.assignedToId,
+            assignedById: existingTask.assignedById || auth.payload.userId,
+            eventId: existingTask.eventId,
+            requiresConfirmation: existingTask.requiresConfirmation,
+          },
+        });
+      }
     }
 
     // VARIABLES (Actividades diarias): se BORRAN al completarlas (no vuelven; se agregan de nuevo)

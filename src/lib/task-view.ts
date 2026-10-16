@@ -1,3 +1,24 @@
+// Clave de título normalizada (sin espacios extra ni mayúsculas) para detectar
+// tareas repetidas (misma actividad duplicada en varias filas).
+export function normTaskTitle(s: unknown): string {
+  return String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// Elimina tareas con el MISMO título (normalizado) conservando la primera.
+// Evita que una actividad repetida (por series/duplicados) aparezca 2+ veces.
+export function dedupeByTitle<T extends { title?: string | null }>(tasks: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const t of tasks) {
+    const k = normTaskTitle(t.title);
+    if (!k) { out.push(t); continue; }
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+
 export function taskPhasePriority(t: { category?: string }): number {
   if (t.category === "PRE_EVENTO") return 0;
   if (t.category === "POST_EVENTO") return 1;
@@ -5,6 +26,7 @@ export function taskPhasePriority(t: { category?: string }): number {
 }
 
 export function orderTasksByDayHour(tasks: any[]): any[] {
+  tasks = dedupeByTitle(tasks);
   const dayStart = (ts: string | Date | null): number => {
     if (!ts) return Number.MAX_SAFE_INTEGER;
     const d = new Date(ts);
@@ -124,6 +146,7 @@ function sortByManualThenHour(a: any, b: any): number {
 // Ordena las tareas EXACTAMENTE como se muestran en el listado jerárquico.
 // Es la fuente del número que usan los comandos "hecho 1", "posponer 2", etc.
 export function orderTasksHierarchical(tasks: any[]): any[] {
+  tasks = dedupeByTitle(tasks);
   const out: any[] = [];
   for (const block of FREQ_BLOCK_ORDER) {
     const blockTasks = tasks.filter((t) => blockOfTask(t) === block);
@@ -150,6 +173,7 @@ export function orderTasksHierarchical(tasks: any[]): any[] {
 
 // Render profesional en listado jerárquico. Devuelve también el orden para numerar.
 export function formatTaskHierarchy(tasks: any[], startNum = 1): { text: string; ordered: any[]; next: number } {
+  tasks = dedupeByTitle(tasks);
   const ordered = orderTasksHierarchical(tasks);
   if (ordered.length === 0) return { text: "", ordered: [], next: startNum };
 

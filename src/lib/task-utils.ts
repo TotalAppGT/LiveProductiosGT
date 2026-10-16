@@ -310,3 +310,66 @@ export async function carryOverUncompletedTasks() {
 
   return carried;
 }
+
+// Clave de título normalizada (para detectar repetidas).
+const normTitleKey = (s: unknown) => String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
+// Divide las tareas activas en VENCIDAS y DE HOY **sin solaparse** y sin títulos
+// repetidos. Regla: una FIJA SEMANAL cuyo día ya pasó (persiste hasta completarse)
+// se cuenta como VENCIDA y NO se vuelve a listar como "de hoy". Así una misma
+// actividad no aparece dos veces en el mensaje (evita el "desorden"/repetidas).
+export function partitionTasksByDay<T extends {
+  id: string;
+  title?: string | null;
+  dueDate?: Date | string | null;
+  type?: string | null;
+  frequency?: string | null;
+  dayOfWeek?: string | null;
+}>(tasks: T[], today: Date = gtStartOfToday()): { overdue: T[]; today: T[] } {
+  const overdueAll = tasks.filter((t) => isTaskOverdue(t as any, today));
+  const odIds = new Set(overdueAll.map((t) => t.id));
+  const seen = new Set<string>();
+  const overdue: T[] = [];
+  for (const t of overdueAll) {
+    const k = normTitleKey(t.title);
+    if (k && seen.has(k)) continue;
+    if (k) seen.add(k);
+    overdue.push(t);
+  }
+  const todayTasks: T[] = [];
+  for (const t of tasks) {
+    if (odIds.has(t.id)) continue;
+    const k = normTitleKey(t.title);
+    if (k && seen.has(k)) continue;
+    if (!isTaskDueOnDate(t as any, today)) continue;
+    if (k) seen.add(k);
+    todayTasks.push(t);
+  }
+  return { overdue, today: todayTasks };
+}
+
+// ¿Ya existe una ocurrencia ACTIVA de esta serie fija (mismo título + programación)?
+// Evita duplicar la próxima ocurrencia cuando una tarea fija se completa más de una vez.
+export async function hasActiveFixedOccurrence(task: {
+  id: string;
+  title: string;
+  type?: string | null;
+  frequency?: string | null;
+  dayOfWeek?: string | null;
+  assignedToId?: string | null;
+}): Promise<boolean> {
+  if (task.type !== "FIJA") return false;
+  const found = await prisma.task.findFirst({
+    where: {
+      id: { not: task.id },
+      title: task.title,
+      type: "FIJA",
+      frequency: (task.frequency ?? null) as any,
+      dayOfWeek: (task.dayOfWeek ?? null) as any,
+      assignedToId: task.assignedToId ?? null,
+      status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] },
+    },
+    select: { id: true },
+  });
+  return !!found;
+}

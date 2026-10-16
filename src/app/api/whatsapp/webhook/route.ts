@@ -4,7 +4,7 @@ import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendMessageChunked, sendInteractiveButtons } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest, formatTaskHierarchy, orderTasksHierarchical } from "@/lib/task-view";
-import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate, isTaskOverdue } from "@/lib/task-utils";
+import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate, isTaskOverdue, partitionTasksByDay } from "@/lib/task-utils";
 import { sendLUNAUpdateBroadcast } from "@/lib/broadcast";
 import { runDataFix } from "@/lib/data-fix";
 
@@ -525,10 +525,17 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
 
   const WEEK: Record<string, number> = { DOMINGO: 0, LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6 };
 
-  // Vencidas / prioridad (regla compartida): las DIARIAS nunca son vencidas;
+  // Vencidas / resto (regla compartida): las DIARIAS nunca son vencidas;
   // las semanales sin fecha vencen cuando su día ya pasó; el resto por fecha.
-  const overdue = tasks.filter((t) => isTaskOverdue(t, today));
-  const rest = tasks.filter((t) => !isTaskOverdue(t, today));
+  // Las vencidas se quitan del resto (no se listan dos veces).
+  const { overdue } = partitionTasksByDay(tasks, today);
+  const odIds = new Set(overdue.map((t) => t.id));
+  const odTitles = new Set(overdue.map((t) => String(t.title ?? "").toLowerCase().replace(/\s+/g, " ").trim()));
+  const rest = tasks.filter((t) => {
+    if (odIds.has(t.id)) return false;
+    const k = String(t.title ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    return !(k && odTitles.has(k));
+  });
 
   // Listado jerárquico a nivel sistema: Frecuencia → Módulo → Fijas/Variables
   let cursor = 1;
