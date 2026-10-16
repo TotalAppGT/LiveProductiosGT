@@ -53,8 +53,8 @@ export function orderTasksByDayHour(tasks: any[]): any[] {
   });
 }
 
+// Línea de tarea: SOLO numeración + título (+ estado/fecha). SIN iconos de prioridad.
 export function formatTaskLine(t: any, num: number): string {
-  const prio = t.priority === "URGENTE" ? "🔴" : t.priority === "ALTA" ? "🔴" : t.priority === "MEDIA" ? "🟡" : "🟢";
   const status = t.status === "COMPLETADA" ? "✅" : t.status === "REPROGRAMADA" ? "🟣 Pospuesta" : t.status === "EN_PROCESO" ? "🔄 En proceso" : "📌";
   const phaseTag = t.category === "PRE_EVENTO" ? "🎪" : t.category === "POST_EVENTO" ? "🏁" : "";
   const typeTag = t.type === "FIJA" ? " 🔁" : "";
@@ -70,7 +70,7 @@ export function formatTaskLine(t: any, num: number): string {
       due = ` ${datePart} ${timePart}`;
     }
   }
-  return `${num}. ${prio} ${phaseTag} *${t.title}* ${status}${typeTag}${due}`;
+  return `${num}. ${phaseTag ? phaseTag + " " : ""}*${t.title}* ${status}${typeTag}${due}`;
 }
 
 // ============================================================
@@ -196,6 +196,28 @@ export function formatTaskHierarchy(tasks: any[], startNum = 1): { text: string;
   if (ordered.length === 0) return { text: "", ordered: [], next: startNum };
   const text = ordered.map((t, i) => formatTaskLine(t, startNum + i)).join("\n");
   return { text, ordered, next: startNum + ordered.length };
+}
+
+// Listado por MÓDULOS (Pre Eventos → Eventos → Post Eventos → Administración → Otro),
+// numerado y cronológico dentro de cada módulo. Es el formato de los mensajes de LUNA.
+export function formatTasksByModule(tasks: any[], startNum = 1): { text: string; ordered: any[]; next: number } {
+  const uniq = dedupeByTitle(tasks);
+  const ordered: any[] = [];
+  const lines: string[] = [];
+  let num = startNum;
+  for (const mod of MODULE_ORDER) {
+    const items = uniq.filter((t) => moduleOfTask(t.category) === mod);
+    if (items.length === 0) continue;
+    const sorted = [...items].sort(
+      (a, b) => hourOf(a) - hourOf(b) || (PRIO_RANK[a.priority] ?? 9) - (PRIO_RANK[b.priority] ?? 9)
+    );
+    lines.push(`*${MODULE_LABELS[mod]}*`);
+    for (const t of sorted) {
+      ordered.push(t);
+      lines.push(formatTaskLine(t, num++));
+    }
+  }
+  return { text: lines.join("\n"), ordered, next: num };
 }
 
 // Devuelve texto de tareas ordenadas cronológicamente por día y hora, agrupadas por día

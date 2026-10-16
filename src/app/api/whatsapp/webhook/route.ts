@@ -5,6 +5,7 @@ import { sendMessage, sendMessageChunked, sendInteractiveButtons } from "@/lib/w
 import { normalizeGTPhone } from "@/lib/phone";
 import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest, formatTaskHierarchy, orderTasksHierarchical } from "@/lib/task-view";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate, isTaskOverdue, partitionTasksByDay } from "@/lib/task-utils";
+import { saveTaskView, getTaskViewIds } from "@/lib/pending-view";
 import { sendLUNAUpdateBroadcast } from "@/lib/broadcast";
 import { runDataFix } from "@/lib/data-fix";
 
@@ -871,12 +872,8 @@ async function getPendingTasks(userId: string) {
   return tasks.filter((t) => !t.title.startsWith("🔔"));
 }
 
-// Guardar la lista que el usuario vio por última vez para que los comandos por # funcionen bien
-const lastViewTasks = new Map<string, { ids: string[]; expires: number }>();
-
-function saveTaskView(userId: string, tasks: { id: string }[]) {
-  lastViewTasks.set(userId, { ids: tasks.map((t) => t.id), expires: Date.now() + 30 * 60 * 1000 });
-}
+// La vista de tareas (para los comandos por #) vive en @/lib/pending-view para
+// que los mensajes programados (7/11/2pm y vencidas 8/4pm) también la guarden.
 
 // Vista de recordatorios que el usuario vio por última vez (para que los # coincidan)
 const lastViewReminders = new Map<string, { ids: string[]; expires: number }>();
@@ -1025,10 +1022,9 @@ Responde SOLO JSON sin markdown.`
 }
 
 async function resolveTaskByNumber(userId: string, num: number) {
-  const view = lastViewTasks.get(userId);
-  if (view && Date.now() < view.expires && num >= 1 && num <= view.ids.length) {
-    const id = view.ids[num - 1];
-    const t = await prisma.task.findUnique({ where: { id } });
+  const ids = getTaskViewIds(userId);
+  if (ids && num >= 1 && num <= ids.length) {
+    const t = await prisma.task.findUnique({ where: { id: ids[num - 1] } });
     if (t) return t;
   }
   const tasks = await getPendingTasks(userId);

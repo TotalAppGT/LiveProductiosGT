@@ -736,15 +736,179 @@ async function weeklyClose() {
   }
 }
 
+// ============================================================
+// MENSAJE DE TAREAS (7:00 / 11:00 / 14:00)
+//   Tareas del día agrupadas por MÓDULO (Pre Eventos → … → Otro),
+//   numeradas y cronológicas. + recordatorios, compras y administración.
+//   NUNCA incluye vencidas (tienen su propio mensaje a las 8:00 y 16:00).
+// ============================================================
+async function scheduledTaskMessage(hour: number) {
+  console.log(`[Cron] Mensaje de tareas (${hour}:00)`);
+  const users = await getActiveUsersWithWhatsApp();
+  const startOfToday = gtStartOfToday();
+  const endOfToday = gtEndOfToday();
+  const todayLabel = startOfToday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
+
+  // 🧠 Proyección logística (solo en el mensaje de la mañana, admins)
+  let logisticsProjection = "";
+  if (hour === 7) {
+    try {
+      const { getUpcomingCuadroInsights } = await import("@/lib/logistics-insights");
+      const insights = await getUpcomingCuadroInsights(14);
+      const withMissing = insights.filter((c) => c.missingCount > 0);
+      if (withMissing.length > 0) {
+        logisticsProjection = `🧠 *PROYECCIÓN DE CUADROS*\n${withMissing.slice(0, 6).map((c) => {
+          const f = c.eventDate
+            ? new Date(c.eventDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "short", day: "numeric", month: "short" })
+            : "s/f";
+          const det = c.missing.slice(0, 3).map((m) => m.name).join(", ");
+          return `• ${f} — *${c.eventName}*: ${c.missingCount} por cubrir (${det}${c.missing.length > 3 ? "…" : ""})`;
+        }).join("\n")}`;
+      }
+    } catch (err) {
+      console.error("[Cron] Error proyección logística:", err);
+    }
+  }
+
+  const { formatTasksByModule } = await import("@/lib/task-view");
+  const { saveTaskView } = await import("@/lib/pending-view");
+  const isAdmin = (role: string) => role === "DUENO" || role === "ADMIN" || role === "JEFE";
+
+  for (const user of users) {
+    try {
+      const tasks = (await prisma.task.findMany({
+        where: { assignedToId: user.id, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
+        orderBy: [{ dueDate: "asc" }],
+        take: 500,
+      })).filter((t) => !t.title.startsWith("🔔"));
+
+      const { today } = partitionTasksByDay(tasks, startOfToday);
+      const { text, ordered } = formatTasksByModule(today);
+      if (ordered.length > 0) saveTaskView(user.id, ordered);
+
+      // ⏰ Recordatorios de HOY
+      let remindersBlock = "";
+      try {
+        const todayReminders = await prisma.reminder.findMany({
+          where: { assignedToId: user.id, isCompleted: false, remindAt: { gte: startOfToday, lte: endOfToday } },
+          orderBy: { remindAt: "asc" },
+          take: 8,
+        });
+        if (todayReminders.length > 0) {
+          remindersBlock = `⏰ *RECORDATORIOS DE HOY (${todayReminders.length})*\n${todayReminders
+            .map((r, i) => `${i + 1}. ${r.title} — ${new Date(r.remindAt).toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`)
+            .join("\n")}`;
+        }
+      } catch { /* silencioso */ }
+
+      // 🛒 Compras de HOY
+      let purchasesBlock = "";
+      try {
+        const todayPurchases = await prisma.purchase.findMany({
+          where: { assignedToId: user.id, status: "PENDIENTE", dueDate: { gte: startOfToday, lte: endOfToday } },
+          orderBy: { dueDate: "asc" },
+          take: 8,
+        });
+        if (todayPurchases.length > 0) {
+          purchasesBlock = `🛒 *COMPRAS DE HOY (${todayPurchases.length})*\n${todayPurchases
+            .map((p, i) => `${i + 1}. ${p.title}${p.amount ? ` — Q${Number(p.amount).toFixed(2)}` : ""}`)
+            .join("\n")}`;
+        }
+      } catch { /* silencioso */ }
+
+      // 💼 Administración (cobros) para admin/jefe/dueño
+      let cobrosBlock = "";
+      if (isAdmin(user.role)) {
+        try {
+          const pendingCobros = await prisma.cobro.findMany({ where: { assignedToId: user.id, status: "PENDIENTE" }, orderBy: { dueDate: "asc" }, take: 5 });
+          if (pendingCobros.length > 0) {
+            cobrosBlock = `💼 *ADMINISTRACIÓN — COBROS (${pendingCobros.length})*\n${pendingCobros
+              .map((c, i) => `${i + 1}. ${c.clientName}: Q${Number(c.amount).toFixed(2)}${c.dueDate ? ` → ${new Date(c.dueDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "numeric", month: "short" })}` : ""}`)
+              .join("\n")}`;
+          }
+        } catch { /* silencioso */ }
+      }
+
+      const blocks: string[] = [text || "✅ *Sin tareas para hoy.*"];
+      if (remindersBlock) blocks.push(remindersBlock);
+      if (purchasesBlock) blocks.push(purchasesBlock);
+      if (cobrosBlock) blocks.push(cobrosBlock);
+      if (logisticsProjection && isAdmin(user.role)) blocks.push(logisticsProjection);
+
+      const greeting = `Luna 🌙 · Hola, ${user.name.split(" ")[0]}`;
+      const msg = `${greeting}\n📋 *TAREAS — ${todayLabel}*\n\n${blocks.join("\n\n")}\n\n_Acciones: *hecho N* · *proceso N* · *posponer N* · *tareas* para ver todo._`;
+
+      const to = user.whatsappNumber || user.phone;
+      if (!to) continue;
+      const r = await sendProactiveChunked(to, msg);
+      await prisma.whatsAppMessage.create({
+        data: { externalId: r.messageId, userId: user.id, toNumber: to, message: `[TAREAS ${hour}h] ${msg}`, type: "NOTIFICATION", status: r.ok ? "SENT" : "FAILED" },
+      }).catch(() => {});
+      await logActivity(user.id, `CRON_TASK_MSG_${hour}`, r.ok ? `Mensaje de tareas ${hour}h a ${user.name} (${ordered.length} tareas) vía ${r.via}` : `FALLO mensaje de tareas ${hour}h a ${user.name}`);
+    } catch (error) {
+      console.error(`[Cron] Error mensaje de tareas (${hour}) para ${user.name}:`, error);
+    }
+  }
+}
+
+// ============================================================
+// MENSAJE SOLO DE VENCIDAS (8:00 / 16:00). Si no hay vencidas, no se envía.
+// ============================================================
+async function overdueMessage() {
+  console.log("[Cron] Mensaje de vencidas");
+  const users = await getActiveUsersWithWhatsApp();
+  const startOfToday = gtStartOfToday();
+  const todayLabel = startOfToday.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "short" });
+  const { formatTasksByModule } = await import("@/lib/task-view");
+  const { saveTaskView } = await import("@/lib/pending-view");
+
+  for (const user of users) {
+    try {
+      const tasks = (await prisma.task.findMany({
+        where: { assignedToId: user.id, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
+        orderBy: [{ dueDate: "asc" }],
+        take: 500,
+      })).filter((t) => !t.title.startsWith("🔔"));
+
+      const { overdue } = partitionTasksByDay(tasks, startOfToday);
+      if (overdue.length === 0) continue;
+      const { text, ordered } = formatTasksByModule(overdue);
+      saveTaskView(user.id, ordered);
+
+      const to = user.whatsappNumber || user.phone;
+      if (!to) continue;
+      const msg = `⚠️ *TAREAS VENCIDAS — ${todayLabel} (${overdue.length})*\n\n${text}\n\n_Ponete al día: *hecho N* · *posponer N*._`;
+      const r = await sendProactiveChunked(to, msg);
+      await prisma.whatsAppMessage.create({
+        data: { externalId: r.messageId, userId: user.id, toNumber: to, message: `[VENCIDAS] ${msg}`, type: "NOTIFICATION", status: r.ok ? "SENT" : "FAILED" },
+      }).catch(() => {});
+      await logActivity(user.id, "CRON_OVERDUE_MSG", r.ok ? `${overdue.length} vencidas a ${user.name} vía ${r.via}` : `FALLO vencidas a ${user.name}`);
+    } catch (error) {
+      console.error(`[Cron] Error mensaje de vencidas para ${user.name}:`, error);
+    }
+  }
+}
+
+// ============================================================
+// HORARIOS (hora Guatemala, todos los días menos domingo):
+//   7:00  tareas + seguimientos + recordatorios + administración
+//   8:00  SOLO vencidas
+//  11:00  tareas + seguimientos + recordatorios + administración
+//  12:00  chequeo de mediodía (admins)
+//  14:00  tareas + seguimientos + recordatorios + administración
+//  16:00  SOLO vencidas  +  chequeo de accesos
+//  17:00  cierre de jornada (todos)  ·  domingo: cierre semanal
+// ============================================================
 const jobs: CronJob[] = [
   { name: "weeklyClose", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: weeklyClose, onlyOnSunday: true },
-  { name: "morningBriefing", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: morningBriefing, skipOnSunday: true, catchUpUntilHour: 11 },
-  { name: "dailyCarryOver", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: dailyCarryOver, skipOnSunday: true, catchUpUntilHour: 12 },
+  { name: "taskMsg7", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: () => scheduledTaskMessage(7), skipOnSunday: true, catchUpUntilHour: 11 },
+  { name: "overdueMsg8", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: overdueMessage, skipOnSunday: true, catchUpUntilHour: 12 },
+  { name: "taskMsg11", schedule: { hour: 11, minute: 0 }, timezone: "America/Guatemala", handler: () => scheduledTaskMessage(11), skipOnSunday: true, catchUpUntilHour: 13 },
   { name: "middayCheck", schedule: { hour: 12, minute: 0 }, timezone: "America/Guatemala", handler: middayCheck, skipOnSunday: true, catchUpUntilHour: 15 },
+  { name: "taskMsg14", schedule: { hour: 14, minute: 0 }, timezone: "America/Guatemala", handler: () => scheduledTaskMessage(14), skipOnSunday: true, catchUpUntilHour: 16 },
+  { name: "overdueMsg16", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: overdueMessage, skipOnSunday: true, catchUpUntilHour: 17 },
   { name: "afternoonAccessCheck", schedule: { hour: 16, minute: 0 }, timezone: "America/Guatemala", handler: afternoonAccessCheck, skipOnSunday: true, catchUpUntilHour: 17 },
   { name: "endOfDayTaskCheck", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: endOfDayTaskCheck, skipOnSunday: true, catchUpUntilHour: 19 },
-  { name: "bihourly11", schedule: { hour: 11, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(11), skipOnSunday: true, catchUpUntilHour: 13 },
-  { name: "bihourly14", schedule: { hour: 14, minute: 0 }, timezone: "America/Guatemala", handler: () => bihourlyReminder(14), skipOnSunday: true, skipWeekdays: [6], catchUpUntilHour: 16 },
 ];
 
 // Usar globalThis para que el cron sea UN SOLO singleton entre todas las instancias del módulo
