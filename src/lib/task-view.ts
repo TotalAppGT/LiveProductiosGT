@@ -171,51 +171,31 @@ export function orderTasksHierarchical(tasks: any[]): any[] {
   return out;
 }
 
-// Render profesional en listado jerárquico. Devuelve también el orden para numerar.
-export function formatTaskHierarchy(tasks: any[], startNum = 1): { text: string; ordered: any[]; next: number } {
-  tasks = dedupeByTitle(tasks);
-  const ordered = orderTasksHierarchical(tasks);
-  if (ordered.length === 0) return { text: "", ordered: [], next: startNum };
+const PRIO_RANK: Record<string, number> = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAJA: 3, OTRO: 4 };
 
-  let num = startNum;
-  const lines: string[] = [];
-  const emit = (arr: any[], indent: string) => {
-    for (const t of arr) lines.push(`${indent}${formatTaskLine(t, num++)}`);
+// Orden CRONOLÓGICO: por día, luego por hora, luego prioridad.
+export function orderTasksChronological(tasks: any[]): any[] {
+  const dayStart = (ts: string | Date | null): number => {
+    if (!ts) return Number.MAX_SAFE_INTEGER;
+    const d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
   };
+  return dedupeByTitle(tasks).sort((a, b) =>
+    dayStart(a.dueDate) - dayStart(b.dueDate) ||
+    hourOf(a) - hourOf(b) ||
+    (PRIO_RANK[a.priority] ?? 9) - (PRIO_RANK[b.priority] ?? 9)
+  );
+}
 
-  for (const block of FREQ_BLOCK_ORDER) {
-    const blockTasks = tasks.filter((t) => blockOfTask(t) === block);
-    if (blockTasks.length === 0) continue;
-    lines.push(`*${FREQ_BLOCK_LABELS[block]}*`);
-    for (const mod of MODULE_ORDER) {
-      const modTasks = blockTasks.filter((t) => moduleOfTask(t.category) === mod);
-      if (modTasks.length === 0) continue;
-      lines.push(`*${MODULE_LABELS[mod]}*`);
-      const fijas = modTasks.filter((t) => t.type === "FIJA").sort(sortByManualThenHour);
-      const variables = modTasks.filter((t) => t.type !== "FIJA").sort(sortByManualThenHour);
-      if (fijas.length > 0) {
-        lines.push("  🔁 *Fijas*");
-        if (mod === "PRE_EVENTO") {
-          for (const sub of PRE_EVENTO_SUBLEVELS) {
-            const subTasks = fijas.filter((t) => sub.cats.includes(String(t.category)));
-            if (subTasks.length === 0) continue;
-            lines.push(`    ${sub.label}`);
-            emit(subTasks, "      ");
-          }
-        } else {
-          emit(fijas, "    ");
-        }
-      }
-      if (variables.length > 0) {
-        lines.push("  ⚡ *Variables*");
-        emit(variables, "    ");
-      }
-    }
-    lines.push("");
-  }
-
-  const text = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { text, ordered, next: num };
+// Listado de tareas para WhatsApp: VENCIDAS primero (lo separa el llamador) y el
+// resto en orden CRONOLÓGICO (por hora del día), sin bloques de frecuencia.
+// Devuelve también el orden usado para numerar ("hecho N").
+export function formatTaskHierarchy(tasks: any[], startNum = 1): { text: string; ordered: any[]; next: number } {
+  const ordered = orderTasksChronological(tasks);
+  if (ordered.length === 0) return { text: "", ordered: [], next: startNum };
+  const text = ordered.map((t, i) => formatTaskLine(t, startNum + i)).join("\n");
+  return { text, ordered, next: startNum + ordered.length };
 }
 
 // Devuelve texto de tareas ordenadas cronológicamente por día y hora, agrupadas por día
