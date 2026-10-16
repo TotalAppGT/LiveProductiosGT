@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
     const assignedToId = searchParams.get("assignedToId") || undefined;
+    const category = searchParams.get("category") || undefined;
     const search = searchParams.get("search") || "";
     const dueDateFrom = searchParams.get("dueDateFrom") || undefined;
     const dueDateTo = searchParams.get("dueDateTo") || undefined;
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
     const where: Prisma.PurchaseWhereInput = {};
     if (status) where.status = status;
     if (assignedToId) where.assignedToId = assignedToId;
+    if (category) where.category = category;
     if (search) {
       where.OR = [
         { title: { contains: search, mode: "insensitive" } },
@@ -40,6 +42,7 @@ export async function GET(request: NextRequest) {
       include: {
         assignedTo: { select: { id: true, name: true } },
         assignedBy: { select: { id: true, name: true } },
+        documents: { orderBy: { createdAt: "desc" } },
       },
     });
 
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, amount, advance, provider, status, dueDate, priority, assignedToId } = body;
+    const { title, description, amount, advance, provider, category, status, dueDate, priority, invoiceNumber, invoiceDate, paymentMethod, assignedToId } = body;
 
     if (!title || !title.trim()) {
       return NextResponse.json({ success: false, error: "El título es requerido" }, { status: 400 });
@@ -71,9 +74,13 @@ export async function POST(request: NextRequest) {
         amount: amount ? Number(amount) : null,
         advance: advance ? Number(advance) : null,
         provider: provider || null,
+        category: category || null,
         status: status || "PENDIENTE",
         dueDate: dueDate ? new Date(dueDate) : null,
         priority: priority || "MEDIA",
+        invoiceNumber: invoiceNumber || null,
+        invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
+        paymentMethod: paymentMethod || null,
         assignedToId: assignedToId || auth.payload.userId,
         assignedById: auth.payload.userId,
       },

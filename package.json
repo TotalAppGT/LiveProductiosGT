@@ -17,6 +17,7 @@
   "dependencies": {
     "@prisma/client": "^6.5.0",
     "@tailwindcss/postcss": "^4.3.3",
+    "aws4fetch": "^1.0.20",
     "bcryptjs": "^2.4.3",
     "date-fns": "^4.1.0",
     "exceljs": "^4.4.0",

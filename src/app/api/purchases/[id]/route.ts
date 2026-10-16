@@ -29,6 +29,11 @@ export async function PATCH(
     if (body.priority !== undefined) data.priority = body.priority;
     if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null;
     if (body.assignedToId !== undefined) data.assignedToId = body.assignedToId;
+    if (body.category !== undefined) data.category = body.category || null;
+    if (body.invoiceNumber !== undefined) data.invoiceNumber = body.invoiceNumber || null;
+    if (body.invoiceDate !== undefined) data.invoiceDate = body.invoiceDate ? new Date(body.invoiceDate) : null;
+    if (body.paymentMethod !== undefined) data.paymentMethod = body.paymentMethod || null;
+    if (body.receivedAt !== undefined) data.receivedAt = body.receivedAt ? new Date(body.receivedAt) : null;
 
     const purchase = await prisma.purchase.update({
       where: { id },
@@ -36,6 +41,7 @@ export async function PATCH(
       include: {
         assignedTo: { select: { id: true, name: true } },
         assignedBy: { select: { id: true, name: true } },
+        documents: { orderBy: { createdAt: "desc" } },
       },
     });
 

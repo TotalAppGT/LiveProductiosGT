@@ -31,6 +31,7 @@ import {
   TrendingUp,
   NotebookPen,
   MapPin,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -126,6 +127,11 @@ const navItems: NavItem[] = [
     label: "Cobros",
     href: "/cobros",
     icon: DollarSign,
+  },
+  {
+    label: "Compras",
+    href: "/compras",
+    icon: ShoppingCart,
   },
   {
     label: "Vehículos",

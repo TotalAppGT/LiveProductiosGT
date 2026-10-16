@@ -204,8 +204,9 @@ model User {
   vehicleLogs       VehicleLog[]   @relation("VehicleLogDriver")
   createdReports    Report[]       @relation("ReportCreator")
   personalNotes     PersonalNote[] @relation("PersonalNoteOwner")
-  createdPurchases  Purchase[]     @relation("PurchaseCreator")
-  assignedPurchases Purchase[]     @relation("PurchaseAssignee")
+  createdPurchases   Purchase[]         @relation("PurchaseCreator")
+  assignedPurchases  Purchase[]         @relation("PurchaseAssignee")
+  purchaseDocuments  PurchaseDocument[] @relation("PurchaseDocUploader")
 }
 
 model Task {
@@ -612,25 +613,48 @@ model PersonalNote {
 }
 
 model Purchase {
-  id           String    @id @default(cuid())
-  title        String
-  description  String?
-  amount       Decimal?  @db.Decimal(10, 2)
-  advance      Decimal?  @db.Decimal(10, 2)
-  provider     String?
-  status       String    @default("PENDIENTE") // PENDIENTE | COMPRADO | CANCELADO
-  dueDate      DateTime?
-  priority     String    @default("MEDIA") // BAJA | MEDIA | ALTA | URGENTE
-  assignedToId String?
-  assignedById String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  amount        Decimal?  @db.Decimal(10, 2)
+  advance       Decimal?  @db.Decimal(10, 2)
+  provider      String?
+  category      String?
+  status        String    @default("PENDIENTE") // PENDIENTE | COMPRADO | CANCELADO
+  dueDate       DateTime?
+  priority      String    @default("MEDIA") // BAJA | MEDIA | ALTA | URGENTE
+  invoiceNumber String?
+  invoiceDate   DateTime?
+  paymentMethod String?
+  receivedAt    DateTime?
+  assignedToId  String?
+  assignedById  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  assignedTo User? @relation("PurchaseAssignee", fields: [assignedToId], references: [id])
-  assignedBy User? @relation("PurchaseCreator", fields: [assignedById], references: [id])
+  assignedTo User?             @relation("PurchaseAssignee", fields: [assignedToId], references: [id])
+  assignedBy User?             @relation("PurchaseCreator", fields: [assignedById], references: [id])
+  documents  PurchaseDocument[]
 
   @@index([status])
   @@index([assignedToId])
+  @@index([category])
+}
+
+model PurchaseDocument {
+  id           String   @id @default(cuid())
+  purchaseId   String
+  purchase     Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  fileName     String
+  fileUrl      String   @db.Text
+  fileType     String   @default("application/octet-stream")
+  fileSize     Int?
+  kind         String   @default("FACTURA") // FACTURA | RECIBO | COTIZACION | COMPROBANTE | OTRO
+  uploadedById String
+  uploadedBy   User     @relation("PurchaseDocUploader", fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([purchaseId])
 }
 
 model ScheduledMessage {
