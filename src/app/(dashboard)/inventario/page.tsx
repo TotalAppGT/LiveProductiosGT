@@ -75,6 +75,9 @@ export default function InventarioPage() {
   const [showReconcile, setShowReconcile] = useState(false);
   const [reconcileData, setReconcileData] = useState<any | null>(null);
   const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [reconcileName, setReconcileNameState] = useState<Record<string, string>>({});
+  const [reconcilePick, setReconcilePickState] = useState<Record<string, string>>({});
+  const [reconcileSearch, setReconcileSearch] = useState("");
   const [showNeeds, setShowNeeds] = useState(false);
   const [needsDays, setNeedsDays] = useState(30);
   const [needs, setNeeds] = useState<any[]>([]);
@@ -332,16 +335,47 @@ export default function InventarioPage() {
     }
   }
 
-  async function addMissingToInventory(d: any) {
+  function setReconcileName(key: string, name: string) {
+    setReconcileNameState((s) => ({ ...s, [key]: name }));
+  }
+  function setReconcilePick(key: string, id: string) {
+    setReconcilePickState((s) => ({ ...s, [key]: id }));
+  }
+
+  // Aplica el nombre final elegido al INVENTARIO y a los CUADROS a la vez.
+  async function applyCanonical(d: any, inventoryItemId: string) {
+    const newName = (reconcileName[d.key] ?? d.name)?.trim();
+    if (!newName) return toast.error("Escribí un nombre final");
     try {
-      const res = await fetch("/api/inventory", {
+      const res = await fetch("/api/inventory/reconcile", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: d.name, category: d.category || "OTRO", section: d.category || null, quantity: d.quantity || 1 }),
+        body: JSON.stringify({ orderItemName: d.key, inventoryItemId, newName }),
       });
       const json = await res.json();
       if (json.success) {
-        toast.success("Ítem agregado al inventario");
+        toast.success(`Alineado a "${json.name}" en ${json.updated} ítem(s) de cuadros`);
+        loadReconcile();
+        fetchItems();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al alinear");
+    }
+  }
+
+  // Crea el ítem en el inventario y lo vincula a los cuadros.
+  async function createMissing(d: any) {
+    const newName = (reconcileName[d.key] ?? d.name)?.trim();
+    if (!newName) return toast.error("Escribí un nombre para el inventario");
+    try {
+      const res = await fetch("/api/inventory/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderItemName: d.key, create: true, newName, category: d.category || "OTRO", quantity: d.quantity || 1 }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(`Agregado al inventario como "${json.name}" (${json.updated} cuadro/s)`);
         loadReconcile();
         fetchItems();
       } else toast.error(json.error || "Error");
@@ -370,8 +404,18 @@ export default function InventarioPage() {
     try {
       const res = await fetch("/api/inventory/reconcile", { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
-      if (json.success) setReconcileData(json.data);
-      else toast.error(json.error || "Error");
+      if (json.success) {
+        setReconcileData(json.data);
+        const names: Record<string, string> = {};
+        const picks: Record<string, string> = {};
+        for (const d of json.data.discrepancies || []) {
+          names[d.key] = d.name;
+          if (d.linked?.[0]) picks[d.key] = d.linked[0].id;
+          else if (d.suggestions?.[0]) picks[d.key] = d.suggestions[0].id;
+        }
+        setReconcileNameState(names);
+        setReconcilePickState(picks);
+      } else toast.error(json.error || "Error");
     } catch {
       toast.error("Error al cotejar");
     } finally {
@@ -438,23 +482,7 @@ export default function InventarioPage() {
     }
   }
 
-  async function linkOrderItemToInventory(name: string, inventoryItemId: string, rename: boolean) {
-    try {
-      const res = await fetch("/api/inventory/reconcile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ orderItemName: name, inventoryItemId, rename }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        toast.success(`Vinculado a "${json.name}" (${json.updated} ítem/s)`);
-        loadReconcile();
-        fetchItems();
-      } else toast.error(json.error || "Error");
-    } catch {
-      toast.error("Error al vincular");
-    }
-  }
+
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -1018,50 +1046,81 @@ export default function InventarioPage() {
                 </div>
               </div>
 
+              <input
+                placeholder="Buscar ítem…"
+                value={reconcileSearch}
+                onChange={(e) => setReconcileSearch(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+              />
               {reconcileData.discrepancies.length === 0 ? (
                 <p className="text-sm text-green-600">✅ Todos los ítems de los cuadros coinciden con el inventario.</p>
               ) : (
-                <div className="space-y-3 max-h-[58vh] overflow-y-auto">
-                  {reconcileData.discrepancies.map((d: any) => (
-                    <div key={d.key} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{d.name}</p>
-                          <p className="text-xs text-gray-400">
-                            Cant. {d.quantity} · {d.orders.slice(0, 3).join(", ")}{d.orders.length > 3 ? ` +${d.orders.length - 3}` : ""}
-                          </p>
-                        </div>
-                        <span className={`shrink-0 px-2 py-0.5 rounded text-[11px] font-medium ${d.status === "missing" ? "bg-red-100 text-red-700" : d.status === "different" ? "bg-amber-100 text-amber-700" : "bg-yellow-100 text-yellow-700"}`}>
-                          {d.status === "missing" ? "No está en inventario" : d.status === "different" ? "Descripción diferente" : "Parecido"}
-                        </span>
-                      </div>
-                      {d.status === "missing" && (
-                        <div className="mt-2 flex items-center justify-between gap-2">
-                          <p className="text-xs text-red-600">No existe en el inventario → comprar o revisar.</p>
-                          <Button size="sm" onClick={() => addMissingToInventory(d)}>➕ Agregar al inventario</Button>
-                        </div>
-                      )}
-                      {d.linked?.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-2">Vinculado a: {d.linked.map((l: any) => l.name).join(", ")}</p>
-                      )}
-                      {d.suggestions?.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          <p className="text-[11px] text-gray-500">Posible coincidencia:</p>
-                          {d.suggestions.map((s: any) => (
-                            <div key={s.id} className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800/50 rounded p-2">
-                              <span className="text-xs truncate">
-                                {s.name} <span className="text-gray-400">· {s.section || "-"} · {s.status} · {Math.round(s.score * 100)}%</span>
-                              </span>
-                              <div className="flex gap-1 shrink-0">
-                                <Button size="sm" variant="outline" onClick={() => linkOrderItemToInventory(d.key, s.id, false)}>Vincular</Button>
-                                <Button size="sm" onClick={() => linkOrderItemToInventory(d.key, s.id, true)}>Vincular + renombrar</Button>
-                              </div>
+                <div className="space-y-3 max-h-[52vh] overflow-y-auto">
+                  {reconcileData.discrepancies
+                    .filter((d: any) => !reconcileSearch || d.name.toLowerCase().includes(reconcileSearch.toLowerCase()))
+                    .map((d: any) => {
+                      const currentName = reconcileName[d.key] ?? d.name;
+                      const options = d.linked?.length ? d.linked : d.suggestions || [];
+                      const pick = reconcilePick[d.key] || options[0]?.id || "";
+                      return (
+                        <div key={d.key} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{d.name}</p>
+                              <p className="text-xs text-gray-400">
+                                Cant. {d.quantity} · {d.orders.slice(0, 3).join(", ")}{d.orders.length > 3 ? ` +${d.orders.length - 3}` : ""}
+                              </p>
                             </div>
-                          ))}
+                            <span className={`shrink-0 px-2 py-0.5 rounded text-[11px] font-medium ${d.status === "missing" ? "bg-red-100 text-red-700" : d.status === "different" ? "bg-amber-100 text-amber-700" : "bg-yellow-100 text-yellow-700"}`}>
+                              {d.status === "missing" ? "No está en inventario" : d.status === "different" ? "Descripción diferente" : "Parecido"}
+                            </span>
+                          </div>
+
+                          {options.length > 0 ? (
+                            <div className="mt-2 space-y-1">
+                              <p className="text-[11px] text-gray-500">Elegí con qué quedarte (inventario):</p>
+                              {options.map((s: any) => (
+                                <label key={s.id} className={`flex items-center justify-between gap-2 rounded p-2 cursor-pointer border ${pick === s.id ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20" : "border-gray-200 dark:border-gray-700"}`}>
+                                  <span className="flex items-center gap-2 min-w-0">
+                                    <input type="radio" name={`pick-${d.key}`} checked={pick === s.id} onChange={() => setReconcilePick(d.key, s.id)} />
+                                    <span className="text-xs truncate">
+                                      {s.name}
+                                      <span className="text-gray-400">
+                                        {s.section ? ` · ${s.section}` : ""}{s.status ? ` · ${s.status}` : ""}{s.score ? ` · ${Math.round(s.score * 100)}%` : ""}
+                                      </span>
+                                    </span>
+                                  </span>
+                                  <Button size="sm" variant="ghost" onClick={(e) => { e.preventDefault(); setReconcilePick(d.key, s.id); setReconcileName(d.key, s.name); }}>Usar este nombre</Button>
+                                </label>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-red-600 mt-2">No existe en el inventario → al agregarlo queda vinculado a los cuadros.</p>
+                          )}
+
+                          <div className="mt-2">
+                            <label className="block text-[11px] text-gray-500 mb-1">Nombre final (se aplica al inventario y a los cuadros):</label>
+                            <div className="flex flex-wrap gap-2">
+                              <input
+                                value={currentName}
+                                onChange={(e) => setReconcileName(d.key, e.target.value)}
+                                className="flex-1 min-w-[200px] rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 text-sm text-gray-900 dark:text-white"
+                              />
+                              <Button size="sm" variant="outline" onClick={() => setReconcileName(d.key, d.name)}>Usar cuadro</Button>
+                              {options[0] && <Button size="sm" variant="outline" onClick={() => setReconcileName(d.key, options[0].name)}>Usar inventario</Button>}
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end gap-2 mt-2">
+                            {options.length > 0 && pick ? (
+                              <Button size="sm" onClick={() => applyCanonical(d, pick)}>Aplicar a ambos</Button>
+                            ) : (
+                              <Button size="sm" onClick={() => createMissing(d)}>➕ Agregar al inventario</Button>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      );
+                    })}
                 </div>
               )}
             </>

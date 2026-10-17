@@ -16,7 +16,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Vincula los ítems de cuadro (por descripción) a un ítem del inventario.
+// Alinea: elige un nombre final y lo aplica al INVENTARIO y a los CUADROS a la vez.
+// - inventoryItemId: ítem del inventario a usar (o crear con `create: true`).
+// - newName: nombre final (si se omite, se usa el del inventario).
 export async function POST(request: NextRequest) {
   try {
     const auth = authenticateRequest(request);
@@ -24,34 +26,55 @@ export async function POST(request: NextRequest) {
     if (!hasMinRole(auth.payload, "JEFE")) return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
 
     const body = await request.json();
-    const { orderItemName, inventoryItemId, rename } = body || {};
-    if (!orderItemName || !inventoryItemId) {
-      return NextResponse.json({ success: false, error: "Datos incompletos" }, { status: 400 });
-    }
-    const inv = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId }, select: { id: true, name: true } });
-    if (!inv) return NextResponse.json({ success: false, error: "Ítem de inventario no encontrado" }, { status: 404 });
+    const { orderItemName, inventoryItemId, newName, create, category, section, quantity } = body || {};
+    if (!orderItemName) return NextResponse.json({ success: false, error: "Falta el nombre del ítem de cuadro" }, { status: 400 });
 
+    const original = normName(orderItemName);
     const all = await prisma.orderItem.findMany({ select: { id: true, name: true } });
-    const target = normName(orderItemName);
-    const ids = all.filter((i) => normName(i.name) === target).map((i) => i.id);
-    if (ids.length === 0) return NextResponse.json({ success: false, error: "Sin ítems de cuadro que coincidan" }, { status: 404 });
+    const ids = all.filter((i) => normName(i.name) === original).map((i) => i.id);
 
-    await prisma.orderItem.updateMany({
-      where: { id: { in: ids } },
-      data: { inventoryItemId, ...(rename ? { name: inv.name } : {}) },
-    });
+    let inv: { id: string; name: string };
+    if (create) {
+      const name = (newName && String(newName).trim()) || orderItemName;
+      inv = await prisma.inventoryItem.create({
+        data: {
+          name,
+          category: category || "OTRO",
+          section: section || null,
+          quantity: quantity && Number(quantity) > 0 ? Number(quantity) : 1,
+          status: "DISPONIBLE",
+          location: "Bodega Elgin",
+          warehouse: "Bodega Elgin",
+          lastCheckedAt: new Date(),
+        },
+        select: { id: true, name: true },
+      });
+    } else {
+      if (!inventoryItemId) return NextResponse.json({ success: false, error: "Falta el ítem del inventario" }, { status: 400 });
+      const found = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId }, select: { id: true, name: true } });
+      if (!found) return NextResponse.json({ success: false, error: "Ítem de inventario no encontrado" }, { status: 404 });
+      inv = found;
+    }
+
+    const finalName = (newName && String(newName).trim()) || inv.name;
+    if (finalName !== inv.name) {
+      await prisma.inventoryItem.update({ where: { id: inv.id }, data: { name: finalName } });
+    }
+    if (ids.length > 0) {
+      await prisma.orderItem.updateMany({ where: { id: { in: ids } }, data: { inventoryItemId: inv.id, name: finalName } });
+    }
 
     await prisma.activity.create({
       data: {
         userId: auth.payload.userId,
         action: "RECONCILIAR_INVENTARIO",
         resource: "INVENTORY",
-        resourceId: inventoryItemId,
-        details: `Cotejo: ${ids.length} ítem(s) de cuadro "${orderItemName}" → inventario "${inv.name}"${rename ? " (renombrado)" : ""}`,
+        resourceId: inv.id,
+        details: `Cotejo/alineación: "${orderItemName}" → "${finalName}" (${ids.length} ítem(s) de cuadros${create ? ", inventario creado" : ""})`,
       },
     }).catch(() => {});
 
-    return NextResponse.json({ success: true, updated: ids.length, name: inv.name });
+    return NextResponse.json({ success: true, updated: ids.length, name: finalName, inventoryItemId: inv.id, created: !!create });
   } catch (error) {
     console.error("Error reconcile POST:", error);
     return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });
