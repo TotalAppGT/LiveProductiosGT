@@ -49,16 +49,29 @@ export async function POST(request: NextRequest) {
       const k = norm(i.name);
       if (!byNorm.has(k) || i.status === "DISPONIBLE") byNorm.set(k, { id: i.id, name: i.name, category: i.category });
     }
+    // Coincidencia estricta: exacta o similitud por tokens (Jaccard) con los
+    // mismos números. Evita que descripciones genéricas ("cable de corriente")
+    // se emparejen con nombres largos que las contienen.
+    const tokens = (s: string) => new Set(norm(s).split(" ").filter((w) => w.length > 1));
+    const numbersOf = (s: string) => (norm(s).match(/\d+(\.\d+)?/g) || []).join(",");
+    const jaccard = (a: string, b: string) => {
+      const A = tokens(a), B = tokens(b);
+      if (!A.size || !B.size) return 0;
+      let inter = 0;
+      for (const x of A) if (B.has(x)) inter++;
+      return inter / (A.size + B.size - inter);
+    };
     function match(name: string) {
       const n = norm(name);
       if (byNorm.has(n)) return byNorm.get(n)!;
-      let best: { k: string; v: { id: string; name: string; category: string } } | null = null;
-      for (const [k, v] of byNorm) {
-        if (k.includes(n) || n.includes(k)) {
-          if (!best || k.length > best.k.length) best = { k, v };
-        }
+      let best: { id: string; name: string; category: string } | null = null;
+      let bestS = 0;
+      for (const v of byNorm.values()) {
+        if (numbersOf(name) !== numbersOf(v.name)) continue;
+        const s = jaccard(name, v.name);
+        if (s >= 0.6 && s > bestS) { bestS = s; best = v; }
       }
-      return best?.v || null;
+      return best;
     }
 
     type Group = { eventName: string; date: Date | null; endDate: Date | null; cliente: string; ubicacion: string; items: { name: string; category: string; quantity: number; inventoryItemId: string | null }[] };
@@ -76,7 +89,7 @@ export async function POST(request: NextRequest) {
       }
       const hit = match(m.item);
       if (!hit) unmatched.add(m.item);
-      g.items.push({ name: hit?.name || m.item, category: hit?.category || "OTRO", quantity: m.cantidad, inventoryItemId: hit?.id || null });
+      g.items.push({ name: m.item, category: hit?.category || "OTRO", quantity: m.cantidad, inventoryItemId: hit?.id || null });
     }
 
     if (groups.size === 0) return NextResponse.json({ success: false, error: "No se encontraron cuadros válidos (revisá las columnas)" }, { status: 400 });

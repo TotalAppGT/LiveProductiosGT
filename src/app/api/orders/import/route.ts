@@ -37,17 +37,27 @@ export async function POST(request: NextRequest) {
       select: { id: true, name: true, section: true, category: true, warehouse: true },
     });
     const byName = new Map(inv.map((i) => [norm(i.name), i]));
+    const tokens = (s: string) => new Set(norm(s).split(" ").filter((w) => w.length > 1));
+    const numbersOf = (s: string) => (norm(s).match(/\d+(\.\d+)?/g) || []).join(",");
+    const jaccard = (a: string, b: string) => {
+      const A = tokens(a), B = tokens(b);
+      if (!A.size || !B.size) return 0;
+      let inter = 0;
+      for (const x of A) if (B.has(x)) inter++;
+      return inter / (A.size + B.size - inter);
+    };
 
     function match(name: string) {
       const n = norm(name);
       if (byName.has(n)) return { item: byName.get(n)!, match: "exact" as const };
-      let best: { k: string; v: (typeof inv)[number] } | null = null;
-      for (const [k, v] of byName) {
-        if (k.includes(n) || n.includes(k)) {
-          if (!best || k.length > best.k.length) best = { k, v };
-        }
+      let best: (typeof inv)[number] | null = null;
+      let bestS = 0;
+      for (const v of byName.values()) {
+        if (numbersOf(name) !== numbersOf(v.name)) continue;
+        const s = jaccard(name, v.name);
+        if (s >= 0.6 && s > bestS) { bestS = s; best = v; }
       }
-      if (best) return { item: best.v, match: "partial" as const };
+      if (best) return { item: best, match: "partial" as const };
       return { item: null, match: "none" as const };
     }
 
