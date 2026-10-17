@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
     const {
       name,
       category,
+      section,
       quantity,
       assignedToId,
       status,
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         category: category || "OTRO",
+        section: section || null,
         quantity: quantity || 1,
         assignedToId: assignedToId || null,
         status: status || "DISPONIBLE",

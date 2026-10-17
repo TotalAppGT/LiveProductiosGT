@@ -68,24 +68,58 @@ export async function POST(request: NextRequest) {
       lastCheckedAt: new Date(),
     }));
 
-    await prisma.inventoryItem.createMany({ data });
+    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+    let created = 0;
+    let updated = 0;
+
+    if (mode === "merge") {
+      // Sumar/agregar sin borrar: si el ítem existe (por nombre) se SUMA la cantidad; si no, se crea.
+      const existing = await prisma.inventoryItem.findMany({ select: { id: true, name: true, status: true } });
+      const byNorm = new Map<string, { id: string; status: string }>();
+      for (const e of existing) {
+        const k = norm(e.name);
+        if (!byNorm.has(k) || e.status === "DISPONIBLE") byNorm.set(k, { id: e.id, status: e.status });
+      }
+      for (const d of data) {
+        const ex = byNorm.get(norm(d.name));
+        if (ex) {
+          await prisma.inventoryItem.update({
+            where: { id: ex.id },
+            data: {
+              quantity: { increment: d.quantity },
+              ...(d.section ? { section: d.section } : {}),
+              ...(d.category ? { category: d.category } : {}),
+              lastCheckedAt: new Date(),
+            },
+          });
+          updated++;
+        } else {
+          await prisma.inventoryItem.create({ data: d });
+          created++;
+        }
+      }
+    } else {
+      await prisma.inventoryItem.createMany({ data });
+      created = data.length;
+    }
 
     await prisma.activity.create({
       data: {
         userId: auth.payload.userId,
         action: "IMPORTAR_INVENTARIO",
         resource: "INVENTORY",
-        details: `Inventario importado: ${data.length} ítems (${mode})`,
+        details: `Inventario importado (${mode}): ${created} nuevos, ${updated} actualizados/sumados`,
       },
     }).catch(() => {});
 
     const sections = Array.from(new Set(items.map((i) => i.section).filter(Boolean)));
     return NextResponse.json({
       success: true,
-      created: data.length,
+      created,
+      updated,
       mode,
       sections,
-      message: `${data.length} ítems importados`,
+      message: mode === "merge" ? `${created} nuevos · ${updated} sumados` : `${created} ítems importados`,
     });
   } catch (error) {
     console.error("Error importando inventario:", error);

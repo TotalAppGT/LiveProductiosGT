@@ -60,7 +60,7 @@ export default function InventarioPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importMode, setImportMode] = useState<"append" | "replace">("append");
+  const [importMode, setImportMode] = useState<"append" | "replace" | "merge">("merge");
   const [importing, setImporting] = useState(false);
   const [showLogistics, setShowLogistics] = useState(false);
   const [movements, setMovements] = useState<any[]>([]);
@@ -75,6 +75,12 @@ export default function InventarioPage() {
   const [showReconcile, setShowReconcile] = useState(false);
   const [reconcileData, setReconcileData] = useState<any | null>(null);
   const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [showNeeds, setShowNeeds] = useState(false);
+  const [needsDays, setNeedsDays] = useState(30);
+  const [needs, setNeeds] = useState<any[]>([]);
+  const [needsLoading, setNeedsLoading] = useState(false);
+  const [needsEdits, setNeedsEdits] = useState<Record<string, { action: string; comment: string }>>({});
+  const [needsSaving, setNeedsSaving] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportStatus, setReportStatus] = useState("ALL");
   const [reportWarehouse, setReportWarehouse] = useState("");
@@ -326,6 +332,39 @@ export default function InventarioPage() {
     }
   }
 
+  async function addMissingToInventory(d: any) {
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: d.name, category: d.category || "OTRO", section: d.category || null, quantity: d.quantity || 1 }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Ítem agregado al inventario");
+        loadReconcile();
+        fetchItems();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al agregar al inventario");
+    }
+  }
+
+  async function downloadReconcileReport(format: "xlsx" | "pdf") {
+    try {
+      toast.loading("Generando listado…", { id: "rec" });
+      const res = await fetch(`/api/inventory/reconcile/report?format=${format}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { toast.error("Error al generar", { id: "rec" }); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `cotejo-inventario.${format}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Listado descargado", { id: "rec" });
+    } catch { toast.error("Error al descargar", { id: "rec" }); }
+  }
+
   async function loadReconcile() {
     setReconcileLoading(true);
     try {
@@ -337,6 +376,65 @@ export default function InventarioPage() {
       toast.error("Error al cotejar");
     } finally {
       setReconcileLoading(false);
+    }
+  }
+
+  async function loadNeeds(days = needsDays) {
+    setNeedsLoading(true);
+    try {
+      const res = await fetch(`/api/inventory/needs?days=${days}`, { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) {
+        setNeeds(json.data.items);
+        const e: Record<string, { action: string; comment: string }> = {};
+        for (const it of json.data.items) e[it.key] = { action: it.action, comment: it.comment || "" };
+        setNeedsEdits(e);
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al cargar faltantes");
+    } finally {
+      setNeedsLoading(false);
+    }
+  }
+
+  function setNeedEdit(key: string, patch: Partial<{ action: string; comment: string }>) {
+    setNeedsEdits((s) => ({ ...s, [key]: { ...(s[key] || { action: "CONSULTAR", comment: "" }), ...patch } }));
+  }
+
+  async function saveAllNeeds() {
+    setNeedsSaving(true);
+    try {
+      for (const it of needs) {
+        const ed = needsEdits[it.key] || { action: it.action, comment: it.comment || "" };
+        await fetch("/api/inventory/needs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ itemKey: it.key, itemName: it.name, action: ed.action, comment: ed.comment }),
+        });
+      }
+      toast.success("Listado guardado");
+      loadNeeds();
+    } catch {
+      toast.error("Error al guardar");
+    } finally {
+      setNeedsSaving(false);
+    }
+  }
+
+  async function downloadNeeds(format: "xlsx" | "pdf") {
+    try {
+      toast.loading("Generando…", { id: "need" });
+      const res = await fetch(`/api/inventory/needs/report?format=${format}&days=${needsDays}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { toast.error("Error al generar", { id: "need" }); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `faltantes-${needsDays}.${format}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Descargado", { id: "need" });
+    } catch {
+      toast.error("Error al descargar", { id: "need" });
     }
   }
 
@@ -379,6 +477,9 @@ export default function InventarioPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => { setShowReconcile(true); loadReconcile(); }}>
             🧩 Cotejar cuadros
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { setShowNeeds(true); loadNeeds(); }}>
+            🧾 Faltantes
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowReport(true)}>
             📊 Reportes
@@ -747,14 +848,21 @@ export default function InventarioPage() {
           />
           <div className="flex flex-wrap gap-4 text-sm">
             <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" checked={importMode === "merge"} onChange={() => setImportMode("merge")} />
+              Sumar / agregar por nombre (no borra)
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" checked={importMode === "append"} onChange={() => setImportMode("append")} />
-              Agregar a lo existente
+              Agregar como filas nuevas
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" checked={importMode === "replace"} onChange={() => setImportMode("replace")} />
               Reemplazar todo
             </label>
           </div>
+          {importMode === "merge" && (
+            <p className="text-xs text-gray-500">Si el ítem ya existe (por nombre) se <b>suma</b> la cantidad; si es nuevo, se crea.</p>
+          )}
           {importMode === "replace" && (
             <p className="text-xs text-red-500">⚠️ Se borrará el inventario actual y se cargará el del archivo.</p>
           )}
@@ -881,6 +989,10 @@ export default function InventarioPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Compara lo que piden los <b>cuadros</b> contra el <b>inventario</b>: detecta ítems que no existen, con descripción diferente o parecidos.
           </p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => downloadReconcileReport("xlsx")}>📊 Descargar listado Excel</Button>
+            <Button size="sm" variant="outline" onClick={() => downloadReconcileReport("pdf")}>📄 Descargar listado PDF</Button>
+          </div>
           {reconcileLoading ? (
             <p className="text-xs text-gray-400">Cotejando…</p>
           ) : !reconcileData ? (
@@ -924,7 +1036,10 @@ export default function InventarioPage() {
                         </span>
                       </div>
                       {d.status === "missing" && (
-                        <p className="text-xs text-red-600 mt-2">No existe en el inventario → hay que comprar o revisar el inventario.</p>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <p className="text-xs text-red-600">No existe en el inventario → comprar o revisar.</p>
+                          <Button size="sm" onClick={() => addMissingToInventory(d)}>➕ Agregar al inventario</Button>
+                        </div>
                       )}
                       {d.linked?.length > 0 && (
                         <p className="text-xs text-gray-500 mt-2">Vinculado a: {d.linked.map((l: any) => l.name).join(", ")}</p>
@@ -950,6 +1065,66 @@ export default function InventarioPage() {
                 </div>
               )}
             </>
+          )}
+        </div>
+      </Modal>
+
+      <Modal isOpen={showNeeds} onClose={() => setShowNeeds(false)} title="Listado de faltantes (comprar / rentar / consultar)" size="lg">
+        <div className="space-y-4 p-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden text-sm">
+              <button className={`px-3 py-1.5 ${needsDays === 30 ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"}`} onClick={() => { setNeedsDays(30); loadNeeds(30); }}>30 días</button>
+              <button className={`px-3 py-1.5 ${needsDays === 60 ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"}`} onClick={() => { setNeedsDays(60); loadNeeds(60); }}>60 días</button>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => downloadNeeds("xlsx")}>📊 Excel</Button>
+            <Button size="sm" variant="outline" onClick={() => downloadNeeds("pdf")}>📄 PDF</Button>
+            <Button size="sm" className="ml-auto" onClick={saveAllNeeds} isLoading={needsSaving}>Guardar cambios</Button>
+          </div>
+          {needsLoading ? (
+            <p className="text-xs text-gray-400">Calculando faltantes…</p>
+          ) : needs.length === 0 ? (
+            <p className="text-sm text-green-600">✅ No hay faltantes en los próximos {needsDays} días.</p>
+          ) : (
+            <div className="space-y-4 max-h-[58vh] overflow-y-auto">
+              {["COMPRAR", "RENTAR", "CONSULTAR"].map((action) => {
+                const arr = needs.filter((n) => (needsEdits[n.key]?.action || n.action) === action);
+                if (arr.length === 0) return null;
+                return (
+                  <div key={action}>
+                    <p className={`text-sm font-bold mb-2 ${action === "COMPRAR" ? "text-red-700" : action === "RENTAR" ? "text-amber-700" : "text-blue-700"}`}>{action} ({arr.length})</p>
+                    <div className="space-y-2">
+                      {arr.map((n) => (
+                        <div key={n.key} className="border border-gray-200 dark:border-gray-700 rounded-lg p-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium flex-1 min-w-[180px]">{n.name}</span>
+                            <span className="text-xs text-gray-500">Necesario {n.peak} · Disp. {n.supply} · <b className="text-red-600">Faltan {n.shortfall}</b></span>
+                            <select
+                              value={needsEdits[n.key]?.action || n.action}
+                              onChange={(e) => setNeedEdit(n.key, { action: e.target.value })}
+                              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-white"
+                            >
+                              <option value="COMPRAR">Comprar</option>
+                              <option value="RENTAR">Rentar</option>
+                              <option value="CONSULTAR">Consultar</option>
+                            </select>
+                          </div>
+                          <input
+                            value={needsEdits[n.key]?.comment || ""}
+                            onChange={(e) => setNeedEdit(n.key, { comment: e.target.value })}
+                            placeholder="Comentario / revisión con el equipo"
+                            className="mt-2 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-white"
+                          />
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            {n.events.slice(0, 4).map((e: any) => `#${e.orderNumber} ${e.eventName}`).join(" · ")}
+                            {n.events.length > 4 ? ` +${n.events.length - 4}` : ""}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </Modal>

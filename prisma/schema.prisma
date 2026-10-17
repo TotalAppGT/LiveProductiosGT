@@ -208,6 +208,7 @@ model User {
   assignedPurchases  Purchase[]         @relation("PurchaseAssignee")
   approvedPurchases  Purchase[]         @relation("PurchaseApprover")
   purchaseDocuments  PurchaseDocument[] @relation("PurchaseDocUploader")
+  needReviews        InventoryNeedReview[] @relation("NeedReviewer")
 }
 
 model Task {
@@ -669,6 +670,19 @@ model Supplier {
   notes       String?
   createdAt   DateTime   @default(now())
   purchases   Purchase[]
+}
+
+// Revisión del listado de faltantes (qué comprar / rentar / consultar + comentario).
+model InventoryNeedReview {
+  id           String   @id @default(cuid())
+  itemKey      String   @unique
+  itemName     String
+  action       String   @default("CONSULTAR") // COMPRAR | RENTAR | CONSULTAR
+  comment      String?
+  reviewedById String?
+  reviewedBy   User?    @relation("NeedReviewer", fields: [reviewedById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model PurchaseDocument {
