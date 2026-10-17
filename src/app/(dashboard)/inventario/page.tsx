@@ -72,6 +72,9 @@ export default function InventarioPage() {
   const [alignLoading, setAlignLoading] = useState(false);
   const [alignChoice, setAlignChoice] = useState<Record<number, string>>({});
   const [alignName, setAlignName] = useState<Record<number, string>>({});
+  const [showReconcile, setShowReconcile] = useState(false);
+  const [reconcileData, setReconcileData] = useState<any | null>(null);
+  const [reconcileLoading, setReconcileLoading] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportStatus, setReportStatus] = useState("ALL");
   const [reportWarehouse, setReportWarehouse] = useState("");
@@ -323,6 +326,38 @@ export default function InventarioPage() {
     }
   }
 
+  async function loadReconcile() {
+    setReconcileLoading(true);
+    try {
+      const res = await fetch("/api/inventory/reconcile", { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (json.success) setReconcileData(json.data);
+      else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al cotejar");
+    } finally {
+      setReconcileLoading(false);
+    }
+  }
+
+  async function linkOrderItemToInventory(name: string, inventoryItemId: string, rename: boolean) {
+    try {
+      const res = await fetch("/api/inventory/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orderItemName: name, inventoryItemId, rename }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(`Vinculado a "${json.name}" (${json.updated} ítem/s)`);
+        loadReconcile();
+        fetchItems();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al vincular");
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -341,6 +376,9 @@ export default function InventarioPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => { setShowAlign(true); loadAlign(); }}>
             🔎 Alinear
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { setShowReconcile(true); loadReconcile(); }}>
+            🧩 Cotejar cuadros
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowReport(true)}>
             📊 Reportes
@@ -833,6 +871,84 @@ export default function InventarioPage() {
                   );
                 })}
               </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      <Modal isOpen={showReconcile} onClose={() => setShowReconcile(false)} title="Cotejar cuadros con inventario" size="lg">
+        <div className="space-y-4 p-1">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Compara lo que piden los <b>cuadros</b> contra el <b>inventario</b>: detecta ítems que no existen, con descripción diferente o parecidos.
+          </p>
+          {reconcileLoading ? (
+            <p className="text-xs text-gray-400">Cotejando…</p>
+          ) : !reconcileData ? (
+            <p className="text-xs text-gray-400">Sin datos.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-2 text-center">
+                  <p className="text-[11px] text-red-600">No existe</p>
+                  <p className="font-bold text-red-700">{reconcileData.counts.missing}</p>
+                </div>
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-2 text-center">
+                  <p className="text-[11px] text-amber-600">Descripción dif.</p>
+                  <p className="font-bold text-amber-700">{reconcileData.counts.different}</p>
+                </div>
+                <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-2 text-center">
+                  <p className="text-[11px] text-yellow-700">Parecido</p>
+                  <p className="font-bold text-yellow-700">{reconcileData.counts.similar}</p>
+                </div>
+                <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-2 text-center">
+                  <p className="text-[11px] text-green-600">OK</p>
+                  <p className="font-bold text-green-700">{reconcileData.counts.exact}</p>
+                </div>
+              </div>
+
+              {reconcileData.discrepancies.length === 0 ? (
+                <p className="text-sm text-green-600">✅ Todos los ítems de los cuadros coinciden con el inventario.</p>
+              ) : (
+                <div className="space-y-3 max-h-[58vh] overflow-y-auto">
+                  {reconcileData.discrepancies.map((d: any) => (
+                    <div key={d.key} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{d.name}</p>
+                          <p className="text-xs text-gray-400">
+                            Cant. {d.quantity} · {d.orders.slice(0, 3).join(", ")}{d.orders.length > 3 ? ` +${d.orders.length - 3}` : ""}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 px-2 py-0.5 rounded text-[11px] font-medium ${d.status === "missing" ? "bg-red-100 text-red-700" : d.status === "different" ? "bg-amber-100 text-amber-700" : "bg-yellow-100 text-yellow-700"}`}>
+                          {d.status === "missing" ? "No está en inventario" : d.status === "different" ? "Descripción diferente" : "Parecido"}
+                        </span>
+                      </div>
+                      {d.status === "missing" && (
+                        <p className="text-xs text-red-600 mt-2">No existe en el inventario → hay que comprar o revisar el inventario.</p>
+                      )}
+                      {d.linked?.length > 0 && (
+                        <p className="text-xs text-gray-500 mt-2">Vinculado a: {d.linked.map((l: any) => l.name).join(", ")}</p>
+                      )}
+                      {d.suggestions?.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-[11px] text-gray-500">Posible coincidencia:</p>
+                          {d.suggestions.map((s: any) => (
+                            <div key={s.id} className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800/50 rounded p-2">
+                              <span className="text-xs truncate">
+                                {s.name} <span className="text-gray-400">· {s.section || "-"} · {s.status} · {Math.round(s.score * 100)}%</span>
+                              </span>
+                              <div className="flex gap-1 shrink-0">
+                                <Button size="sm" variant="outline" onClick={() => linkOrderItemToInventory(d.key, s.id, false)}>Vincular</Button>
+                                <Button size="sm" onClick={() => linkOrderItemToInventory(d.key, s.id, true)}>Vincular + renombrar</Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>
