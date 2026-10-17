@@ -7,6 +7,7 @@ export interface NeedItem {
   key: string;
   name: string;
   category: string;
+  section: string | null;
   supply: number;
   peak: number;
   shortfall: number;
@@ -36,34 +37,41 @@ type OrderRow = {
   items: { name: string; category: string; quantity: number }[];
 };
 
-async function loadContext(days: number | "all") {
+async function loadContext(days: number | "all", orderIds?: string[]) {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const windowEnd = days === "all" ? null : new Date(start.getTime() + (days - 1) * 86400000);
 
   const [orders, inv, reviews] = await Promise.all([
     prisma.order.findMany({
-      where: { status: { not: "CANCELADO" }, eventDate: { not: null, gte: start, ...(windowEnd ? { lte: windowEnd } : {}) } },
+      where: {
+        status: { not: "CANCELADO" },
+        eventDate: { not: null, gte: start, ...(windowEnd ? { lte: windowEnd } : {}) },
+        ...(orderIds && orderIds.length ? { id: { in: orderIds } } : {}),
+      },
       select: { orderNumber: true, eventName: true, eventDate: true, eventEndDate: true, items: { select: { name: true, category: true, quantity: true } } },
     }),
-    prisma.inventoryItem.findMany({ select: { name: true, category: true, quantity: true, status: true } }),
+    prisma.inventoryItem.findMany({ select: { name: true, category: true, section: true, quantity: true, status: true } }),
     prisma.inventoryNeedReview.findMany(),
   ]);
 
   const supply = new Map<string, number>();
   const catMap = new Map<string, string>();
+  const sectionMap = new Map<string, string>();
   for (const i of inv) {
     const k = normName(i.name);
     if (!catMap.has(k)) catMap.set(k, i.category);
+    if (i.section && !sectionMap.has(k)) sectionMap.set(k, i.section);
     if (i.status === "DISPONIBLE") supply.set(k, (supply.get(k) || 0) + i.quantity);
   }
-  return { orders: orders as OrderRow[], supply, catMap, reviews };
+  return { orders: orders as OrderRow[], supply, catMap, sectionMap, reviews };
 }
 
 function computeForOrders(
   orders: OrderRow[],
   supply: Map<string, number>,
   catMap: Map<string, string>,
+  sectionMap: Map<string, string>,
   reviews: { itemKey: string; action: string; comment: string | null }[]
 ): NeedItem[] {
   type Rec = { key: string; name: string; category: string; intervals: { s: number; e: number; q: number }[]; events: NeedItem["events"] };
@@ -104,7 +112,7 @@ function computeForOrders(
     let suggested: NeedItem["suggestedAction"] = "RENTAR";
     if (!inInventory) suggested = "CONSULTAR";
     else if (BUY_CATEGORIES.includes(cat)) suggested = "COMPRAR";
-    out.push({ key: rec.key, name: rec.name, category: rec.category, supply: sup, peak, shortfall, peakDate: peakDay ? new Date(peakDay) : null, events: rec.events, suggestedAction: suggested, action: suggested, comment: "", reviewed: false });
+    out.push({ key: rec.key, name: rec.name, category: rec.category, section: sectionMap.get(rec.key) || null, supply: sup, peak, shortfall, peakDate: peakDay ? new Date(peakDay) : null, events: rec.events, suggestedAction: suggested, action: suggested, comment: "", reviewed: false });
   }
 
   const rv = new Map(reviews.map((r) => [r.itemKey, r]));
@@ -117,9 +125,9 @@ function computeForOrders(
 }
 
 // Lista plana (todos los cuadros del periodo) — usada por el cotejo/revisión.
-export async function computeNeeds(days: number | "all"): Promise<{ days: number | "all"; items: NeedItem[] }> {
-  const { orders, supply, catMap, reviews } = await loadContext(days);
-  return { days, items: computeForOrders(orders, supply, catMap, reviews) };
+export async function computeNeeds(days: number | "all", orderIds?: string[]): Promise<{ days: number | "all"; items: NeedItem[] }> {
+  const { orders, supply, catMap, sectionMap, reviews } = await loadContext(days, orderIds);
+  return { days, items: computeForOrders(orders, supply, catMap, sectionMap, reviews) };
 }
 
 function weekStartOf(d: Date): number {
@@ -137,8 +145,8 @@ const fmtLong = (d: Date) => d.toLocaleDateString("es-GT", { weekday: "short", d
 // Faltantes SEPARADOS POR SEMANA (lunes a domingo) + CONSOLIDADO.
 // El consolidado toma el PICO de todo el periodo: si un ítem falta en varias
 // semanas, se adquiere UNA sola vez la cantidad máxima y se reutiliza.
-export async function computeNeedsByWeek(days: number | "all"): Promise<{ days: number | "all"; weeks: NeedWeek[]; consolidated: NeedItem[] }> {
-  const { orders, supply, catMap, reviews } = await loadContext(days);
+export async function computeNeedsByWeek(days: number | "all", orderIds?: string[]): Promise<{ days: number | "all"; weeks: NeedWeek[]; consolidated: NeedItem[] }> {
+  const { orders, supply, catMap, sectionMap, reviews } = await loadContext(days, orderIds);
   const map = new Map<number, OrderRow[]>();
   for (const o of orders) {
     if (!o.eventDate) continue;
@@ -150,13 +158,13 @@ export async function computeNeedsByWeek(days: number | "all"): Promise<{ days: 
   for (const ws of Array.from(map.keys()).sort((a, b) => a - b)) {
     const start = new Date(ws);
     const end = new Date(ws + 6 * 86400000);
-    const items = computeForOrders(map.get(ws)!, supply, catMap, reviews);
+    const items = computeForOrders(map.get(ws)!, supply, catMap, sectionMap, reviews);
     if (items.length === 0) continue; // semanas sin faltantes no se listan
     weeks.push({ start, end, label: `Semana ${fmtLong(start)} al ${fmtLong(end)}`, items });
   }
 
   // Consolidado: pico de todo el periodo (una sola adquisición) + semanas que cubre.
-  const consolidated = computeForOrders(orders, supply, catMap, reviews);
+  const consolidated = computeForOrders(orders, supply, catMap, sectionMap, reviews);
   const labelsByKey = new Map<string, string[]>();
   for (const w of weeks) {
     for (const it of w.items) {

@@ -287,10 +287,10 @@ export default function PedidosPage() {
           <Package className="w-6 h-6" /> Cuadros de Evento
         </h1>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => downloadReport("/api/orders/report?format=xlsx", "reporte-general-cuadros.xlsx")}>
+          <Button variant="outline" onClick={() => downloadReport(`/api/orders/report?format=xlsx&t=${Date.now()}`, `reporte-general-cuadros-${new Date().toISOString().slice(0, 10)}.xlsx`)}>
             📊 Reporte general (Excel)
           </Button>
-          <Button variant="outline" onClick={() => downloadReport("/api/orders/report?format=pdf", "reporte-general-cuadros.pdf")}>
+          <Button variant="outline" onClick={() => downloadReport(`/api/orders/report?format=pdf&t=${Date.now()}`, `reporte-general-cuadros-${new Date().toISOString().slice(0, 10)}.pdf`)}>
             📄 (PDF)
           </Button>
           <Button variant="outline" onClick={() => downloadReport("/api/orders/template", "plantilla-cuadros.xlsx")}>

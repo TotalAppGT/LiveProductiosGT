@@ -3,6 +3,7 @@ import PDFDocument from "pdfkit";
 import * as XLSX from "xlsx";
 import { recommendTruck } from "@/lib/inventory-availability";
 import { INVENTORY_SECTIONS } from "@/lib/inventory";
+import { computeNeedsByWeek, type NeedItem, type NeedWeek } from "@/lib/needs";
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 const fmtDate = (iso: string | null) =>
@@ -82,6 +83,8 @@ export interface GeneralReport {
   faltantes: MatrixRow[];
   warehouseStock: { warehouse: string; items: number; units: number; available: number; repair: number }[];
   totals: { orders: number; items: number; demand: number; faltantes: number; comprar: number; alquilar: number };
+  weeks?: NeedWeek[];
+  consolidated?: NeedItem[];
 }
 
 async function getInventoryIndex() {
@@ -223,7 +226,18 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
     alquilar: faltantes.filter((m) => m.action === "Alquilar").length,
   };
 
-  return { kind: "general", generatedAt: new Date().toISOString(), events, items, faltantes, warehouseStock, totals };
+  // Faltantes por semana + consolidado (una sola adquisición).
+  let weeks: NeedWeek[] = [];
+  let consolidated: NeedItem[] = [];
+  try {
+    const w = await computeNeedsByWeek("all", ids);
+    weeks = w.weeks;
+    consolidated = w.consolidated;
+  } catch {
+    // si falla el cálculo por semana, el reporte general sigue funcionando
+  }
+
+  return { kind: "general", generatedAt: new Date().toISOString(), events, items, faltantes, warehouseStock, totals, weeks, consolidated };
 }
 
 // ================= PDF =================
@@ -349,17 +363,28 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
     { v: e.truck },
   ])));
 
+  const weeks = report.weeks || [];
+  const consolidated = report.consolidated || [];
   doc.moveDown(0.6);
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text(`RESUMEN DE RENTA / COMPRA (${report.faltantes.length})`);
-  const rcCols: Col[] = [{ w: 230, t: "Equipo" }, { w: 50, t: "Total", align: "right" }, { w: 62, t: "Inventario", align: "right" }, { w: 50, t: "Saldo", align: "right" }, { w: 60, t: "Comprar", align: "right" }, { w: 60, t: "Acción" }];
-  drawTable(doc, rcCols, report.faltantes.map((m) => ([
-    { v: m.name },
-    { v: String(m.total) },
-    { v: String(Math.max(0, m.stock - m.repair)) },
-    { v: String(m.saldo) },
-    { v: String(m.faltante), color: "#b91c1c", bold: true },
-    { v: m.action },
-  ])));
+  if (consolidated.length) {
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f766e").text("CONSOLIDADO — adquirir UNA sola vez (cubre todas las semanas)");
+    const cCols: Col[] = [{ w: 210, t: "Equipo" }, { w: 48, t: "Cant.", align: "right" }, { w: 62, t: "Inventario", align: "right" }, { w: 52, t: "Faltan", align: "right" }, { w: 90, t: "Semanas" }];
+    drawTable(doc, cCols, consolidated.map((m) => ([
+      { v: m.name }, { v: String(m.peak) }, { v: String(m.supply) }, { v: String(m.shortfall), color: "#b91c1c", bold: true }, { v: (m.weeks || []).join(", ") || "—" },
+    ])));
+    doc.moveDown(0.4);
+  }
+  for (const w of weeks) {
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text(`RENTA / COMPRA — SEMANA ${fmtDate(w.start.toISOString())} al ${fmtDate(w.end.toISOString())} (${w.items.length})`);
+    const rcCols: Col[] = [{ w: 220, t: "Equipo" }, { w: 50, t: "Cant.", align: "right" }, { w: 62, t: "Inventario", align: "right" }, { w: 52, t: "Faltan", align: "right" }, { w: 70, t: "Acción" }];
+    drawTable(doc, rcCols, w.items.map((m) => ([
+      { v: m.name }, { v: String(m.peak) }, { v: String(m.supply) }, { v: String(m.shortfall), color: "#b91c1c", bold: true }, { v: m.action },
+    ])));
+    doc.moveDown(0.4);
+  }
+  if (!consolidated.length && !weeks.length) {
+    doc.font("Helvetica").fontSize(9).fillColor("#15803d").text("Sin faltantes en las fechas futuras.");
+  }
 
   if (report.warehouseStock && report.warehouseStock.length > 0) {
     doc.moveDown(0.6);
@@ -432,14 +457,29 @@ export function reportXlsx(report: CuadroReport | GeneralReport): Buffer {
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matrix), "Resumen de Equipo");
 
-  // Renta / Compra
+  // Renta / Compra — POR SEMANA + CONSOLIDADO
   const rc: any[][] = [
-    ["RESUMEN DE RENTA / COMPRA"],
-    ["Solo equipos con saldo negativo (no alcanza en inventario)."],
+    ["RESUMEN DE RENTA / COMPRA — POR SEMANA"],
+    ["Solo equipos que no alcanzan en inventario."],
     [],
-    ["Equipo", "Sección", "Total requerido", "Inventario", "Saldo", "Comprar/Rentar", "Acción"],
-    ...report.faltantes.map((m) => [m.name, m.section || "", m.total, Math.max(0, m.stock - m.repair), m.saldo, m.faltante, m.action]),
   ];
+  const consolidated = report.consolidated || [];
+  const weeks = report.weeks || [];
+  if (consolidated.length) {
+    rc.push(["CONSOLIDADO — adquirir UNA sola vez (cubre todas las semanas)"]);
+    rc.push(["Equipo", "Sección", "Cantidad", "Inventario", "Faltan", "Acción", "Semanas"]);
+    for (const m of consolidated) rc.push([m.name, m.section || "", m.peak, m.supply, m.shortfall, m.action, (m.weeks || []).join(", ")]);
+    rc.push([]);
+  }
+  for (const w of weeks) {
+    rc.push([`SEMANA ${fmtDate(w.start.toISOString())} al ${fmtDate(w.end.toISOString())}`]);
+    rc.push(["Equipo", "Sección", "Cantidad", "Inventario", "Faltan", "Acción", "Cuadros"]);
+    for (const m of w.items) rc.push([m.name, m.section || "", m.peak, m.supply, m.shortfall, m.action, m.events.map((e) => `#${e.orderNumber} ${e.eventName}`).join(", ")]);
+    rc.push([]);
+  }
+  if (!consolidated.length && !weeks.length) {
+    rc.push(["Sin faltantes en las fechas futuras."]);
+  }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rc), "Renta-Compra");
 
   // Stock por bodega

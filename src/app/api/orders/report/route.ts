@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
         headers: {
           "Content-Type": "application/pdf",
           "Content-Disposition": 'attachment; filename="reporte-general-cuadros.pdf"',
+          "Cache-Control": "no-store, max-age=0",
         },
       });
     }
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": 'attachment; filename="reporte-general-cuadros.xlsx"',
+        "Cache-Control": "no-store, max-age=0",
       },
     });
   } catch (error) {
