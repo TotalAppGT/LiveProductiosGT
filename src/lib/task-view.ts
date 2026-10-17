@@ -202,16 +202,22 @@ export function formatTaskHierarchy(tasks: any[], startNum = 1): { text: string;
 // numerado y cronológico dentro de cada módulo. Es el formato de los mensajes de LUNA.
 export function formatTasksByModule(tasks: any[], startNum = 1): { text: string; ordered: any[]; next: number } {
   const uniq = dedupeByTitle(tasks);
+  if (uniq.length === 0) return { text: "", ordered: [], next: startNum };
   const ordered: any[] = [];
   const lines: string[] = [];
   let num = startNum;
+  // SIEMPRE se muestran las 5 secciones (aunque estén vacías) para que el
+  // esquema sea idéntico para todos; las vacías llevan "—".
   for (const mod of MODULE_ORDER) {
     const items = uniq.filter((t) => moduleOfTask(t.category) === mod);
-    if (items.length === 0) continue;
+    lines.push(`*${MODULE_LABELS[mod]}*`);
+    if (items.length === 0) {
+      lines.push("—");
+      continue;
+    }
     const sorted = [...items].sort(
       (a, b) => hourOf(a) - hourOf(b) || (PRIO_RANK[a.priority] ?? 9) - (PRIO_RANK[b.priority] ?? 9)
     );
-    lines.push(`*${MODULE_LABELS[mod]}*`);
     for (const t of sorted) {
       ordered.push(t);
       lines.push(formatTaskLine(t, num++));
