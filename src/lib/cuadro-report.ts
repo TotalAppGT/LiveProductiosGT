@@ -8,6 +8,8 @@ import { computeNeedsByWeek, type NeedItem, type NeedWeek } from "@/lib/needs";
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "short", year: "numeric" }) : "—";
+// Día corto SIN convertir zona (las semanas ya vienen como medianoche local).
+const fmtDay = (d: Date) => d.toLocaleDateString("es-GT", { day: "2-digit", month: "short" });
 
 // Secciones que típicamente se ALQUILAN (equipo mayor). El resto → COMPRAR.
 const RENT_SECTIONS = new Set([
@@ -375,7 +377,7 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
     doc.moveDown(0.4);
   }
   for (const w of weeks) {
-    doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text(`RENTA / COMPRA — SEMANA ${fmtDate(w.start.toISOString())} al ${fmtDate(w.end.toISOString())} (${w.items.length})`);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text(`RENTA / COMPRA — SEMANA ${fmtDay(w.start)} al ${fmtDay(w.end)} (${w.items.length})`);
     const rcCols: Col[] = [{ w: 220, t: "Equipo" }, { w: 50, t: "Cant.", align: "right" }, { w: 62, t: "Inventario", align: "right" }, { w: 52, t: "Faltan", align: "right" }, { w: 70, t: "Acción" }];
     drawTable(doc, rcCols, w.items.map((m) => ([
       { v: m.name }, { v: String(m.peak) }, { v: String(m.supply) }, { v: String(m.shortfall), color: "#b91c1c", bold: true }, { v: m.action },
@@ -472,7 +474,7 @@ export function reportXlsx(report: CuadroReport | GeneralReport): Buffer {
     rc.push([]);
   }
   for (const w of weeks) {
-    rc.push([`SEMANA ${fmtDate(w.start.toISOString())} al ${fmtDate(w.end.toISOString())}`]);
+    rc.push([`SEMANA ${fmtDay(w.start)} al ${fmtDay(w.end)}`]);
     rc.push(["Equipo", "Sección", "Cantidad", "Inventario", "Faltan", "Acción", "Cuadros"]);
     for (const m of w.items) rc.push([m.name, m.section || "", m.peak, m.supply, m.shortfall, m.action, m.events.map((e) => `#${e.orderNumber} ${e.eventName}`).join(", ")]);
     rc.push([]);
