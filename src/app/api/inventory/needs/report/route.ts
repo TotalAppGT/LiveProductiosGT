@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const format = (searchParams.get("format") || "xlsx").toLowerCase();
     const raw = (searchParams.get("days") || "30").toLowerCase();
     const days = raw === "all" ? "all" : Math.max(1, Math.min(365, parseInt(raw) || 30));
-    const { weeks } = await computeNeedsByWeek(days);
+    const { weeks, consolidated } = await computeNeedsByWeek(days);
     const rango = days === "all" ? "Todo el futuro" : `Próximos ${days} días`;
     const totalItems = weeks.reduce((s, w) => s + w.items.length, 0);
     const totalUnits = weeks.reduce((s, w) => s + w.items.reduce((a, i) => a + i.shortfall, 0), 0);
@@ -40,6 +40,24 @@ export async function GET(request: NextRequest) {
         { w: 65, t: "Faltan", align: "right" },
         { w: 120, t: "Comentario" },
       ];
+      const consCols: Col[] = [
+        { w: 190, t: "Descripción" },
+        { w: 50, t: "Cant.", align: "right" },
+        { w: 65, t: "Disponible", align: "right" },
+        { w: 60, t: "Faltan", align: "right" },
+        { w: 90, t: "Semanas" },
+      ];
+      if (consolidated.length > 0) {
+        blockTitle(doc, "CONSOLIDADO — adquirir UNA sola vez (cubre todas las semanas)", "#0f766e");
+        for (const a of ACTIONS) {
+          const arr = consolidated.filter((i) => i.action === a.key);
+          if (arr.length === 0) continue;
+          doc.font("Helvetica-Bold").fontSize(9).fillColor(a.color).text(`${a.label} (${arr.length})`);
+          drawTable(doc, consCols, arr.map((i) => [
+            { v: i.name }, { v: String(i.peak) }, { v: String(i.supply) }, { v: String(i.shortfall) }, { v: (i.weeks || []).join(", ") || "—" },
+          ]), { headColor: a.color });
+        }
+      }
       for (const w of weeks) {
         doc.moveDown(0.4);
         blockTitle(doc, `${weekTitle(w).toUpperCase()} — ${w.items.length} ítem(s)`, "#1e40af");
@@ -87,6 +105,41 @@ export async function GET(request: NextRequest) {
       rr++;
     }
     if (weeks.length === 0) { rs.getCell(rr, 1).value = "✅ No hay faltantes en el periodo."; }
+
+    // Hoja CONSOLIDADA (una sola adquisición para todas las semanas)
+    if (consolidated.length > 0) {
+      const cs = wb.addWorksheet("Consolidado");
+      cs.columns = [{ width: 44 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 38 }, { width: 26 }];
+      cs.mergeCells("A1:G1");
+      cs.getCell("A1").value = "CONSOLIDADO — adquirir UNA sola vez (cubre todas las semanas)";
+      cs.getCell("A1").font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+      cs.getCell("A1").fill = headFill("0F766E");
+      cs.getRow(1).height = 22;
+      let cr = 3;
+      for (const a of ACTIONS) {
+        const arr = consolidated.filter((i) => i.action === a.key);
+        if (arr.length === 0) continue;
+        const h = cs.getCell(cr, 1);
+        h.value = `${a.label} (${arr.length})`;
+        cs.mergeCells(cr, 1, cr, 7);
+        h.font = { bold: true, color: { argb: "FFFFFFFF" } }; h.fill = headFill(a.color.replace("#", ""));
+        h.alignment = { indent: 1, vertical: "middle" }; cs.getRow(cr).height = 20;
+        cr++;
+        ["Descripción", "Cantidad", "Disponible", "Faltan", "Acción", "Comentario", "Semanas"].forEach((t, i) => {
+          const c = cs.getCell(cr, i + 1); c.value = t; c.font = { bold: true }; c.fill = headFill("F3F4F6"); c.border = border;
+        });
+        cr++;
+        for (const i of arr) {
+          [i.name, i.peak, i.supply, i.shortfall, i.action, i.comment || "", (i.weeks || []).join(", ")].forEach((v, ci) => {
+            const c = cs.getCell(cr, ci + 1); c.value = v as any; c.border = border;
+            if (ci >= 1 && ci <= 3) c.numFmt = "#,##0";
+          });
+          cr++;
+        }
+        cr++;
+      }
+      cs.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, cr - 1), column: 7 } };
+    }
 
     // Una hoja por semana
     for (const w of weeks) {

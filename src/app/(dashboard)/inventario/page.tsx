@@ -85,6 +85,8 @@ export default function InventarioPage() {
   const [needsEdits, setNeedsEdits] = useState<Record<string, { action: string; comment: string }>>({});
   const [needsSaving, setNeedsSaving] = useState(false);
   const [needsWeeks, setNeedsWeeks] = useState<any[]>([]);
+  const [needsConsolidated, setNeedsConsolidated] = useState<any[]>([]);
+  const [needsView, setNeedsView] = useState<"week" | "consolidated">("week");
   const [showReport, setShowReport] = useState(false);
   const [reportStatus, setReportStatus] = useState("ALL");
   const [reportWarehouse, setReportWarehouse] = useState("");
@@ -434,6 +436,7 @@ export default function InventarioPage() {
       if (json.success) {
         const weeks = json.data.weeks || [];
         setNeedsWeeks(weeks);
+        setNeedsConsolidated(json.data.consolidated || []);
         const flat = weeks.flatMap((w: any) => w.items);
         setNeeds(flat);
         const e: Record<string, { action: string; comment: string }> = {};
@@ -1141,12 +1144,62 @@ export default function InventarioPage() {
               <button className={`px-3 py-1.5 ${needsDays === 30 ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"}`} onClick={() => { setNeedsDays(30); loadNeeds(30); }}>30 días</button>
               <button className={`px-3 py-1.5 ${needsDays === 60 ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"}`} onClick={() => { setNeedsDays(60); loadNeeds(60); }}>60 días</button>
             </div>
+            <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden text-sm">
+              <button className={`px-3 py-1.5 ${needsView === "week" ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"}`} onClick={() => setNeedsView("week")}>Por semana</button>
+              <button className={`px-3 py-1.5 ${needsView === "consolidated" ? "bg-teal-600 text-white" : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"}`} onClick={() => setNeedsView("consolidated")}>Consolidado</button>
+            </div>
             <Button size="sm" variant="outline" onClick={() => downloadNeeds("xlsx")}>📊 Excel</Button>
             <Button size="sm" variant="outline" onClick={() => downloadNeeds("pdf")}>📄 PDF</Button>
             <Button size="sm" className="ml-auto" onClick={saveAllNeeds} isLoading={needsSaving}>Guardar cambios</Button>
           </div>
           {needsLoading ? (
             <p className="text-xs text-gray-400">Calculando faltantes…</p>
+          ) : needsView === "consolidated" ? (
+            needsConsolidated.length === 0 ? (
+              <p className="text-sm text-green-600">✅ No hay faltantes en los próximos {needsDays} días.</p>
+            ) : (
+              <div className="space-y-4 max-h-[58vh] overflow-y-auto">
+                <p className="text-xs text-gray-500">Adquirir <b>una sola vez</b> la cantidad máxima y reutilizarla en las semanas indicadas.</p>
+                {["COMPRAR", "RENTAR", "CONSULTAR"].map((action) => {
+                  const arr = needsConsolidated.filter((n: any) => (needsEdits[n.key]?.action || n.action) === action);
+                  if (arr.length === 0) return null;
+                  return (
+                    <div key={action}>
+                      <p className={`text-sm font-bold mb-2 ${action === "COMPRAR" ? "text-red-700" : action === "RENTAR" ? "text-amber-700" : "text-blue-700"}`}>{action} ({arr.length})</p>
+                      <div className="space-y-2">
+                        {arr.map((n: any) => (
+                          <div key={`c-${n.key}`} className="border border-gray-200 dark:border-gray-700 rounded-lg p-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium flex-1 min-w-[180px]">{n.name}</span>
+                              <span className="text-xs text-gray-500">Necesario {n.peak} · Disp. {n.supply} · <b className="text-red-600">Faltan {n.shortfall}</b></span>
+                              <select
+                                value={needsEdits[n.key]?.action || n.action}
+                                onChange={(e) => setNeedEdit(n.key, { action: e.target.value })}
+                                className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-white"
+                              >
+                                <option value="COMPRAR">Comprar</option>
+                                <option value="RENTAR">Rentar</option>
+                                <option value="CONSULTAR">Consultar</option>
+                              </select>
+                            </div>
+                            <input
+                              value={needsEdits[n.key]?.comment || ""}
+                              onChange={(e) => setNeedEdit(n.key, { comment: e.target.value })}
+                              placeholder="Comentario / revisión con el equipo"
+                              className="mt-2 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-white"
+                            />
+                            <p className="text-[11px] text-gray-400 mt-1">
+                              Semanas: {(n.weeks || []).join(", ") || "—"} · {n.events.slice(0, 4).map((e: any) => `#${e.orderNumber} ${e.eventName}`).join(" · ")}
+                              {n.events.length > 4 ? ` +${n.events.length - 4}` : ""}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           ) : needsWeeks.length === 0 ? (
             <p className="text-sm text-green-600">✅ No hay faltantes en los próximos {needsDays} días.</p>
           ) : (

@@ -16,6 +16,7 @@ export interface NeedItem {
   action: string;
   comment: string;
   reviewed: boolean;
+  weeks?: string[]; // semanas que cubre (listado consolidado)
 }
 
 export interface NeedWeek {
@@ -133,8 +134,10 @@ function weekStartOf(d: Date): number {
 const fmtShort = (d: Date) => d.toLocaleDateString("es-GT", { day: "2-digit", month: "short" });
 const fmtLong = (d: Date) => d.toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" });
 
-// Faltantes SEPARADOS POR SEMANA (lunes a domingo).
-export async function computeNeedsByWeek(days: number | "all"): Promise<{ days: number | "all"; weeks: NeedWeek[] }> {
+// Faltantes SEPARADOS POR SEMANA (lunes a domingo) + CONSOLIDADO.
+// El consolidado toma el PICO de todo el periodo: si un ítem falta en varias
+// semanas, se adquiere UNA sola vez la cantidad máxima y se reutiliza.
+export async function computeNeedsByWeek(days: number | "all"): Promise<{ days: number | "all"; weeks: NeedWeek[]; consolidated: NeedItem[] }> {
   const { orders, supply, catMap, reviews } = await loadContext(days);
   const map = new Map<number, OrderRow[]>();
   for (const o of orders) {
@@ -151,5 +154,17 @@ export async function computeNeedsByWeek(days: number | "all"): Promise<{ days: 
     if (items.length === 0) continue; // semanas sin faltantes no se listan
     weeks.push({ start, end, label: `Semana ${fmtLong(start)} al ${fmtLong(end)}`, items });
   }
-  return { days, weeks };
+
+  // Consolidado: pico de todo el periodo (una sola adquisición) + semanas que cubre.
+  const consolidated = computeForOrders(orders, supply, catMap, reviews);
+  const labelsByKey = new Map<string, string[]>();
+  for (const w of weeks) {
+    for (const it of w.items) {
+      if (!labelsByKey.has(it.key)) labelsByKey.set(it.key, []);
+      labelsByKey.get(it.key)!.push(fmtShort(w.start));
+    }
+  }
+  for (const it of consolidated) it.weeks = labelsByKey.get(it.key) || [];
+
+  return { days, weeks, consolidated };
 }
