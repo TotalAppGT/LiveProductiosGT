@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import { computeNeeds } from "@/lib/needs";
+import { computeNeeds, computeNeedsByWeek } from "@/lib/needs";
 
 export async function GET(request: NextRequest) {
   try {
     const auth = authenticateRequest(request);
     if ("error" in auth) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
-    const raw = (new URL(request.url).searchParams.get("days") || "30").toLowerCase();
+    const params = new URL(request.url).searchParams;
+    const raw = (params.get("days") || "30").toLowerCase();
     const days = raw === "all" ? "all" : Math.max(1, Math.min(365, parseInt(raw) || 30));
-    const data = await computeNeeds(days);
+    const data = params.get("group") === "week" ? await computeNeedsByWeek(days) : await computeNeeds(days);
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error("Error needs:", error);

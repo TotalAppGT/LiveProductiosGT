@@ -1,9 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { normName } from "@/lib/reconcile";
 
-// Calcula los faltantes para los próximos `days` días (o "all"), considerando
-// TODOS los cuadros no cancelados y el pico simultáneo por día (trasiego natural:
-// lo que termina en una fecha se puede reutilizar en la siguiente).
+// Calcula faltantes por item para un conjunto de cuadros, comparando el pico
+// simultáneo de demanda contra el inventario disponible.
 export interface NeedItem {
   key: string;
   name: string;
@@ -19,23 +18,32 @@ export interface NeedItem {
   reviewed: boolean;
 }
 
+export interface NeedWeek {
+  start: Date;
+  end: Date;
+  label: string;
+  items: NeedItem[];
+}
+
 const BUY_CATEGORIES = ["CONSUMIBLE", "CABLEADO", "HERRAMIENTA"];
 
-export async function computeNeeds(days: number | "all"): Promise<{ days: number | "all"; items: NeedItem[] }> {
+type OrderRow = {
+  orderNumber: number;
+  eventName: string;
+  eventDate: Date | null;
+  eventEndDate: Date | null;
+  items: { name: string; category: string; quantity: number }[];
+};
+
+async function loadContext(days: number | "all") {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const windowEnd = days === "all" ? null : new Date(start.getTime() + (days - 1) * 86400000);
 
   const [orders, inv, reviews] = await Promise.all([
     prisma.order.findMany({
-      where: {
-        status: { not: "CANCELADO" },
-        eventDate: { not: null, gte: start, ...(windowEnd ? { lte: windowEnd } : {}) },
-      },
-      select: {
-        orderNumber: true, eventName: true, eventDate: true, eventEndDate: true,
-        items: { select: { name: true, category: true, quantity: true } },
-      },
+      where: { status: { not: "CANCELADO" }, eventDate: { not: null, gte: start, ...(windowEnd ? { lte: windowEnd } : {}) } },
+      select: { orderNumber: true, eventName: true, eventDate: true, eventEndDate: true, items: { select: { name: true, category: true, quantity: true } } },
     }),
     prisma.inventoryItem.findMany({ select: { name: true, category: true, quantity: true, status: true } }),
     prisma.inventoryNeedReview.findMany(),
@@ -48,7 +56,15 @@ export async function computeNeeds(days: number | "all"): Promise<{ days: number
     if (!catMap.has(k)) catMap.set(k, i.category);
     if (i.status === "DISPONIBLE") supply.set(k, (supply.get(k) || 0) + i.quantity);
   }
+  return { orders: orders as OrderRow[], supply, catMap, reviews };
+}
 
+function computeForOrders(
+  orders: OrderRow[],
+  supply: Map<string, number>,
+  catMap: Map<string, string>,
+  reviews: { itemKey: string; action: string; comment: string | null }[]
+): NeedItem[] {
   type Rec = { key: string; name: string; category: string; intervals: { s: number; e: number; q: number }[]; events: NeedItem["events"] };
   const items = new Map<string, Rec>();
   for (const o of orders) {
@@ -87,11 +103,7 @@ export async function computeNeeds(days: number | "all"): Promise<{ days: number
     let suggested: NeedItem["suggestedAction"] = "RENTAR";
     if (!inInventory) suggested = "CONSULTAR";
     else if (BUY_CATEGORIES.includes(cat)) suggested = "COMPRAR";
-    out.push({
-      key: rec.key, name: rec.name, category: rec.category, supply: sup, peak, shortfall,
-      peakDate: peakDay ? new Date(peakDay) : null, events: rec.events,
-      suggestedAction: suggested, action: suggested, comment: "", reviewed: false,
-    });
+    out.push({ key: rec.key, name: rec.name, category: rec.category, supply: sup, peak, shortfall, peakDate: peakDay ? new Date(peakDay) : null, events: rec.events, suggestedAction: suggested, action: suggested, comment: "", reviewed: false });
   }
 
   const rv = new Map(reviews.map((r) => [r.itemKey, r]));
@@ -100,5 +112,44 @@ export async function computeNeeds(days: number | "all"): Promise<{ days: number
     if (r) { it.action = r.action; it.comment = r.comment || ""; it.reviewed = true; }
   }
   out.sort((a, b) => b.shortfall - a.shortfall);
-  return { days, items: out };
+  return out;
+}
+
+// Lista plana (todos los cuadros del periodo) — usada por el cotejo/revisión.
+export async function computeNeeds(days: number | "all"): Promise<{ days: number | "all"; items: NeedItem[] }> {
+  const { orders, supply, catMap, reviews } = await loadContext(days);
+  return { days, items: computeForOrders(orders, supply, catMap, reviews) };
+}
+
+function weekStartOf(d: Date): number {
+  const x = new Date(d);
+  const day = x.getDay(); // 0 domingo
+  const diff = (day + 6) % 7; // lunes = 0
+  x.setDate(x.getDate() - diff);
+  x.setHours(0, 0, 0, 0);
+  return x.getTime();
+}
+
+const fmtShort = (d: Date) => d.toLocaleDateString("es-GT", { day: "2-digit", month: "short" });
+const fmtLong = (d: Date) => d.toLocaleDateString("es-GT", { weekday: "short", day: "numeric", month: "short" });
+
+// Faltantes SEPARADOS POR SEMANA (lunes a domingo).
+export async function computeNeedsByWeek(days: number | "all"): Promise<{ days: number | "all"; weeks: NeedWeek[] }> {
+  const { orders, supply, catMap, reviews } = await loadContext(days);
+  const map = new Map<number, OrderRow[]>();
+  for (const o of orders) {
+    if (!o.eventDate) continue;
+    const ws = weekStartOf(new Date(o.eventDate));
+    if (!map.has(ws)) map.set(ws, []);
+    map.get(ws)!.push(o);
+  }
+  const weeks: NeedWeek[] = [];
+  for (const ws of Array.from(map.keys()).sort((a, b) => a - b)) {
+    const start = new Date(ws);
+    const end = new Date(ws + 6 * 86400000);
+    const items = computeForOrders(map.get(ws)!, supply, catMap, reviews);
+    if (items.length === 0) continue; // semanas sin faltantes no se listan
+    weeks.push({ start, end, label: `Semana ${fmtLong(start)} al ${fmtLong(end)}`, items });
+  }
+  return { days, weeks };
 }
