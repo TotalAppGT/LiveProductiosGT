@@ -346,6 +346,7 @@ export default function InventarioPage() {
   async function applyCanonical(d: any, inventoryItemId: string) {
     const newName = (reconcileName[d.key] ?? d.name)?.trim();
     if (!newName) return toast.error("Escribí un nombre final");
+    if (!confirm(`¿Quedarnos con la descripción:\n\n"${newName}"\n\nSe renombrará el INVENTARIO y los CUADROS con ese nombre (quedarán iguales). ¿Continuar?`)) return;
     try {
       const res = await fetch("/api/inventory/reconcile", {
         method: "POST",
@@ -367,6 +368,7 @@ export default function InventarioPage() {
   async function createMissing(d: any) {
     const newName = (reconcileName[d.key] ?? d.name)?.trim();
     if (!newName) return toast.error("Escribí un nombre para el inventario");
+    if (!confirm(`Se agregará al inventario con la descripción:\n\n"${newName}"\n\nY los ítems de los CUADROS se renombrarán igual. ¿Continuar?`)) return;
     try {
       const res = await fetch("/api/inventory/reconcile", {
         method: "POST",
@@ -1099,7 +1101,7 @@ export default function InventarioPage() {
                           )}
 
                           <div className="mt-2">
-                            <label className="block text-[11px] text-gray-500 mb-1">Nombre final (se aplica al inventario y a los cuadros):</label>
+                            <label className="block text-[11px] text-gray-500 mb-1">Descripción final (inventario y cuadros quedarán iguales):</label>
                             <div className="flex flex-wrap gap-2">
                               <input
                                 value={currentName}
@@ -1113,9 +1115,9 @@ export default function InventarioPage() {
 
                           <div className="flex justify-end gap-2 mt-2">
                             {options.length > 0 && pick ? (
-                              <Button size="sm" onClick={() => applyCanonical(d, pick)}>Aplicar a ambos</Button>
+                              <Button size="sm" onClick={() => applyCanonical(d, pick)}>Guardar en ambos (inventario + cuadros)</Button>
                             ) : (
-                              <Button size="sm" onClick={() => createMissing(d)}>➕ Agregar al inventario</Button>
+                              <Button size="sm" onClick={() => createMissing(d)}>➕ Agregar al inventario y cuadros</Button>
                             )}
                           </div>
                         </div>
