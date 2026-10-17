@@ -489,9 +489,10 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   // ---------- RESUMEN DE EQUIPO ----------
   const re = wb.addWorksheet("Resumen de Equipo", { properties: { defaultRowHeight: 17 } });
   const evCols = report.events.map((e) => `#${e.orderNumber}`);
-  re.columns = [{ width: 40 }, { width: 16 }, ...evCols.map(() => ({ width: 9 })), { width: 10 }, { width: 10 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 10 }, { width: 11 }];
+  re.columns = [{ width: 40 }, { width: 16 }, ...evCols.map(() => ({ width: 9 })), { width: 10 }, { width: 10 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 10 }, { width: 12 }, { width: 11 }];
   title(re, 1, "RESUMEN DE EQUIPO (por evento)", re.columns.length);
-  headerRow(re, 2, ["Equipo", "Sección", ...evCols, "Total", "Inventario", "Reparación", "Disponible", "Faltante", "Saldo", "Acción"]);
+  headerRow(re, 2, ["Equipo", "Sección", ...evCols, "Total", "Inventario", "Reparación", "Disponible", "Faltante", "Saldo", "Utilización %", "Acción"]);
+  const faltanteCol = report.events.length + 7;
   let lastSec = "";
   r = 3;
   for (const m of report.items) {
@@ -504,12 +505,13 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       r++; lastSec = sec;
     }
     const available = Math.max(0, m.stock - m.repair);
-    const vals: any[] = [m.name, sec, ...report.events.map((e) => m.perEvent[String(e.orderNumber)] || ""), m.total, m.stock, m.repair, available, m.faltante, m.saldo, m.faltante > 0 ? m.action : "—"];
+    const utilization = m.stock > 0 ? Math.round((m.total / m.stock) * 100) : 0;
+    const vals: any[] = [m.name, sec, ...report.events.map((e) => m.perEvent[String(e.orderNumber)] || ""), m.total, m.stock, m.repair, available, m.faltante, m.saldo, `${utilization}%`, m.faltante > 0 ? m.action : "—"];
     vals.forEach((v, i) => {
       const c = re.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
       c.alignment = i >= 2 ? center : { vertical: "middle", wrapText: true };
     });
-    if (m.faltante > 0) re.getCell(r, 10).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (m.faltante > 0) re.getCell(r, faltanteCol).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
     r++;
   }
   re.autoFilter = { from: { row: 2, column: 1 }, to: { row: r - 1, column: re.columns.length } };

@@ -14,16 +14,27 @@ export interface AvailabilityRow {
   available: number; // total - committed - repair
 }
 
+// El inventario se usa/arma desde el DÍA ANTERIOR al evento.
+export const PREP_DAYS = 1;
+const DAY_MS = 86400000;
+
+// Ventana de ocupación de un cuadro: [eventDate - 1 día, eventEndDate].
+export function occupancy(o: { eventDate: Date | null; eventEndDate: Date | null }): { s: number; e: number } | null {
+  if (!o.eventDate) return null;
+  const s = new Date(o.eventDate).getTime();
+  const e = o.eventEndDate ? new Date(o.eventEndDate).getTime() : s;
+  return { s: s - PREP_DAYS * DAY_MS, e };
+}
+
 function overlap(
   o: { eventDate: Date | null; eventEndDate: Date | null },
   start?: Date | null,
   end?: Date | null
 ): boolean {
   if (!start || !end) return true; // sin fechas: cuenta todo lo activo
-  const os = o.eventDate ? new Date(o.eventDate).getTime() : null;
-  const oe = o.eventEndDate ? new Date(o.eventEndDate).getTime() : os;
-  if (os === null) return true;
-  return os <= end.getTime() && (oe ?? os) >= start.getTime();
+  const occ = occupancy(o);
+  if (!occ) return true;
+  return occ.s <= end.getTime() && occ.e >= start.getTime();
 }
 
 // Disponibilidad por ítem para un rango de fechas (si no hay fechas, cuenta todo lo activo).
@@ -126,8 +137,10 @@ export async function analyzeCuadro(orderId: string): Promise<CuadroAnalysis | n
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) return null;
 
-  const start = order.eventDate;
-  const end = order.eventEndDate || order.eventDate;
+  // Ocupación real: desde un día ANTES del evento (montaje) hasta el fin.
+  const occ = occupancy({ eventDate: order.eventDate, eventEndDate: order.eventEndDate });
+  const start = occ ? new Date(occ.s) : null;
+  const end = order.eventEndDate ? new Date(order.eventEndDate) : order.eventDate ? new Date(order.eventDate) : null;
   const avail = await computeAvailability(start, end, orderId);
   const byId = new Map(avail.map((a) => [a.id, a]));
   const byName = new Map(avail.map((a) => [a.name.toLowerCase(), a]));
@@ -170,9 +183,10 @@ export async function analyzeCuadro(orderId: string): Promise<CuadroAnalysis | n
     for (const ci of items) {
       if (ci.shortfall <= 0) continue;
       const froms = others.filter((o) => {
-        const oe = o.eventEndDate || o.eventDate;
-        if (!oe) return false;
-        return new Date(oe).getTime() < start.getTime();
+        const oo = occupancy({ eventDate: o.eventDate, eventEndDate: o.eventEndDate });
+        if (!oo) return false;
+        // Termina antes del día de montaje de este evento → se puede reutilizar.
+        return oo.e < start.getTime();
       }).filter((o) => o.items.some((it) => it.name.toLowerCase() === ci.name.toLowerCase()));
       if (froms.length) {
         ci.reusableFrom = froms.map((o) => ({ orderNumber: o.orderNumber, eventName: o.eventName, date: o.eventEndDate || o.eventDate }));

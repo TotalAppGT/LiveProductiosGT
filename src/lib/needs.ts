@@ -82,7 +82,8 @@ function computeForOrders(
   const items = new Map<string, Rec>();
   for (const o of orders) {
     if (!o.eventDate) continue;
-    const s = new Date(o.eventDate).getTime();
+    // El inventario se ocupa desde un día antes (montaje) hasta el fin del evento.
+    const s = new Date(o.eventDate).getTime() - 86400000;
     const e = new Date(o.eventEndDate || o.eventDate).getTime();
     for (const it of o.items) {
       const k = normName(it.name);
