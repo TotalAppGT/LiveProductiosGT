@@ -161,6 +161,25 @@ export default function PedidosPage() {
     }
   }
 
+  async function uploadBulkOrders(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/orders/import-bulk", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(`${json.created} cuadro(s) cargados (${json.totalItems} ítems)${json.unmatched?.length ? ` · ${json.unmatched.length} sin coincidencia` : ""}`);
+        if (json.unmatched?.length) console.warn("Sin coincidencia en inventario:", json.unmatched);
+        fetchData();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al subir cuadros");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function doUpload(file: File) {
     setUploading(true);
     setUploadItems(null);
@@ -274,6 +293,13 @@ export default function PedidosPage() {
           <Button variant="outline" onClick={() => downloadReport("/api/orders/report?format=pdf", "reporte-general-cuadros.pdf")}>
             📄 (PDF)
           </Button>
+          <Button variant="outline" onClick={() => downloadReport("/api/orders/template", "plantilla-cuadros.xlsx")}>
+            ⬇️ Plantilla Excel
+          </Button>
+          <label className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">
+            {uploading ? "Subiendo…" : "⬆️ Subir cuadros (Excel)"}
+            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadBulkOrders(f); e.target.value = ""; }} />
+          </label>
           <Button variant="outline" onClick={() => setShowUpload(true)}>
             ⬆️ Subir cuadro
           </Button>
