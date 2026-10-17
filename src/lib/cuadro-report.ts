@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import PDFDocument from "pdfkit";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { recommendTruck } from "@/lib/inventory-availability";
 import { INVENTORY_SECTIONS } from "@/lib/inventory";
 import { computeNeedsByWeek, type NeedItem, type NeedWeek } from "@/lib/needs";
@@ -370,17 +371,17 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
   doc.moveDown(0.6);
   if (consolidated.length) {
     doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f766e").text("CONSOLIDADO — adquirir UNA sola vez (cubre todas las semanas)");
-    const cCols: Col[] = [{ w: 210, t: "Equipo" }, { w: 48, t: "Cant.", align: "right" }, { w: 62, t: "Inventario", align: "right" }, { w: 52, t: "Faltan", align: "right" }, { w: 90, t: "Semanas" }];
+    const cCols: Col[] = [{ w: 180, t: "Equipo" }, { w: 44, t: "Cant.", align: "right" }, { w: 55, t: "Disponible", align: "right" }, { w: 58, t: "Reparación", align: "right" }, { w: 48, t: "Faltan", align: "right" }, { w: 85, t: "Semanas" }];
     drawTable(doc, cCols, consolidated.map((m) => ([
-      { v: m.name }, { v: String(m.peak) }, { v: String(m.supply) }, { v: String(m.shortfall), color: "#b91c1c", bold: true }, { v: (m.weeks || []).join(", ") || "—" },
+      { v: m.name }, { v: String(m.peak) }, { v: String(m.supply) }, { v: String(m.repair) }, { v: String(m.shortfall), color: "#b91c1c", bold: true }, { v: (m.weeks || []).join(", ") || "—" },
     ])));
     doc.moveDown(0.4);
   }
   for (const w of weeks) {
     doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text(`RENTA / COMPRA — SEMANA ${fmtDay(w.start)} al ${fmtDay(w.end)} (${w.items.length})`);
-    const rcCols: Col[] = [{ w: 220, t: "Equipo" }, { w: 50, t: "Cant.", align: "right" }, { w: 62, t: "Inventario", align: "right" }, { w: 52, t: "Faltan", align: "right" }, { w: 70, t: "Acción" }];
+    const rcCols: Col[] = [{ w: 190, t: "Equipo" }, { w: 46, t: "Cant.", align: "right" }, { w: 58, t: "Disponible", align: "right" }, { w: 58, t: "Reparación", align: "right" }, { w: 48, t: "Faltan", align: "right" }, { w: 65, t: "Acción" }];
     drawTable(doc, rcCols, w.items.map((m) => ([
-      { v: m.name }, { v: String(m.peak) }, { v: String(m.supply) }, { v: String(m.shortfall), color: "#b91c1c", bold: true }, { v: m.action },
+      { v: m.name }, { v: String(m.peak) }, { v: String(m.supply) }, { v: String(m.repair) }, { v: String(m.shortfall), color: "#b91c1c", bold: true }, { v: m.action },
     ])));
     doc.moveDown(0.4);
   }
@@ -406,10 +407,9 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
 }
 
 // ================= Excel =================
-export function reportXlsx(report: CuadroReport | GeneralReport): Buffer {
-  const wb = XLSX.utils.book_new();
-
+export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<Buffer> {
   if (report.kind === "cuadro") {
+    const wb = XLSX.utils.book_new();
     const info = [
       ["REPORTE DE CUADRO — Live Productions GT"], [],
       ["Cuadro #", report.orderNumber], ["Evento", report.eventName], ["Cliente", report.clientName || ""],
@@ -424,83 +424,178 @@ export function reportXlsx(report: CuadroReport | GeneralReport): Buffer {
     return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
   }
 
-  // Resumen
-  const resumen: any[][] = [
-    ["REPORTE GENERAL DE CUADROS — Live Productions GT"],
-    [`Generado: ${new Date(report.generatedAt).toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`],
-    [],
-    ["RESUMEN GENERAL"],
-    ["Cuadros", report.totals.orders],
-    ["Ítems distintos", report.totals.items],
-    ["Demanda total (unidades)", report.totals.demand],
-    ["Ítems a comprar", report.totals.comprar],
-    ["Ítems a alquilar", report.totals.alquilar],
-    ["Total faltantes", report.totals.faltantes],
-    [],
-    ["POR EVENTO"],
-    ["Cuadro", "Evento", "Fecha", "Lugar", "Invitados", "Ítems", "Faltantes", "Cobertura %", "Camión recomendado"],
-    ...report.events.map((e) => [`#${e.orderNumber}`, e.eventName, fmtDate(e.eventDate), e.location || "", e.guests || "", e.itemCount, e.faltantes, e.coverage, e.truck]),
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Live Productions GT";
+  const BRAND = "1E40AF";
+  const headFill = (hex: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF" + hex } });
+  const thin = { style: "thin" as const, color: { argb: "FFD1D5DB" } };
+  const border = { top: thin, left: thin, bottom: thin, right: thin };
+  const center = { horizontal: "center" as const, vertical: "middle" as const, wrapText: true };
+  const headerRow = (ws: any, row: number, labels: string[], fill = BRAND) => {
+    labels.forEach((t, i) => {
+      const c = ws.getCell(row, i + 1);
+      c.value = t;
+      c.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 9 };
+      c.fill = headFill(fill);
+      c.border = border;
+      c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    });
+    ws.getRow(row).height = 26;
+  };
+  const title = (ws: any, row: number, text: string, lastCol: number, fill = BRAND) => {
+    ws.mergeCells(row, 1, row, lastCol);
+    const c = ws.getCell(row, 1);
+    c.value = text;
+    c.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+    c.fill = headFill(fill);
+    c.alignment = { vertical: "middle", indent: 1 };
+    ws.getRow(row).height = 26;
+  };
 
-  // Resumen de Equipo (matriz)
-  const eventCols = report.events.map((e) => `#${e.orderNumber} ${e.eventName}`);
-  const header = ["Equipo", "Sección", ...eventCols, "Total semanal", "Inventario", "Faltante", "Saldo", "Acción"];
-  const matrix: any[][] = [["RESUMEN DE EQUIPO"], [], header];
-  let lastSection = "";
+  // ---------- RESUMEN ----------
+  const rs = wb.addWorksheet("Resumen", { properties: { defaultRowHeight: 18 } });
+  rs.columns = [{ width: 11 }, { width: 34 }, { width: 14 }, { width: 24 }, { width: 10 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 24 }];
+  title(rs, 1, "REPORTE GENERAL DE CUADROS — Live Productions GT", 9);
+  rs.mergeCells("A2:I2");
+  rs.getCell("A2").value = `Generado: ${new Date(report.generatedAt).toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`;
+  rs.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
+  const kpis: [string, number][] = [
+    ["Cuadros", report.totals.orders], ["Ítems", report.totals.items], ["Demanda (u)", report.totals.demand],
+    ["Faltantes", report.totals.faltantes], ["Comprar", report.totals.comprar], ["Alquilar", report.totals.alquilar],
+  ];
+  kpis.forEach(([label, val], i) => {
+    const lc = rs.getCell(4, i + 1); lc.value = label; lc.font = { bold: true, size: 8, color: { argb: "FF6B7280" } }; lc.fill = headFill("F3F4F6"); lc.border = border; lc.alignment = center;
+    const vc = rs.getCell(5, i + 1); vc.value = val; vc.font = { bold: true, size: 13 }; vc.fill = headFill("F3F4F6"); vc.border = border; vc.alignment = center;
+  });
+  const evHeader = 7;
+  rs.mergeCells(evHeader, 1, evHeader, 9);
+  rs.getCell(evHeader, 1).value = "POR EVENTO";
+  rs.getCell(evHeader, 1).font = { bold: true, size: 11, color: { argb: "FF" + BRAND } };
+  rs.getRow(evHeader).height = 20;
+  headerRow(rs, evHeader + 1, ["Cuadro", "Evento", "Fecha", "Lugar", "Invitados", "Ítems", "Faltantes", "Cobertura %", "Camión"]);
+  let r = evHeader + 2;
+  for (const e of report.events) {
+    const vals: any[] = [`#${e.orderNumber}`, e.eventName, fmtDate(e.eventDate), e.location || "", e.guests || "", e.itemCount, e.faltantes, e.coverage, e.truck];
+    vals.forEach((v, i) => {
+      const c = rs.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
+      c.alignment = i >= 4 && i <= 7 ? center : { vertical: "middle", wrapText: true };
+    });
+    if (e.faltantes > 0) rs.getCell(r, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    r++;
+  }
+  rs.autoFilter = { from: { row: evHeader + 1, column: 1 }, to: { row: r - 1, column: 9 } };
+  rs.views = [{ state: "frozen", ySplit: evHeader + 1 }];
+
+  // ---------- RESUMEN DE EQUIPO ----------
+  const re = wb.addWorksheet("Resumen de Equipo", { properties: { defaultRowHeight: 17 } });
+  const evCols = report.events.map((e) => `#${e.orderNumber}`);
+  re.columns = [{ width: 40 }, { width: 16 }, ...evCols.map(() => ({ width: 9 })), { width: 10 }, { width: 10 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 10 }, { width: 11 }];
+  title(re, 1, "RESUMEN DE EQUIPO (por evento)", re.columns.length);
+  headerRow(re, 2, ["Equipo", "Sección", ...evCols, "Total", "Inventario", "Reparación", "Disponible", "Faltante", "Saldo", "Acción"]);
+  let lastSec = "";
+  r = 3;
   for (const m of report.items) {
     const sec = (m.section || "OTRO").toUpperCase();
-    if (sec !== lastSection) { matrix.push([sec]); lastSection = sec; }
-    matrix.push([
-      m.name, sec,
-      ...report.events.map((e) => m.perEvent[String(e.orderNumber)] || ""),
-      m.total, m.stock, m.faltante > 0 ? `Falta ${m.faltante}` : "Completo", m.saldo, m.faltante > 0 ? m.action : "—",
-    ]);
+    if (sec !== lastSec) {
+      re.mergeCells(r, 1, r, re.columns.length);
+      const sc = re.getCell(r, 1);
+      sc.value = sec; sc.font = { bold: true, size: 9, color: { argb: "FF" + BRAND } }; sc.fill = headFill("EEF2FF"); sc.border = border; sc.alignment = { indent: 1, vertical: "middle" };
+      re.getRow(r).height = 18;
+      r++; lastSec = sec;
+    }
+    const available = Math.max(0, m.stock - m.repair);
+    const vals: any[] = [m.name, sec, ...report.events.map((e) => m.perEvent[String(e.orderNumber)] || ""), m.total, m.stock, m.repair, available, m.faltante, m.saldo, m.faltante > 0 ? m.action : "—"];
+    vals.forEach((v, i) => {
+      const c = re.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
+      c.alignment = i >= 2 ? center : { vertical: "middle", wrapText: true };
+    });
+    if (m.faltante > 0) re.getCell(r, 10).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    r++;
   }
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matrix), "Resumen de Equipo");
+  re.autoFilter = { from: { row: 2, column: 1 }, to: { row: r - 1, column: re.columns.length } };
+  re.views = [{ state: "frozen", ySplit: 2, xSplit: 2 }];
 
-  // Renta / Compra — POR SEMANA + CONSOLIDADO
-  const rc: any[][] = [
-    ["RESUMEN DE RENTA / COMPRA — POR SEMANA"],
-    ["Solo equipos que no alcanzan en inventario."],
-    [],
-  ];
+  // ---------- RENTA / COMPRA ----------
+  const rc = wb.addWorksheet("Renta-Compra", { properties: { defaultRowHeight: 17 } });
+  rc.columns = [{ width: 42 }, { width: 16 }, { width: 10 }, { width: 11 }, { width: 11 }, { width: 10 }, { width: 11 }, { width: 30 }];
+  title(rc, 1, "RESUMEN DE RENTA / COMPRA — POR SEMANA", 8);
+  rc.mergeCells("A2:H2");
+  rc.getCell("A2").value = "Solo equipos que no alcanzan en inventario. Reparación = cantidad en reparación según el sistema.";
+  rc.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
   const consolidated = report.consolidated || [];
   const weeks = report.weeks || [];
+  const rcLabels = ["Equipo", "Sección", "Cantidad", "Disponible", "Reparación", "Faltan", "Acción", "Semanas / Cuadros"];
+  r = 4;
   if (consolidated.length) {
-    rc.push(["CONSOLIDADO — adquirir UNA sola vez (cubre todas las semanas)"]);
-    rc.push(["Equipo", "Sección", "Cantidad", "Inventario", "Faltan", "Acción", "Semanas"]);
-    for (const m of consolidated) rc.push([m.name, m.section || "", m.peak, m.supply, m.shortfall, m.action, (m.weeks || []).join(", ")]);
-    rc.push([]);
+    rc.mergeCells(r, 1, r, 8);
+    const h = rc.getCell(r, 1); h.value = "CONSOLIDADO — adquirir UNA sola vez (cubre todas las semanas)"; h.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } }; h.fill = headFill("0F766E"); h.alignment = { indent: 1, vertical: "middle" }; rc.getRow(r).height = 20;
+    r++;
+    headerRow(rc, r, rcLabels, "0F766E");
+    r++;
+    for (const m of consolidated) {
+      const vals: any[] = [m.name, m.section || "", m.peak, m.supply, m.repair, m.shortfall, m.action, (m.weeks || []).join(", ")];
+      vals.forEach((v, i) => { const c = rc.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 }; c.alignment = i >= 2 && i <= 6 ? center : { vertical: "middle", wrapText: true }; });
+      rc.getCell(r, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      r++;
+    }
+    r++;
   }
   for (const w of weeks) {
-    rc.push([`SEMANA ${fmtDay(w.start)} al ${fmtDay(w.end)}`]);
-    rc.push(["Equipo", "Sección", "Cantidad", "Inventario", "Faltan", "Acción", "Cuadros"]);
-    for (const m of w.items) rc.push([m.name, m.section || "", m.peak, m.supply, m.shortfall, m.action, m.events.map((e) => `#${e.orderNumber} ${e.eventName}`).join(", ")]);
-    rc.push([]);
+    rc.mergeCells(r, 1, r, 8);
+    const h = rc.getCell(r, 1); h.value = `SEMANA ${fmtDay(w.start)} al ${fmtDay(w.end)}`; h.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } }; h.fill = headFill(BRAND); h.alignment = { indent: 1, vertical: "middle" }; rc.getRow(r).height = 20;
+    r++;
+    headerRow(rc, r, rcLabels);
+    r++;
+    for (const m of w.items) {
+      const vals: any[] = [m.name, m.section || "", m.peak, m.supply, m.repair, m.shortfall, m.action, m.events.map((e) => `#${e.orderNumber} ${e.eventName}`).join(", ")];
+      vals.forEach((v, i) => { const c = rc.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 }; c.alignment = i >= 2 && i <= 6 ? center : { vertical: "middle", wrapText: true }; });
+      rc.getCell(r, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      r++;
+    }
+    r++;
   }
   if (!consolidated.length && !weeks.length) {
-    rc.push(["Sin faltantes en las fechas futuras."]);
+    rc.mergeCells(r, 1, r, 8);
+    rc.getCell(r, 1).value = "Sin faltantes en las fechas futuras.";
+    rc.getCell(r, 1).font = { italic: true, size: 9, color: { argb: "FF15803D" } };
   }
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rc), "Renta-Compra");
 
-  // Stock por bodega
-  const wsStock: any[][] = [
-    ["STOCK POR BODEGA"], [],
-    ["Bodega", "Ítems", "Unidades", "Disponibles", "En reparación"],
-    ...report.warehouseStock.map((w) => [w.warehouse, w.items, w.units, w.available, w.repair]),
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsStock), "Stock por bodega");
+  // ---------- STOCK POR BODEGA ----------
+  const st = wb.addWorksheet("Stock por bodega", { properties: { defaultRowHeight: 18 } });
+  st.columns = [{ width: 26 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 13 }];
+  title(st, 1, "STOCK POR BODEGA", 5);
+  headerRow(st, 2, ["Bodega", "Ítems", "Unidades", "Disponibles", "En reparación"]);
+  r = 3;
+  for (const w of report.warehouseStock) {
+    [w.warehouse, w.items, w.units, w.available, w.repair].forEach((v, i) => {
+      const c = st.getCell(r, i + 1); c.value = v as any; c.border = border; c.font = { size: 9 };
+      c.alignment = i >= 1 ? center : { vertical: "middle" };
+    });
+    r++;
+  }
+  st.autoFilter = { from: { row: 2, column: 1 }, to: { row: r - 1, column: 5 } };
 
-  // Detalle por evento (desde perEvent de cada ítem)
-  const detalle: any[][] = [["Evento", "Fecha", "Ítem", "Sección", "Cantidad", "Inventario"]];
+  // ---------- DETALLE ----------
+  const det = wb.addWorksheet("Detalle", { properties: { defaultRowHeight: 17 } });
+  det.columns = [{ width: 11 }, { width: 32 }, { width: 13 }, { width: 40 }, { width: 16 }, { width: 10 }, { width: 11 }, { width: 11 }, { width: 11 }];
+  title(det, 1, "DETALLE POR EVENTO", 9);
+  headerRow(det, 2, ["Cuadro", "Evento", "Fecha", "Ítem", "Sección", "Cantidad", "Inventario", "Reparación", "Disponible"]);
+  r = 3;
   for (const m of report.items) {
     for (const e of report.events) {
       const q = m.perEvent[String(e.orderNumber)];
-      if (q) detalle.push([`#${e.orderNumber} ${e.eventName}`, fmtDate(e.eventDate), m.name, m.section || "", q, m.stock]);
+      if (!q) continue;
+      const available = Math.max(0, m.stock - m.repair);
+      const vals: any[] = [`#${e.orderNumber}`, e.eventName, fmtDate(e.eventDate), m.name, m.section || "", q, m.stock, m.repair, available];
+      vals.forEach((v, i) => {
+        const c = det.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
+        c.alignment = i >= 5 ? center : { vertical: "middle", wrapText: true };
+      });
+      r++;
     }
   }
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), "Detalle");
+  det.autoFilter = { from: { row: 2, column: 1 }, to: { row: r - 1, column: 9 } };
+  det.views = [{ state: "frozen", ySplit: 2 }];
 
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }

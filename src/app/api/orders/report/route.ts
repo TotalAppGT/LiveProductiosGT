@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         },
       });
     }
-    const buf = reportXlsx(report);
+    const buf = await reportXlsx(report);
     return new NextResponse(buf as unknown as BodyInit, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
