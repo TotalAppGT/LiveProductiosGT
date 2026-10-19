@@ -5,9 +5,7 @@ import { authenticateRequest } from "@/lib/auth";
 export async function GET(request: NextRequest) {
   try {
     const auth = authenticateRequest(request);
-    if ("error" in auth) {
-      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
-    }
+    if ("error" in auth) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
 
     const logs = await prisma.vehicleLog.findMany({
       orderBy: { createdAt: "desc" },
@@ -17,7 +15,23 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, data: logs });
+    // La lista NO manda las fotos en base64 (pesan varios MB).
+    // Solo envía conteos; el detalle las pide al abrir la bitácora.
+    const data = logs.map((log) => {
+      const { startPhotos, endPhotos, fuelEntries, ...rest } = log;
+      return {
+        ...rest,
+        startPhotoCount: startPhotos?.length || 0,
+        endPhotoCount: endPhotos?.length || 0,
+        fuelPhotoCount: (fuelEntries || []).reduce((s, f) => s + (f.photos?.length || 0), 0),
+        fuelEntries: (fuelEntries || []).map(({ photos, ...f }) => ({
+          ...f,
+          photoCount: photos?.length || 0,
+        })),
+      };
+    });
+
+    return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error("Error en vehicle-logs GET:", error);
     return NextResponse.json({ success: false, error: "Error interno" }, { status: 500 });
@@ -27,9 +41,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const auth = authenticateRequest(request);
-    if ("error" in auth) {
-      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
-    }
+    if ("error" in auth) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
 
     const body = await request.json();
     const { vehicleId, plate, vehicleType, startKm, startWater, startOil, startPhotos, startComment } = body;

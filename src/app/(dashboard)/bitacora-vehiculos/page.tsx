@@ -30,7 +30,10 @@ export default function BitacoraVehiculosPage() {
   const [startComment, setStartComment] = useState("");
 
   const fetchData = useCallback(async () => {
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [lRes, vRes] = await Promise.all([
@@ -49,6 +52,19 @@ export default function BitacoraVehiculosPage() {
   }, [token]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // La lista viene sin fotos (liviana). Al abrir el detalle se piden las fotos.
+  async function openDetail(log: any) {
+    try {
+      const res = await fetch(`/api/vehicle-logs/${log.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      setActiveLog(json.success ? json.data : log);
+    } catch {
+      setActiveLog(log);
+    }
+  }
 
   function onSelectVehicle(vId: string) {
     const v = vehicles.find((x) => x.id === vId);
@@ -165,7 +181,7 @@ export default function BitacoraVehiculosPage() {
 
       <div className="grid gap-3">
         {filteredLogs.map((log) => (
-          <Card key={log.id} className="p-4 cursor-pointer hover:border-blue-400" onClick={() => setActiveLog(log)}>
+          <Card key={log.id} className="p-4 cursor-pointer hover:border-blue-400" onClick={() => openDetail(log)}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
@@ -183,7 +199,7 @@ export default function BitacoraVehiculosPage() {
                 <p className="text-xs text-gray-400">
                   {log.status === "FINALIZADO" && log.endKm != null ? `${(log.endKm - log.startKm).toLocaleString()} km recorridos · ` : ""}
                   {log.endAt ? `Duración: ${Math.max(0, Math.round(((new Date(log.endAt).getTime() - new Date(log.startAt).getTime()) / 3600000) * 10) / 10)} h · ` : ""}
-                  {(log.startPhotos?.length || 0) + (log.endPhotos?.length || 0) + (log.fuelEntries?.reduce((s: number, f: any) => s + (f.photos?.length || 0), 0) || 0)} fotos
+                  {((log.startPhotoCount ?? log.startPhotos?.length ?? 0) + (log.endPhotoCount ?? log.endPhotos?.length ?? 0) + (log.fuelPhotoCount ?? 0))} fotos
                 </p>
               </div>
               <Car className="w-5 h-5 text-gray-400" />
