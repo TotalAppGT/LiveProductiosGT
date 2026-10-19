@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateToken, comparePassword } from "@/lib/auth";
 import { getAdminAuth } from "@/lib/firebase-admin";
+import { phoneMatch } from "@/lib/phone";
 
 export async function POST(request: NextRequest) {
   try {
@@ -95,8 +96,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const isPasswordValid = await comparePassword(password, found.password);
-      if (!isPasswordValid) {
+      // Login interno: la contraseña puede ser la guardada o el teléfono del
+      // usuario (con o sin 502). Así usuario=nombre · contraseña=teléfono.
+      const isPasswordValid = found.password ? await comparePassword(password, found.password) : false;
+      const isPhoneValid =
+        (!!found.phone && phoneMatch(password, found.phone)) ||
+        (!!found.whatsappNumber && phoneMatch(password, found.whatsappNumber));
+      if (!isPasswordValid && !isPhoneValid) {
         return NextResponse.json(
           { success: false, error: "Credenciales inválidas" },
           { status: 401 }
