@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 
-// Procesar devolución: buen estado → inventario, dañado/perdido → taller
+// Procesar devolución: OK → disponible, faltante → perdido, dañado → taller (con bitácora)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -32,30 +32,65 @@ export async function POST(
       }
     }
 
+    const jose = await prisma.user.findFirst({
+      where: { name: { contains: "Marroquin", mode: "insensitive" }, active: true },
+      select: { id: true },
+    });
+
     const damagedItems: string[] = [];
     for (const item of order.items) {
+      // OK: vuelve a disponible en bodega.
       if (item.returnCondition === "BUENO") {
-        // Bueno: no se toca quantity (la disponibilidad se calcula por fechas).
-        continue;
-      }
-      if (item.returnCondition === "DANADO" || item.returnCondition === "PERDIDO") {
-        damagedItems.push(item.name);
-        // Va al taller
-        await prisma.workshopItem.create({
-          data: {
-            itemName: item.name,
-            category: item.category,
-            issue: item.returnCondition === "DANADO" ? "Dañado en evento" : "Perdido en evento",
-            status: "EN_REVISION",
-            createdById: auth.payload.userId,
-            notes: `Devuelto del cuadro #${order.orderNumber}`,
-          },
-        });
-        // Marca el ítem como dañado/perdido (el motor lo excluye de la disponibilidad)
         if (item.inventoryItemId) {
           await prisma.inventoryItem.update({
             where: { id: item.inventoryItemId },
-            data: { status: item.returnCondition === "PERDIDO" ? "PERDIDO" : "DANADO" },
+            data: { status: "DISPONIBLE", location: "Bodega Elgin" },
+          }).catch(() => {});
+        }
+        continue;
+      }
+
+      // FALTANTE: queda perdido. NO va a taller.
+      if (item.returnCondition === "PERDIDO") {
+        if (item.inventoryItemId) {
+          await prisma.inventoryItem.update({
+            where: { id: item.inventoryItemId },
+            data: { status: "PERDIDO" },
+          }).catch(() => {});
+        }
+        continue;
+      }
+
+      // DAÑADO: va a TALLER (en reparación, asignado a José), con bitácora de entrega.
+      if (item.returnCondition === "DANADO") {
+        damagedItems.push(item.name);
+        if (item.inventoryItemId) {
+          await prisma.inventoryItem.update({
+            where: { id: item.inventoryItemId },
+            data: { status: "EN_REPARACION", location: "Taller" },
+          });
+        }
+        const open = item.inventoryItemId
+          ? await prisma.workshopItem.findFirst({
+              where: { inventoryItemId: item.inventoryItemId, status: { in: ["EN_REVISION", "EN_REPARACION"] } },
+              select: { id: true },
+            })
+          : null;
+        if (!open) {
+          await prisma.workshopItem.create({
+            data: {
+              inventoryItemId: item.inventoryItemId || null,
+              itemName: item.name,
+              category: item.category,
+              quantity: item.quantity,
+              issue: "Dañado en evento",
+              status: "EN_REVISION",
+              assignedToId: jose?.id || null,
+              deliveredById: auth.payload.userId,
+              deliveredAt: new Date(),
+              createdById: auth.payload.userId,
+              notes: `Devuelto del cuadro #${order.orderNumber} — ${order.eventName}`,
+            },
           });
         }
       }

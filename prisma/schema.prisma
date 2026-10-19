@@ -199,6 +199,8 @@ model User {
   maintenanceDone   VehicleMaintenance[]
   workshopAssigned  WorkshopItem[]       @relation("WorkshopTechnician")
   workshopCreated   WorkshopItem[]       @relation("WorkshopCreator")
+  workshopDelivered WorkshopItem[]       @relation("WorkshopDeliverer")
+  workshopReceived  WorkshopItem[]       @relation("WorkshopReceiver")
   createdOrders     Order[]        @relation("OrderCreator")
   createdTemplates  OrderTemplate[] @relation("OrderTemplateCreator")
   vehicleLogs       VehicleLog[]   @relation("VehicleLogDriver")
@@ -317,9 +319,10 @@ model InventoryItem {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  assignedTo  User?               @relation(fields: [assignedToId], references: [id])
-  attachments FileAttachment[]
-  movements   InventoryMovement[]
+  assignedTo    User?               @relation(fields: [assignedToId], references: [id])
+  attachments   FileAttachment[]
+  movements     InventoryMovement[]
+  workshopItems WorkshopItem[]
 }
 
 model InventoryMovement {
@@ -387,22 +390,35 @@ model VehicleMaintenance {
 }
 
 model WorkshopItem {
-  id           String    @id @default(cuid())
-  itemName     String
-  category     String    @default("AUDIO")
-  issue        String
-  diagnostic   String?
-  status       String    @default("EN_REVISION")
-  assignedToId String?
-  assignedTo   User?     @relation("WorkshopTechnician", fields: [assignedToId], references: [id])
-  createdById  String
-  createdBy    User      @relation("WorkshopCreator", fields: [createdById], references: [id])
-  completedAt  DateTime?
-  notes        String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id              String        @id @default(cuid())
+  itemName        String
+  category        String        @default("AUDIO")
+  issue           String
+  diagnostic      String?
+  status          String        @default("EN_REVISION")
+  quantity        Int           @default(1)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  warehouse       String?
+  assignedToId    String?
+  assignedTo      User?         @relation("WorkshopTechnician", fields: [assignedToId], references: [id])
+  createdById     String
+  createdBy       User          @relation("WorkshopCreator", fields: [createdById], references: [id])
+  deliveredById   String?
+  deliveredBy     User?         @relation("WorkshopDeliverer", fields: [deliveredById], references: [id])
+  deliveredAt     DateTime      @default(now())
+  receivedById    String?
+  receivedBy      User?         @relation("WorkshopReceiver", fields: [receivedById], references: [id])
+  receptionAt     DateTime?
+  deliveryPhotos  String[]      @default([])
+  receptionPhotos String[]      @default([])
+  completedAt     DateTime?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@index([status])
+  @@index([inventoryItemId])
 }
 
 model Cobro {
