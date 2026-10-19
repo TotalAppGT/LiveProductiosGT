@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
 import { sendMessage, sendMessageChunked, sendInteractiveButtons } from "@/lib/whatsapp";
 import { normalizeGTPhone } from "@/lib/phone";
-import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest, formatTaskHierarchy, orderTasksHierarchical } from "@/lib/task-view";
+import { taskPhasePriority, orderTasksByDayHour, formatTaskLine, groupTasksByDayText, formatTaskDigest, formatTaskHierarchy, formatTasksByModule, orderTasksHierarchical } from "@/lib/task-view";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate, isTaskOverdue, partitionTasksByDay } from "@/lib/task-utils";
 import { saveTaskView, getTaskViewIds } from "@/lib/pending-view";
 import { sendLUNAUpdateBroadcast } from "@/lib/broadcast";
@@ -544,13 +544,14 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
   let out = `📋 *Tus Tareas*\n\n`;
 
   if (overdue.length > 0) {
-    const h = formatTaskHierarchy(overdue, cursor);
+    const h = formatTasksByModule(overdue, cursor);
     out += `⚠️ *VENCIDAS / PRIORIDAD (${h.ordered.length})*\n${h.text}\n\n`;
     displayed.push(...h.ordered);
     cursor = h.next;
   }
 
-  const hier = formatTaskHierarchy(rest, cursor);
+  // Misma estructura que los mensajes programados (día + módulos).
+  const hier = formatTasksByModule(rest, cursor);
   if (hier.ordered.length > 0) {
     out += `${hier.text}\n\n`;
     displayed.push(...hier.ordered);
@@ -1825,11 +1826,20 @@ async function handleCommand(
 
     let body: string;
     if (isSingleDay) {
-      // Un solo día: lista plana ordenada por hora
-      body = formatTaskList(tasks);
+      // Un solo día: MISMA estructura (día + módulos) que los mensajes de LUNA.
+      body = formatTasksByModule(tasks).text;
     } else {
-      // Varios días (semana/mes): agrupar por día
-      body = groupTasksByDay(tasks);
+      // Varios días: agrupar por día y, dentro de cada día, por módulos.
+      const days = new Map<string, any[]>();
+      for (const t of tasks) {
+        if (!t.dueDate) continue;
+        const d = new Date(t.dueDate);
+        const key = d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" });
+        if (!days.has(key)) days.set(key, []);
+        days.get(key)!.push(t);
+      }
+      const sorted = Array.from(days.entries()).sort((a, b) => new Date(a[1][0].dueDate).getTime() - new Date(b[1][0].dueDate).getTime());
+      body = sorted.map(([label, dayTasks]) => `📅 *${label}*\n${formatTasksByModule(dayTasks, 1, { skipEmpty: true }).text}`).join("\n\n");
     }
 
     return `📅 *${title}*\n\n${body}\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
