@@ -113,11 +113,12 @@ export default function DashboardPage() {
     setLoading(true);
     setError("");
     try {
+      const manager = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
       const [dashRes, accessRes, tasksRes, complianceRes] = await Promise.all([
         fetch("/api/dashboard", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/access?filter=today", { headers: { Authorization: `Bearer ${token}` } }),
+        manager ? fetch("/api/access?filter=today", { headers: { Authorization: `Bearer ${token}` } }) : Promise.resolve(null),
         fetch("/api/tasks/daily", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/compliance?filter=today", { headers: { Authorization: `Bearer ${token}` } }),
+        manager ? fetch("/api/compliance?filter=today", { headers: { Authorization: `Bearer ${token}` } }) : Promise.resolve(null),
       ]);
 
       if (dashRes.ok) {
@@ -139,7 +140,7 @@ export default function DashboardPage() {
         }
       }
 
-      if (accessRes.ok) {
+      if (accessRes && accessRes.ok) {
         const json = await accessRes.json();
         if (json.success && json.data) {
           setAccessUsers(json.data || []);
@@ -160,7 +161,7 @@ export default function DashboardPage() {
         }
       }
 
-      if (complianceRes.ok) {
+      if (complianceRes && complianceRes.ok) {
         const json = await complianceRes.json();
         if (json.success && json.data) {
           const staff = json.data.staff || [];
@@ -176,7 +177,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, user?.role]);
 
   useEffect(() => {
     fetchDashboard();
@@ -612,6 +613,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
+      {isManager && (
       <Card variant="bordered" className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -647,6 +649,7 @@ export default function DashboardPage() {
           />
         )}
       </Card>
+      )}
 
       <Modal
         isOpen={commentModal.open}

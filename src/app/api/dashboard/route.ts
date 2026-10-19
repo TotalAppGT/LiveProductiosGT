@@ -18,6 +18,11 @@ export async function GET(request: NextRequest) {
     const weekStart = startOfWeek(today, { weekStartsOn: 0 });
     const weekEnd = endOfWeek(today, { weekStartsOn: 0 });
 
+    // Empleados: el dashboard es PERSONAL (solo sus tareas, eventos y avances).
+    const isEmployee = auth.payload.role === "EMPLEADO";
+    const uid = auth.payload.userId;
+    const taskScope = isEmployee ? { assignedToId: uid } : {};
+
     const [
       pendingTasks,
       completedTasksToday,
@@ -29,30 +34,35 @@ export async function GET(request: NextRequest) {
       tasksDueToday,
     ] = await Promise.all([
       prisma.task.count({
-        where: { status: { in: ["PENDIENTE", "EN_PROCESO"] } },
+        where: { status: { in: ["PENDIENTE", "EN_PROCESO"] }, ...taskScope },
       }),
-      prisma.taskHistory.count({
-        where: {
-          newStatus: "COMPLETADA",
-          createdAt: { gte: todayStart },
-        },
-      }),
+      isEmployee
+        ? prisma.taskHistory.count({
+            where: { newStatus: "COMPLETADA", createdAt: { gte: todayStart }, task: { assignedToId: uid } },
+          })
+        : prisma.taskHistory.count({
+            where: { newStatus: "COMPLETADA", createdAt: { gte: todayStart } },
+          }),
       prisma.event.count({
         where: {
           date: { gte: weekStart, lte: weekEnd },
+          ...(isEmployee ? { OR: [{ plannerId: uid }, { responsibleId: uid }] } : {}),
         },
       }),
       prisma.cobro.count({
-        where: { status: "PENDIENTE" },
+        where: { status: "PENDIENTE", ...(isEmployee ? { assignedToId: uid } : {}) },
       }),
-      prisma.inventoryItem.count({
-        where: { status: { in: ["DANADO", "PERDIDO"] } },
-      }),
+      isEmployee
+        ? Promise.resolve(0)
+        : prisma.inventoryItem.count({
+            where: { status: { in: ["DANADO", "PERDIDO"] } },
+          }),
       prisma.cobro.aggregate({
-        where: { status: "PENDIENTE" },
+        where: { status: "PENDIENTE", ...(isEmployee ? { assignedToId: uid } : {}) },
         _sum: { amount: true },
       }),
       prisma.activity.findMany({
+        where: isEmployee ? { userId: uid } : {},
         take: 10,
         orderBy: { createdAt: "desc" },
         include: {
@@ -65,6 +75,7 @@ export async function GET(request: NextRequest) {
             gte: todayStart,
             lt: new Date(todayStart.getTime() + 86400000),
           },
+          ...taskScope,
         },
         include: {
           assignedTo: { select: { name: true } },
