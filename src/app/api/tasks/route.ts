@@ -132,7 +132,9 @@ export async function POST(request: NextRequest) {
         type: type || "FIJA",
         frequency: frequency || null,
         dayOfWeek: dayOfWeek || null,
-        dueDate: parseGTInputDate(dueDate),
+        // Las FIJA SEMANALES se rigen por su día (dayOfWeek). Una fecha futura
+        // concreta las ocultaría hasta esa fecha; por eso se guardan sin fecha.
+        dueDate: type === "FIJA" && frequency === "SEMANAL" && dayOfWeek ? null : parseGTInputDate(dueDate),
         priority: priority || "MEDIA",
         category: category || "OTRO",
         assignedToId: assignedToId || null,
