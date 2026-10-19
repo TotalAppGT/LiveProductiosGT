@@ -264,21 +264,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const firebaseCredential = await signInWithEmailAndPassword(
-          authInstance,
-          loginEmail,
-          credentials.password
-        );
-        const { user, token } = await syncWithBackend(
-          firebaseCredential.user
-        );
-        persistAuth(token, user);
-        setState({
-          user,
-          token,
-          loading: false,
-          initialized: true,
-        });
+        try {
+          const firebaseCredential = await signInWithEmailAndPassword(
+            authInstance,
+            loginEmail,
+            credentials.password
+          );
+          const { user, token } = await syncWithBackend(firebaseCredential.user);
+          persistAuth(token, user);
+          setState({ user, token, loading: false, initialized: true });
+          return;
+        } catch (firebaseError) {
+          // Respaldo: muchos empleados no tienen cuenta en Firebase. Se valida
+          // contra la contraseña guardada en la base de datos.
+          try {
+            const res = await fetch("/api/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: loginEmail, password: credentials.password }),
+            });
+            const json = await res.json();
+            if (json.success && json.data?.token) {
+              persistAuth(json.data.token, json.data.user);
+              setState({ user: json.data.user, token: json.data.token, loading: false, initialized: true });
+              return;
+            }
+          } catch {
+            // se ignora y se lanza el error original de Firebase
+          }
+          throw firebaseError;
+        }
       } catch (error) {
         setState((prev) => ({ ...prev, loading: false }));
         throw error;
