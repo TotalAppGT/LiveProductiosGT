@@ -12,10 +12,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || undefined;
     const limit = parseInt(searchParams.get("limit") || "200");
+    const scope = searchParams.get("scope");
 
-    // Empleados: solo sus propios recordatorios (los demás no deben verlos).
+    // Empleados o vista personal (scope=mine): solo sus propios recordatorios.
     const isEmployee = auth.payload.role === "EMPLEADO";
-    const where: any = isEmployee ? { assignedToId: auth.payload.userId } : {};
+    const mine = isEmployee || scope === "mine";
+    const where: any = mine ? { assignedToId: auth.payload.userId } : {};
     if (status === "PENDIENTE") where.isCompleted = false;
     if (status === "COMPLETADO") where.isCompleted = true;
 

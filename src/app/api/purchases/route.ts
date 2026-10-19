@@ -18,12 +18,14 @@ export async function GET(request: NextRequest) {
     const dueDateFrom = searchParams.get("dueDateFrom") || undefined;
     const dueDateTo = searchParams.get("dueDateTo") || undefined;
     const limit = parseInt(searchParams.get("limit") || "50");
+    const scope = searchParams.get("scope");
 
-    // Empleados: solo sus propias compras (no las de otros).
+    // Empleados o vista personal (scope=mine): solo sus propias compras.
     const isEmployee = auth.payload.role === "EMPLEADO";
-    const where: Prisma.PurchaseWhereInput = isEmployee ? { assignedToId: auth.payload.userId } : {};
+    const mine = isEmployee || scope === "mine";
+    const where: Prisma.PurchaseWhereInput = mine ? { assignedToId: auth.payload.userId } : {};
     if (status) where.status = status;
-    if (!isEmployee && assignedToId) where.assignedToId = assignedToId;
+    if (!mine && assignedToId) where.assignedToId = assignedToId;
     if (category) where.category = category;
     if (search) {
       where.OR = [
