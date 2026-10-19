@@ -29,7 +29,7 @@ interface TaskFormProps {
 
 const taskTypeOptions = [
   { value: "FIJA", label: "Fija" },
-  { value: "DINAMICA", label: "Dinámica" },
+  { value: "DINAMICA", label: "Variable" },
 ];
 
 const frequencyOptions = [

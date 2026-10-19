@@ -54,7 +54,7 @@ const categoryOptions: { value: TaskCategory | ""; label: string }[] = [
 const typeOptions: { value: TaskType | ""; label: string }[] = [
   { value: "", label: "Todos los tipos" },
   { value: "FIJA", label: "Fija" },
-  { value: "DINAMICA", label: "Dinámica" },
+  { value: "DINAMICA", label: "Variable" },
 ];
 
 const priorityOptions: { value: TaskPriority | ""; label: string }[] = [
@@ -304,7 +304,7 @@ export function TaskFilters({
           )}
           {filters.type && (
             <Badge color="teal" size="sm" removable onRemove={() => update("type", undefined)}>
-              {filters.type === "FIJA" ? "Fija" : "Dinámica"}
+              {filters.type === "FIJA" ? "Fija" : "Variable"}
             </Badge>
           )}
           {filters.priority && (

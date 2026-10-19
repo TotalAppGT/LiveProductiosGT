@@ -133,7 +133,7 @@ SISTEMA DE TAREAS Y PRIORIDADES:
 - 🟢 BAJA | 🟡 MEDIA | 🔴 ALTA | 🔴 URGENTE
 - Las tareas se muestran numeradas. El usuario se refiere a ellas por su #.
 - Tareas FIJA: diarias reaparecen todos los días; semanales aparecen su día y persisten hasta el sábado.
-- Tareas VARIABLES (dinámicas): al completarlas se borran; si no se completan siguen como prioridad hasta hacerse.
+- Tareas VARIABLES: al completarlas se borran; si no se completan siguen como prioridad hasta hacerse.
 - Mínimo 4 accesos diarios al sistema por persona.
 - El dueño y administradores reciben reportes consolidados de cumplimiento.
 - Hay ranking mensual de desempeño (tareas completadas + accesos).

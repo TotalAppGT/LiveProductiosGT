@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status") || undefined;
     const limit = parseInt(searchParams.get("limit") || "200");
 
-    const where: any = {};
+    // Empleados: solo sus propios recordatorios (los demás no deben verlos).
+    const isEmployee = auth.payload.role === "EMPLEADO";
+    const where: any = isEmployee ? { assignedToId: auth.payload.userId } : {};
     if (status === "PENDIENTE") where.isCompleted = false;
     if (status === "COMPLETADO") where.isCompleted = true;
 

@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
     // Hoja 3: Referencia de valores válidos
     const refData = [
       { campo: "categoria", valores: "PRE_EVENTO, EVENTO, POST_EVENTO, COTIZACION, COBRO, INVENTARIO, VEHICULO, PERSONAL, BODEGA, MANTENIMIENTO, ADMINISTRACION, OTRO" },
-      { campo: "tipo", valores: "FIJA (se repite) o DINAMICA (puntual)" },
+      { campo: "tipo", valores: "FIJA (se repite) o VARIABLE (puntual)" },
       { campo: "frecuencia", valores: "DIARIA, SEMANAL, MENSUAL (solo si tipo=FIJA)" },
       { campo: "dia_semana", valores: "LUNES, MARTES, MIERCOLES, JUEVES, VIERNES, SABADO, DOMINGO (para FIJA semanal)" },
       { campo: "fecha", valores: "YYYY-MM-DD (ej: 2026-08-24). Vacío para tareas fijas" },

@@ -19,9 +19,11 @@ export async function GET(request: NextRequest) {
     const dueDateTo = searchParams.get("dueDateTo") || undefined;
     const limit = parseInt(searchParams.get("limit") || "50");
 
-    const where: Prisma.PurchaseWhereInput = {};
+    // Empleados: solo sus propias compras (no las de otros).
+    const isEmployee = auth.payload.role === "EMPLEADO";
+    const where: Prisma.PurchaseWhereInput = isEmployee ? { assignedToId: auth.payload.userId } : {};
     if (status) where.status = status;
-    if (assignedToId) where.assignedToId = assignedToId;
+    if (!isEmployee && assignedToId) where.assignedToId = assignedToId;
     if (category) where.category = category;
     if (search) {
       where.OR = [

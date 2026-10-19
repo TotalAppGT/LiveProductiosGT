@@ -1464,7 +1464,7 @@ export default function TareasPage() {
             >
               <option value="">Todos</option>
               <option value="FIJA">Fija</option>
-              <option value="DINAMICA">Dinámica</option>
+              <option value="DINAMICA">Variable</option>
             </select>
           </div>
         </div>
@@ -2591,7 +2591,7 @@ function CreateTaskModal({
               onChange={(e) => setType(e.target.value)}
               className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              <option value="DINAMICA">Dinámica</option>
+              <option value="DINAMICA">Variable</option>
               <option value="FIJA">Fija</option>
             </select>
           </div>
@@ -2836,7 +2836,7 @@ function EditTaskModal({
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo</label>
             <select value={type} onChange={(e) => setType(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
-              <option value="DINAMICA">Dinámica (Variable)</option>
+              <option value="DINAMICA">Variable</option>
               <option value="FIJA">Fija (recurrente)</option>
             </select>
           </div>
