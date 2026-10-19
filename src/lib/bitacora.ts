@@ -21,6 +21,7 @@ export type BitacoraInput = {
 
 export const BITACORA_LABELS: Record<string, string> = {
   DEVOLUCION: "Devolución de cuadro",
+  CARGO: "Cargo interno por pérdida",
   PRESTAMO: "Préstamo de inventario",
   DEVOLUCION_PRESTAMO: "Devolución de préstamo",
   ENTREGA_TALLER: "Entrega a taller",

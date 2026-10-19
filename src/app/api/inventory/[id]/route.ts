@@ -83,6 +83,7 @@ export async function PUT(
       serialNumber,
       lastCheckedAt,
       photos,
+      unitValue,
     } = body;
 
     const previousStatus = existingItem.status;
@@ -103,6 +104,7 @@ export async function PUT(
         lastCheckedAt: lastCheckedAt !== undefined ? (lastCheckedAt ? new Date(lastCheckedAt) : null) : undefined,
         photos: photos !== undefined ? photos : undefined,
         photoUpdatedAt: photos !== undefined ? new Date() : undefined,
+        unitValue: unitValue !== undefined ? (unitValue === null || unitValue === "" ? null : Number(unitValue)) : undefined,
       },
       include: {
         assignedTo: {

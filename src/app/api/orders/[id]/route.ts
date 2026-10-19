@@ -11,7 +11,10 @@ export async function GET(
     const auth = authenticateRequest(request);
     if ("error" in auth) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     const { id } = await params;
-    const order = await prisma.order.findUnique({ where: { id }, include: { items: true } });
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true, reintegros: { orderBy: { createdAt: "desc" }, take: 1 } },
+    });
     if (!order) return NextResponse.json({ success: false, error: "Cuadro no encontrado" }, { status: 404 });
     return NextResponse.json({ success: true, data: order });
   } catch (error) {

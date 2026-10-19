@@ -1432,6 +1432,7 @@ function InventoryFormModal({
   const [name, setName] = useState(item?.name || "");
   const [category, setCategory] = useState(item?.category || "AUDIO");
   const [quantity, setQuantity] = useState(String(item?.quantity || 1));
+  const [unitValue, setUnitValue] = useState(String((item as any)?.unitValue ?? ""));
   const [status, setStatus] = useState(item?.status || "DISPONIBLE");
   const [location, setLocation] = useState(item?.location || "Bodega Cristo Rey");
   const [warehouse, setWarehouse] = useState(item?.warehouse || "Bodega Cristo Rey");
@@ -1447,6 +1448,7 @@ function InventoryFormModal({
     setName(item?.name || "");
     setCategory(item?.category || "AUDIO");
     setQuantity(String(item?.quantity ?? 1));
+    setUnitValue(String((item as any)?.unitValue ?? ""));
     setStatus(item?.status || "DISPONIBLE");
     setLocation(item?.location || "Bodega Cristo Rey");
     setWarehouse(item?.warehouse || "Bodega Cristo Rey");
@@ -1491,6 +1493,7 @@ function InventoryFormModal({
           name: name.trim(),
           category,
           quantity: parseInt(quantity) || 1,
+          unitValue: unitValue === "" ? null : Number(unitValue),
           status,
           location,
           warehouse,
@@ -1552,6 +1555,14 @@ function InventoryFormModal({
             onChange={(e) => setQuantity(e.target.value)}
           />
         </div>
+        <Input
+          label="Valor de reposición (Q) — para cargos por pérdida"
+          type="number"
+          min="0"
+          step="0.01"
+          value={unitValue}
+          onChange={(e) => setUnitValue(e.target.value)}
+        />
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

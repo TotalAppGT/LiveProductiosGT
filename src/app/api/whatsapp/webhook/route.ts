@@ -671,15 +671,16 @@ function parseReminderLocal(text: string, user: { id: string; name: string }) {
 
   // Fecha/hora (todo en hora de Guatemala)
   const time = parseTimeExpression(t);
-  let date = parseRelativeDate(t, new Date());
+  let date: Date | null = parseRelativeDate(t, new Date());
 
-  if (!date) {
-    // "a las 8 am mañana" → tiempo y mañana (base real en Guatemala)
+  // Solo se asume HOY si el usuario dio una hora explícita (ej. "a las 3pm").
+  // Si no dio fecha NI hora, se deja null para que LUNA pregunte.
+  if (!date && time) {
     let base = gtStartOfToday();
     if (/\bpasado\s*mañana\b/.test(t)) base = new Date(base.getTime() + 2 * 24 * 60 * 60 * 1000);
     else if (/\bmañana\b/.test(t) && !/\ben la mañana\b/.test(t)) base = new Date(base.getTime() + 1 * 24 * 60 * 60 * 1000);
-    date = applyGuatemalaTime(base, time?.hours ?? 9, time?.minutes ?? 0);
-  } else if (time) {
+    date = applyGuatemalaTime(base, time.hours, time.minutes);
+  } else if (date && time) {
     date = applyGuatemalaTime(date, time.hours, time.minutes);
   }
 
@@ -721,16 +722,19 @@ HOY ES: ${new Date().toLocaleDateString("es-GT", { timeZone: "America/Guatemala"
 
 Reglas IMPORTANTES:
 - La hora que dice el usuario ES la hora de Guatemala. NO la conviertas a UTC ni a otra zona.
-- Si NO se indica fecha, el recordatorio es para HOY (la fecha indicada arriba).
 - Si el usuario dice "9:15 am", remindAt debe tener "09:15", NUNCA "15:15".
 - "mañana" = día siguiente
 - "pasado mañana" = en 2 días
 - "el lunes" = próximo lunes
-- Si no se especifica hora, usa 09:00
-- assignToName = la persona que RECIBIRÁ el recordatorio.
-  * Si dice "recuérdame", "mándame", "avísame" → assignToName = null (es él mismo)
+- Si se indica una hora pero NO una fecha, usá HOY con esa hora (ej. "a las 3pm").
+- Si NO se indica hora, remindAt = null (NO inventes hora).
+- Si no se indica ni fecha ni hora, remindAt = null.
+- NUNCA asumas "9:00": si falta la hora, devolvé null.
+- assignToName = la persona que RECIBIRÁ el recordatorio, solo si se menciona explícitamente.
+  * Si dice "recuérdame", "mándame", "avísame", "para mí" → assignToName = null (es él mismo)
   * Si dice "recuérdale a Diana", "mándale un mensaje a Diana", "para Diana" → assignToName = "Diana"
   * El nombre de la tarea (ej: "llamar a Juan") NO es el asignado. Juan es parte de la tarea, no quien recibe.
+  * Si no hay persona explícita, assignToName = null (NO inventes).
 
 Responde SOLO el JSON, sin markdown.`
     }], { responseFormat: "json", temperature: 0.1, maxTokens: 300 });
@@ -738,12 +742,12 @@ Responde SOLO el JSON, sin markdown.`
     if (response === AI_ERROR_MESSAGE) {
       response = await askAI([{
         role: "user",
-        content: `Extrae del texto "${text}" un recordatorio y devuelve SOLO JSON con: title, description, remindAt (YYYY-MM-DDTHH:mm:ss hora de Guatemala), assignToName (o null). Si dice "recuérdame"/"mándame" el asignado es null. Usuario: ${user.name}. Hoy en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}. Si no hay hora usa 09:00. Sin markdown.`
+        content: `Extrae del texto "${text}" un recordatorio y devuelve SOLO JSON con: title, description, remindAt (YYYY-MM-DDTHH:mm:ss hora de Guatemala o null), assignToName (o null). Si falta fecha u hora, remindAt = null. No inventes fecha, hora ni persona. Si dice "recuérdame"/"mándame" el asignado es null. Usuario: ${user.name}. Hoy en Guatemala: ${new Date().toLocaleString("es-GT", {timeZone:"America/Guatemala"})}. Sin markdown.`
       }], { responseFormat: "json", temperature: 0, maxTokens: 300 });
     }
 
     const json = JSON.parse(response.replace(/```json|```/g, "").trim());
-    const remindAt = normalizeToFive(normalizeGuatemalaDate(json.remindAt));
+    const remindAt = json.remindAt ? normalizeToFive(normalizeGuatemalaDate(json.remindAt)) : null;
 
     let assignToId: string | undefined;
     if (json.assignToName) {
@@ -770,6 +774,48 @@ Responde SOLO el JSON, sin markdown.`
       return null;
     }
   }
+}
+
+async function resolveMentionedAssignee(text: string, parsed: any) {
+  if (!parsed || parsed.assignToId) return parsed;
+  const roster = await prisma.user.findMany({ where: { active: true }, select: { id: true, name: true } });
+  const mentioned = roster.find((u) => new RegExp(`\\b${u.name.split(" ")[0]}\\b`, "i").test(text));
+  if (mentioned) parsed.assignToId = mentioned.id;
+  return parsed;
+}
+
+function reminderMissingFields(
+  text: string,
+  parsed: { title?: string | null; remindAt?: Date | null; assignToId?: string } | null
+) {
+  const t = text.toLowerCase().trim();
+  const missing: string[] = [];
+
+  const title = (parsed?.title || "").trim();
+  const meaningfulTitle = !!title && !/^(recordatorio|recordar|recordarme|aviso|alerta|mensaje)$/i.test(title);
+  if (!meaningfulTitle) missing.push("titulo");
+
+  const hasTime = !!parseTimeExpression(t);
+  if (!hasTime) missing.push("hora");
+
+  const toMe = /(^|\s)(recu[ée]rdame|m[aá]ndame|av[íi]same|notif[íi]came|para\s+m[ií]|a\s+m[ií])(\s|$)/i.test(t);
+  if (!toMe && !parsed?.assignToId) missing.push("quien");
+
+  // Dio hora pero no fecha y esa hora ya pasó hoy → preguntar si es para mañana.
+  if (hasTime && !parseRelativeDate(t, new Date()) && parsed?.remindAt && parsed.remindAt.getTime() < Date.now()) {
+    missing.push("fecha_pasada");
+  }
+
+  return missing;
+}
+
+function reminderQuestion(missing: string[]) {
+  const lines: string[] = [];
+  if (missing.includes("titulo")) lines.push("• ¿Qué querés que te recuerde?");
+  if (missing.includes("hora")) lines.push("• ¿A qué hora? (ej. *3pm*)");
+  if (missing.includes("quien")) lines.push("• ¿Para quién? (o *para mí*)");
+  if (missing.includes("fecha_pasada")) lines.push("• Esa hora ya pasó hoy. ¿Es para mañana u otro día?");
+  return `🤔 Me faltan datos para el recordatorio:\n${lines.join("\n")}\n\nPodés responder todo junto, ej: *revisar inventario mañana 3pm para mí*`;
 }
 
 async function parseTaskCreation(text: string, user: { id: string; name: string }) {
@@ -1243,11 +1289,21 @@ async function handleMeetingCommand(cmd: string, user: { id: string; name: strin
 // al instante (el aviso sale a la hora, dentro del horario de notificación desde las 7am).
 async function createReminderFromText(
   text: string,
-  user: { id: string; name: string }
+  user: { id: string; name: string },
+  fromNumber?: string
 ): Promise<string> {
-  const parsed = await parseReminderFromText(text, user);
-  if (!parsed || !parsed.remindAt) {
-    return "🤔 No pude entender la fecha/hora. Ejemplos:\n• *recordatorio para Diana revisar cotizaciones el viernes 3pm*\n• *recuérdame llamar a Juan mañana a las 3pm*\n• *recordatorio Jorge reunión con Tania el 8 a las 7pm*";
+  const pending = fromNumber ? getConversation(fromNumber) : null;
+  const baseText =
+    pending?.state === "menu_reminder_title" && pending.data?.draft
+      ? `${pending.data.draft} ${text}`.trim()
+      : text;
+
+  const parsed = await resolveMentionedAssignee(baseText, await parseReminderFromText(baseText, user));
+  const missing = parsed && parsed.remindAt ? reminderMissingFields(baseText, parsed) : ["titulo", "hora"];
+
+  if (!parsed || !parsed.remindAt || missing.length > 0) {
+    if (fromNumber) setConversation(fromNumber, "menu_reminder_title", { draft: baseText });
+    return reminderQuestion(missing);
   }
 
   // Guard: si la fecha quedó muy en el pasado (probable error de la IA, ej. "9 de enero"
@@ -1261,14 +1317,14 @@ async function createReminderFromText(
   // ¿Para quién? Puede ser MÚLTIPLE (ej: "recordatorio de reunión Daniel y Diana")
   // → se crea un recordatorio para cada persona mencionada.
   let assignees: string[] = [];
-  const toMe = /(^|\s)(recu[ée]rdame|m[aá]ndame|av[íi]same|para\s+m[ií])(\s|$)/i.test(text);
+  const toMe = /(^|\s)(recu[ée]rdame|m[aá]ndame|av[íi]same|para\s+m[ií])(\s|$)/i.test(baseText);
   if (toMe) {
     assignees = [user.id];
   } else {
     const roster = await prisma.user.findMany({ where: { active: true }, select: { id: true, name: true } });
     const mentioned = roster.filter((u) => {
       const firstName = u.name.split(" ")[0].toLowerCase();
-      return new RegExp(`\\b${firstName}\\b`, "i").test(text);
+      return new RegExp(`\\b${firstName}\\b`, "i").test(baseText);
     });
     if (mentioned.length > 0) {
       assignees = mentioned.map((u) => u.id);
@@ -1296,6 +1352,7 @@ async function createReminderFromText(
     await prisma.user.findMany({ where: { id: { in: assignees } }, select: { name: true } })
   ).map((u) => u.name);
   const who = assignees.length > 1 ? names.join(", ") : names[0] || "ti";
+  if (fromNumber) conversations.delete(fromNumber);
 
   const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
 
@@ -1947,7 +2004,7 @@ async function handleCommand(
       /\b(ponme|pon|manda|mandame|env[íi]a|env[íi]ame)\s+(una|un)\s+(alerta|aviso|recordatorio|mensaje)\b/i.test(cmd)) &&
       !/\b(masivo|a los que no han completado|a todos)\b/.test(cmd)) {
     // Crea SOLO el recordatorio (sin tarea 🔔, sin aviso inmediato)
-    return await createReminderFromText(cmd, user);
+    return await createReminderFromText(cmd, user, fromNumber);
   }
 
   if (cmd === "eventos") {
@@ -2425,6 +2482,12 @@ async function handleConversationStep(
   const cmdLower = text.toLowerCase().trim();
   const isBareNumber = /^\d+$/.test(cmdLower);
 
+  // Cancelar cualquier flujo en curso.
+  if (/^(cancelar|cancela|cancel|olvidalo|olvídalo|salir|menu)$/i.test(cmdLower)) {
+    conversations.delete(fromNumber);
+    return "Listo, cancelado. ¿En qué más te ayudo?";
+  }
+
   if (conv.state === "waiting_postpone" && isBareNumber) {
     conversations.delete(fromNumber);
     const postponeText = "posponer " + text;
@@ -2612,9 +2675,13 @@ async function handleConversationStep(
 
   // ── Wizard: Recordatorio (botón ⏰) ──────────────────────────────
   if (conv.state === "menu_reminder_title") {
-    const parsed = await parseReminderFromText(text, user);
-    if (!parsed || !parsed.remindAt) {
-      return "🤔 No pude leer el día y la hora. Escribilo de nuevo con día y hora.\nEj: *llamar al proveedor mañana 9am*";
+    const combined = `${conv.data?.draft || ""} ${text}`.trim();
+    const parsed = await resolveMentionedAssignee(combined, await parseReminderFromText(combined, user));
+    const missing = parsed && parsed.remindAt ? reminderMissingFields(combined, parsed) : ["titulo", "hora"];
+
+    if (!parsed || !parsed.remindAt || missing.length > 0) {
+      setConversation(fromNumber, "menu_reminder_title", { draft: combined });
+      return reminderQuestion(missing);
     }
     // Guard: fecha muy en el pasado → corregir a hoy (misma hora)
     const nowW = new Date();

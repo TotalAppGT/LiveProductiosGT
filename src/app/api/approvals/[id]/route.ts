@@ -85,6 +85,34 @@ export async function PUT(
       if (req.inventoryItemId) {
         await prisma.inventoryItem.update({ where: { id: req.inventoryItemId }, data: { status: "PERDIDO" } });
       }
+
+      const responsibleId = body.responsibleId || req.responsibleId || req.requestedById;
+      const unitValue = Number(
+        body.unitValue !== undefined
+          ? body.unitValue
+          : req.unitValue !== null && req.unitValue !== undefined
+            ? req.unitValue
+            : req.inventoryItem?.unitValue ?? 0
+      );
+      const amount = unitValue * req.quantity;
+
+      const charge = await prisma.internalCharge.create({
+        data: {
+          orderId: req.orderId,
+          approvalRequestId: req.id,
+          inventoryItemId: req.inventoryItemId,
+          itemName: req.itemName,
+          quantity: req.quantity,
+          unitValue,
+          amount,
+          responsibleId,
+          reason: req.reason,
+          notes: req.notes,
+          photos: req.photos,
+          createdById: auth.payload.userId,
+        },
+      });
+
       await logBitacora({
         type: "PERDIDA",
         itemName: req.itemName,
@@ -92,9 +120,23 @@ export async function PUT(
         inventoryItemId: req.inventoryItemId,
         approvalRequestId: req.id,
         userId: auth.payload.userId,
-        notes: `Pérdida aprobada por ${actor?.name || "admin"}${req.reason ? ` — ${req.reason}` : ""}`,
+        notes: `Pérdida aprobada por ${actor?.name || "admin"}${req.reason ? ` — ${req.reason}` : ""} · cargo Q${amount.toFixed(2)}`,
         toStatus: "PERDIDO",
       });
+
+      if (charge) {
+        const responsible = await prisma.user.findUnique({ where: { id: responsibleId }, select: { name: true } });
+        await logBitacora({
+          type: "CARGO",
+          itemName: req.itemName,
+          quantity: req.quantity,
+          inventoryItemId: req.inventoryItemId,
+          approvalRequestId: req.id,
+          userId: auth.payload.userId,
+          notes: `Cargo a ${responsible?.name || "responsable"}: ${req.quantity} × Q${unitValue.toFixed(2)} = Q${amount.toFixed(2)}`,
+          metadata: { chargeId: charge.id },
+        });
+      }
     }
 
     if (req.type === "TALLER") {
@@ -237,6 +279,8 @@ export async function PUT(
         resolvedAt: new Date(),
         toWarehouse,
         notes,
+        unitValue: body.unitValue !== undefined ? Number(body.unitValue) : undefined,
+        responsibleId: body.responsibleId || undefined,
       },
     });
 

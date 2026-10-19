@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Package, Plus, Search, Check, Camera, Trash2, ClipboardList, ArrowRightLeft } from "lucide-react";
+import { Package, Plus, Search, Check, Camera, Trash2, ClipboardList, ArrowRightLeft, PackageCheck } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/Card";
@@ -17,7 +17,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   BORRADOR: "Borrador", PREPARANDO: "Preparando", LISTO: "Listo",
-  EN_EVENTO: "En evento", DEVUELTO: "Devuelto",
+  EN_EVENTO: "En evento", DEVUELTO: "Devuelto", POR_RECIBIR: "Por recibir",
 };
 
 export default function PedidosPage() {
@@ -333,6 +333,7 @@ export default function PedidosPage() {
                   <span className="font-bold text-blue-600">#{o.orderNumber}</span>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                     o.status === "LISTO" ? "bg-green-100 text-green-700" :
+                    o.status === "POR_RECIBIR" ? "bg-amber-100 text-amber-700" :
                     o.status === "DEVUELTO" ? "bg-gray-100 text-gray-600" :
                     o.status === "BORRADOR" ? "bg-yellow-100 text-yellow-700" :
                     "bg-blue-100 text-blue-700"
@@ -543,10 +544,32 @@ export default function PedidosPage() {
 }
 
 function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; onClose: () => void; token: string; onUpdated: () => void }) {
+  const { user } = useAuth();
   const [items, setItems] = useState<any[]>(order.items || []);
   const [uploading, setUploading] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<any>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
+  const [status, setStatus] = useState<string>(order.status);
+  const [users, setUsers] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [destination, setDestination] = useState("Bodega Cristo Rey");
+  const [receiving, setReceiving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [uRes, wRes] = await Promise.all([
+          fetch("/api/users/list", { headers: { Authorization: `Bearer ${token}` } }),
+          fetch("/api/warehouses", { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        const [uJson, wJson] = await Promise.all([uRes.json(), wRes.json()]);
+        if (Array.isArray(uJson)) setUsers(uJson);
+        if (wJson.success) setWarehouses(wJson.data || []);
+      } catch {
+        // silencioso
+      }
+    })();
+  }, [token]);
 
   const loadAnalysis = useCallback(async () => {
     setAnalysisLoading(true);
@@ -561,7 +584,11 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
     }
   }, [order.id, token]);
 
-  useEffect(() => { loadAnalysis(); }, [loadAnalysis]);
+  useEffect(() => {
+    loadAnalysis();
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadAnalysis]);
 
   async function downloadReport(format: "pdf" | "xlsx") {
     try {
@@ -584,7 +611,60 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
   async function refresh() {
     const res = await fetch(`/api/orders/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
     const json = await res.json();
-    if (json.success) setItems(json.data.items);
+    if (json.success) {
+      setItems(json.data.items);
+      if (json.data.status) setStatus(json.data.status);
+      const actaDest = json.data.reintegros?.[0]?.destinationWarehouse;
+      if (actaDest) setDestination(actaDest);
+    }
+  }
+
+  async function setResponsible(itemId: string, responsibleId: string) {
+    await fetch(`/api/order-items/${itemId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ responsibleId }),
+    });
+    refresh();
+  }
+
+  async function downloadLossReport(format: "pdf" | "xlsx") {
+    try {
+      const res = await fetch(`/api/orders/${order.id}/loss-report?format=${format}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { toast.error("Error al generar el reporte"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `reintegro-${order.orderNumber}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Error al descargar");
+    }
+  }
+
+  async function receiveOrder() {
+    if (!confirm("¿Confirmar que el cuadro fue recibido en la bodega destino?")) return;
+    setReceiving(true);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/receive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(json.message);
+        setStatus("DEVUELTO");
+        await refresh();
+        onUpdated();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al recibir");
+    } finally {
+      setReceiving(false);
+    }
   }
 
   async function uploadPhoto(itemId: string, type: "prepared" | "return") {
@@ -668,17 +748,28 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
   }
 
   async function processReturn() {
-    if (!confirm("¿Procesar devolución? Buen estado → inventario; vino malo → taller; no vino → pérdida. Taller y pérdida requieren aprobación de un admin.")) return;
+    if (!confirm("¿Procesar reintegro? Buen estado → por recibir en bodega; vino malo → taller; no vino → pérdida. Taller y pérdida requieren aprobación de un admin.")) return;
     const res = await fetch(`/api/orders/${order.id}/return`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ destinationWarehouse: destination }),
     });
     const json = await res.json();
-    if (json.success) { toast.success(json.message); refresh(); loadAnalysis(); onUpdated(); }
-    else toast.error(json.error || "Error");
+    if (json.success) {
+      toast.success(json.message);
+      setStatus(json.okItems > 0 ? "POR_RECIBIR" : "DEVUELTO");
+      await refresh();
+      loadAnalysis();
+      onUpdated();
+    } else toast.error(json.error || "Error");
   }
 
-  const isPreparing = order.status === "BORRADOR" || order.status === "PREPARANDO";
+  const isPreparing = status === "BORRADOR" || status === "PREPARANDO";
+  const isDone = status === "DEVUELTO";
+  const isPendingReception = status === "POR_RECIBIR";
+  const canChecklist = !isPreparing && !isDone && !isPendingReception;
+  const destWarehouse = warehouses.find((w: any) => w.name === destination);
+  const canReceive = user?.role === "ADMIN" || user?.role === "DUENO" || destWarehouse?.managerId === user?.id;
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
@@ -877,7 +968,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
         ) : null}
 
         {!editing && (<>
-        {!isPreparing && order.status !== "DEVUELTO" && (
+        {canChecklist && (
           <div className="flex items-center justify-between text-sm bg-gray-50 border rounded-lg px-3 py-2">
             <span className="text-gray-600">
               Checklist: {items.filter((i: any) => i.returnChecked && i.returnCondition).length} / {items.length}
@@ -904,7 +995,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
                   <Check className="w-4 h-4 inline" /> {item.preparedChecked ? "Preparado" : "Preparar"}
                 </button>
               )}
-              {!isPreparing && order.status !== "DEVUELTO" && (
+              {canChecklist && (
                 <button
                   onClick={() => toggleCheck(item.id, "return")}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
@@ -929,7 +1020,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
             )}
 
             {/* Fotos devolución */}
-            {!isPreparing && order.status !== "DEVUELTO" && (
+            {canChecklist && (
               <div className="mt-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <button onClick={() => uploadPhoto(item.id, "return")} className="text-xs bg-gray-100 px-2 py-1 rounded hover:bg-gray-200">
@@ -954,6 +1045,19 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
                     </button>
                   ))}
                 </div>
+                {item.returnCondition === "PERDIDO" && (
+                  <div className="mt-2">
+                    <label className="block text-xs text-gray-500 mb-1">Responsable del cargo</label>
+                    <select
+                      value={item.responsibleId || user?.id || ""}
+                      onChange={(e) => setResponsible(item.id, e.target.value)}
+                      className="w-full rounded-lg border px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Seleccionar...</option>
+                      {users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -964,13 +1068,44 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
             <Check className="w-4 h-4 mr-1" /> Cuadro Listo (compromete inventario en sus fechas)
           </Button>
         )}
-        {!isPreparing && order.status !== "DEVUELTO" && (
-          <Button onClick={processReturn} className="w-full">
-            <ArrowRightLeft className="w-4 h-4 mr-1" /> Procesar Devolución
-          </Button>
+        {canChecklist && (
+          <div className="space-y-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bodega destino del reintegro</label>
+              <select value={destination} onChange={(e) => setDestination(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
+                {(warehouses.length ? warehouses.map((w: any) => w.name) : ["Bodega Cristo Rey", "Casa Nómada"]).map((name: string) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={processReturn} className="w-full">
+              <ArrowRightLeft className="w-4 h-4 mr-1" /> Procesar reintegro
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => downloadLossReport("pdf")}>📄 Reporte del evento</Button>
+              <Button variant="outline" size="sm" onClick={() => downloadLossReport("xlsx")}>📊 Excel</Button>
+            </div>
+          </div>
         )}
-        {order.status === "DEVUELTO" && (
-          <p className="text-center text-sm text-green-600 font-medium">✅ Pedido devuelto y procesado</p>
+        {isPendingReception && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm space-y-2">
+            <p className="font-medium text-amber-800">Reintegro registrado. Pendiente de recepción en la bodega destino.</p>
+            <p className="text-xs text-amber-700">El encargado de la bodega debe confirmar que el cuadro llegó.</p>
+            {canReceive && (
+              <Button variant="success" onClick={receiveOrder} isLoading={receiving}>
+                <PackageCheck className="w-4 h-4 mr-1" /> Recibir cuadro
+              </Button>
+            )}
+          </div>
+        )}
+        {isDone && (
+          <div className="text-center text-sm text-green-600 font-medium space-y-2">
+            <p>✅ Cuadro reintegrado y recibido en bodega.</p>
+            <div className="flex gap-2 justify-center">
+              <Button variant="outline" size="sm" onClick={() => downloadLossReport("pdf")}>📄 Reporte del evento</Button>
+              <Button variant="outline" size="sm" onClick={() => downloadLossReport("xlsx")}>📊 Excel</Button>
+            </div>
+          </div>
         )}
         </>)}
       </div>

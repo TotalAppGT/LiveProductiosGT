@@ -14,7 +14,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { preparedPhotos, preparedChecked, returnPhotos, returnChecked, returnCondition, quantity, name, category } = body;
+    const { preparedPhotos, preparedChecked, returnPhotos, returnChecked, returnCondition, quantity, name, category, okQty, damagedQty, lostQty, unitValue, responsibleId, returnNotes } = body;
 
     const data: Record<string, unknown> = {};
     if (preparedPhotos !== undefined) data.preparedPhotos = preparedPhotos;
@@ -34,6 +34,12 @@ export async function PUT(
       }
     }
     if (returnCondition !== undefined) data.returnCondition = returnCondition;
+    if (okQty !== undefined) data.okQty = okQty;
+    if (damagedQty !== undefined) data.damagedQty = damagedQty;
+    if (lostQty !== undefined) data.lostQty = lostQty;
+    if (unitValue !== undefined) data.unitValue = unitValue;
+    if (responsibleId !== undefined) data.responsibleId = responsibleId || null;
+    if (returnNotes !== undefined) data.returnNotes = returnNotes;
     if (quantity !== undefined) data.quantity = quantity;
     if (name !== undefined) data.name = name;
     if (category !== undefined) data.category = category;

@@ -33,6 +33,7 @@ import {
   MapPin,
   ShoppingCart,
   ArrowRightLeft,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -133,6 +134,12 @@ const navItems: NavItem[] = [
     label: "Compras",
     href: "/compras",
     icon: ShoppingCart,
+  },
+  {
+    label: "Cargos internos",
+    href: "/cargos",
+    icon: Receipt,
+    roles: ["DUENO", "ADMIN", "JEFE"],
   },
   {
     label: "Vehículos",

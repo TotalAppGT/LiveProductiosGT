@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
       notes,
       serialNumber,
       photos,
+      unitValue,
     } = body;
 
     if (!name) {
@@ -117,6 +118,7 @@ export async function POST(request: NextRequest) {
         serialNumber: serialNumber || null,
         photos: Array.isArray(photos) ? photos : [],
         photoUpdatedAt: Array.isArray(photos) && photos.length ? new Date() : null,
+        unitValue: unitValue !== undefined && unitValue !== null && unitValue !== "" ? Number(unitValue) : null,
         lastCheckedAt: new Date(),
       },
       include: {

@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
         workshopItem: { select: { id: true, itemName: true, status: true, quantity: true } },
         requestedBy: { select: { id: true, name: true } },
         approvedBy: { select: { id: true, name: true } },
+        responsible: { select: { id: true, name: true } },
         order: { select: { id: true, orderNumber: true, eventName: true } },
       },
     });

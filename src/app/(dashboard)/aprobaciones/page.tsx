@@ -37,6 +37,9 @@ export default function AprobacionesPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [dest, setDest] = useState<Record<string, string>>({});
+  const [resp, setResp] = useState<Record<string, string>>({});
+  const [unit, setUnit] = useState<Record<string, string>>({});
+  const [users, setUsers] = useState<any[]>([]);
 
   const canApprove = user?.role === "ADMIN" || user?.role === "DUENO";
   const canView = canApprove || user?.role === "JEFE";
@@ -45,12 +48,16 @@ export default function AprobacionesPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/approvals", { headers: { Authorization: `Bearer ${token}` } });
-      const json = await res.json();
+      const [res, uRes] = await Promise.all([
+        fetch("/api/approvals", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/users/list", { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const [json, uJson] = await Promise.all([res.json(), uRes.json()]);
       if (json.success) {
         setItems(json.data || []);
         setPending(json.pending || 0);
       }
+      if (Array.isArray(uJson)) setUsers(uJson);
     } catch {
       toast.error("Error al cargar");
     } finally {
@@ -68,7 +75,13 @@ export default function AprobacionesPage() {
       const res = await fetch(`/api/approvals/${item.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action, notes, toWarehouse: dest[item.id] || item.toWarehouse || undefined }),
+        body: JSON.stringify({
+          action,
+          notes,
+          toWarehouse: dest[item.id] || item.toWarehouse || undefined,
+          responsibleId: resp[item.id] || item.responsibleId || undefined,
+          unitValue: unit[item.id] !== undefined ? Number(unit[item.id]) : undefined,
+        }),
       });
       const json = await res.json();
       if (json.success) {
@@ -159,6 +172,31 @@ export default function AprobacionesPage() {
                     >
                       {WAREHOUSES.map((w) => <option key={w} value={w}>{w}</option>)}
                     </select>
+                  )}
+                  {item.type === "PERDIDA" && (
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-gray-500">Responsable del cargo</label>
+                      <select
+                        value={resp[item.id] || item.responsibleId || ""}
+                        onChange={(e) => setResp((p) => ({ ...p, [item.id]: e.target.value }))}
+                        className="w-full rounded-lg border px-2 py-1.5 text-xs"
+                      >
+                        <option value="">Seleccionar...</option>
+                        {users.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                      <label className="text-[11px] text-gray-500">Valor unitario (Q)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={unit[item.id] ?? (item.unitValue ?? "")}
+                        onChange={(e) => setUnit((p) => ({ ...p, [item.id]: e.target.value }))}
+                        className="w-full rounded-lg border px-2 py-1.5 text-xs"
+                      />
+                      <p className="text-[11px] text-gray-500">
+                        Total: Q{((Number(unit[item.id] ?? item.unitValue ?? 0)) * item.quantity).toFixed(2)}
+                      </p>
+                    </div>
                   )}
                   <Button variant="success" onClick={() => resolve(item, "approve")} isLoading={busy === item.id}>
                     <CheckCircle2 className="w-4 h-4 mr-1" /> Aprobar

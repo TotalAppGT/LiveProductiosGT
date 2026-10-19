@@ -209,6 +209,11 @@ model User {
   bitacoraEntries    BitacoraEntry[]
   loansBorrowed      InventoryLoan[]     @relation("LoanBorrower")
   loansCreated       InventoryLoan[]     @relation("LoanCreator")
+  approvalsResponsible ApprovalRequest[] @relation("ApprovalResponsible")
+  reintegrosDelivered  OrderReintegro[]   @relation("ReintegroDelivered")
+  reintegrosReceived   OrderReintegro[]   @relation("ReintegroReceived")
+  chargesResponsible   InternalCharge[]   @relation("ChargeResponsible")
+  chargesCreated       InternalCharge[]   @relation("ChargeCreator")
   createdOrders     Order[]        @relation("OrderCreator")
   createdTemplates  OrderTemplate[] @relation("OrderTemplateCreator")
   vehicleLogs       VehicleLog[]   @relation("VehicleLogDriver")
@@ -317,6 +322,7 @@ model InventoryItem {
   section       String?
   category      InventoryCategory @default(OTRO)
   quantity      Int               @default(1)
+  unitValue     Decimal?          @db.Decimal(10, 2)
   assignedToId  String?
   status        InventoryStatus   @default(DISPONIBLE)
   location      String            @default("Bodega Cristo Rey")
@@ -336,6 +342,7 @@ model InventoryItem {
   approvals     ApprovalRequest[]
   bitacora      BitacoraEntry[]
   loans         InventoryLoan[]
+  charges       InternalCharge[]
 }
 
 model InventoryMovement {
@@ -383,6 +390,9 @@ model ApprovalRequest {
   toWarehouse     String?
   previousStatus  String?
   reason          String?
+  unitValue       Decimal?       @db.Decimal(10, 2)
+  responsibleId   String?
+  responsible     User?          @relation("ApprovalResponsible", fields: [responsibleId], references: [id])
   photos          String[]       @default([])
   payload         Json?
   requestedById   String
@@ -396,6 +406,7 @@ model ApprovalRequest {
 
   bitacora BitacoraEntry[]
   loans    InventoryLoan[]
+  charges  InternalCharge[]
 
   @@index([status])
   @@index([type])
@@ -456,6 +467,56 @@ model InventoryLoan {
 
   @@index([status])
   @@index([inventoryItemId])
+}
+
+model OrderReintegro {
+  id                   String   @id @default(cuid())
+  orderId              String
+  order                Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  destinationWarehouse String?
+  deliveredById        String?
+  deliveredBy          User?    @relation("ReintegroDelivered", fields: [deliveredById], references: [id])
+  receivedById         String?
+  receivedBy           User?    @relation("ReintegroReceived", fields: [receivedById], references: [id])
+  notes                String?  @db.Text
+  photos               String[] @default([])
+  okItems              Int      @default(0)
+  damagedItems         Int      @default(0)
+  lostItems            Int      @default(0)
+  totalValue           Decimal  @default(0) @db.Decimal(12, 2)
+  receivedAt           DateTime?
+  createdAt            DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model InternalCharge {
+  id                String           @id @default(cuid())
+  orderId           String?
+  order             Order?           @relation(fields: [orderId], references: [id])
+  approvalRequestId String?
+  approvalRequest   ApprovalRequest? @relation(fields: [approvalRequestId], references: [id])
+  inventoryItemId   String?
+  inventoryItem     InventoryItem?   @relation(fields: [inventoryItemId], references: [id])
+  itemName          String
+  quantity          Int              @default(1)
+  unitValue         Decimal          @default(0) @db.Decimal(10, 2)
+  amount            Decimal          @default(0) @db.Decimal(12, 2)
+  responsibleId     String
+  responsible       User             @relation("ChargeResponsible", fields: [responsibleId], references: [id])
+  status            String           @default("POR_COBRAR") // POR_COBRAR | COBRADO | EXONERADO
+  reason            String?
+  notes             String?          @db.Text
+  photos            String[]         @default([])
+  createdById       String
+  createdBy         User             @relation("ChargeCreator", fields: [createdById], references: [id])
+  paidAt            DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([status])
+  @@index([responsibleId])
+  @@index([orderId])
 }
 
 model Vehicle {
@@ -648,6 +709,8 @@ model Order {
   updatedAt     DateTime    @updatedAt
   approvalRequests ApprovalRequest[]
   bitacora         BitacoraEntry[]
+  reintegros       OrderReintegro[]
+  charges          InternalCharge[]
 
   @@unique([orderNumber])
 }
@@ -668,6 +731,12 @@ model OrderItem {
   returnedById    String?
   returnedAt      DateTime?
   returnCondition String?
+  okQty           Int?
+  damagedQty      Int?
+  lostQty         Int?
+  unitValue       Decimal?  @db.Decimal(10, 2)
+  responsibleId   String?
+  returnNotes     String?   @db.Text
   inventoryItemId String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
