@@ -224,7 +224,7 @@ export default function TareasPage() {
   const fetchPurchases = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch("/api/purchases?limit=100&scope=mine", {
+      const res = await fetch("/api/purchases?limit=100", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -239,7 +239,7 @@ export default function TareasPage() {
   const fetchReminders = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch("/api/reminders?status=PENDIENTE&limit=200&scope=mine", {
+      const res = await fetch("/api/reminders?status=PENDIENTE&limit=200", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -558,7 +558,7 @@ export default function TareasPage() {
   async function deleteAllReminders() {
     if (!confirm("¿Eliminar TODOS los recordatorios pendientes?")) return;
     try {
-      const res = await fetch("/api/reminders?scope=mine", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch("/api/reminders", { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
       if (json.success) {
         const ids = (json.data || []).map((r: any) => r.id);
