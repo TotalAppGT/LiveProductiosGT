@@ -93,6 +93,8 @@ enum InventoryStatus {
   EN_REPARACION
   PERDIDO
   DANADO
+  PENDIENTE
+  POR_RECIBIR
 }
 
 enum InventoryLocation {
@@ -201,6 +203,12 @@ model User {
   workshopCreated   WorkshopItem[]       @relation("WorkshopCreator")
   workshopDelivered WorkshopItem[]       @relation("WorkshopDeliverer")
   workshopReceived  WorkshopItem[]       @relation("WorkshopReceiver")
+  warehouses        Warehouse[]          @relation("WarehouseManager")
+  approvalsRequested ApprovalRequest[]   @relation("ApprovalRequester")
+  approvalsApproved  ApprovalRequest[]   @relation("ApprovalApprover")
+  bitacoraEntries    BitacoraEntry[]
+  loansBorrowed      InventoryLoan[]     @relation("LoanBorrower")
+  loansCreated       InventoryLoan[]     @relation("LoanCreator")
   createdOrders     Order[]        @relation("OrderCreator")
   createdTemplates  OrderTemplate[] @relation("OrderTemplateCreator")
   vehicleLogs       VehicleLog[]   @relation("VehicleLogDriver")
@@ -311,11 +319,13 @@ model InventoryItem {
   quantity      Int               @default(1)
   assignedToId  String?
   status        InventoryStatus   @default(DISPONIBLE)
-  location      String            @default("Bodega Elgin")
-  warehouse     String?           @default("Bodega Elgin")
+  location      String            @default("Bodega Cristo Rey")
+  warehouse     String?           @default("Bodega Cristo Rey")
   notes         String?
   lastCheckedAt DateTime?
   serialNumber  String?
+  photos        String[]          @default([])
+  photoUpdatedAt DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -323,6 +333,9 @@ model InventoryItem {
   attachments   FileAttachment[]
   movements     InventoryMovement[]
   workshopItems WorkshopItem[]
+  approvals     ApprovalRequest[]
+  bitacora      BitacoraEntry[]
+  loans         InventoryLoan[]
 }
 
 model InventoryMovement {
@@ -340,6 +353,109 @@ model InventoryMovement {
   inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id])
 
   @@index([createdAt])
+}
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  managerId String?
+  manager   User?    @relation("WarehouseManager", fields: [managerId], references: [id])
+  address   String?
+  notes     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ApprovalRequest {
+  id              String         @id @default(cuid())
+  type            String // PERDIDA | TALLER | REINTEGRO | DESCUENTO | TRASLADO
+  status          String         @default("PENDIENTE") // PENDIENTE | APROBADA | RECHAZADA
+  itemName        String
+  quantity        Int            @default(1)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  workshopItemId  String?
+  workshopItem    WorkshopItem?  @relation(fields: [workshopItemId], references: [id])
+  orderId         String?
+  order           Order?         @relation(fields: [orderId], references: [id])
+  fromWarehouse   String?
+  toWarehouse     String?
+  previousStatus  String?
+  reason          String?
+  photos          String[]       @default([])
+  payload         Json?
+  requestedById   String
+  requestedBy     User           @relation("ApprovalRequester", fields: [requestedById], references: [id])
+  approvedById    String?
+  approvedBy      User?          @relation("ApprovalApprover", fields: [approvedById], references: [id])
+  notes           String?        @db.Text
+  resolvedAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  bitacora BitacoraEntry[]
+  loans    InventoryLoan[]
+
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model BitacoraEntry {
+  id                String           @id @default(cuid())
+  type              String // ENTREGA_TALLER | RECEPCION_TALLER | PERDIDA | REINTEGRO | APROBACION | RECHAZO | TRASLADO | RECIBIDO | FOTO | DEVOLUCION | AJUSTE
+  itemName          String
+  quantity          Int              @default(0)
+  inventoryItemId   String?
+  inventoryItem     InventoryItem?   @relation(fields: [inventoryItemId], references: [id])
+  workshopItemId    String?
+  workshopItem      WorkshopItem?    @relation(fields: [workshopItemId], references: [id])
+  approvalRequestId String?
+  approvalRequest   ApprovalRequest? @relation(fields: [approvalRequestId], references: [id])
+  orderId           String?
+  order             Order?           @relation(fields: [orderId], references: [id])
+  fromWarehouse     String?
+  toWarehouse       String?
+  fromStatus        String?
+  toStatus          String?
+  userId            String?
+  user              User?            @relation(fields: [userId], references: [id])
+  notes             String?          @db.Text
+  photos            String[]         @default([])
+  metadata          Json?
+  createdAt         DateTime         @default(now())
+
+  @@index([createdAt])
+  @@index([type])
+}
+
+model InventoryLoan {
+  id                String           @id @default(cuid())
+  inventoryItemId   String
+  inventoryItem     InventoryItem    @relation(fields: [inventoryItemId], references: [id])
+  itemName          String
+  quantity          Int              @default(1)
+  borrowerName      String
+  borrowerId        String?
+  borrower          User?            @relation("LoanBorrower", fields: [borrowerId], references: [id])
+  loanedAt          DateTime         @default(now())
+  expectedReturn    DateTime?
+  returnedAt        DateTime?
+  status            String           @default("PRESTADO") // PRESTADO | DEVUELTO | PERDIDO | DANADO
+  condition         String?
+  photos            String[]         @default([])
+  returnPhotos      String[]         @default([])
+  notes             String?          @db.Text
+  createdById       String
+  createdBy         User             @relation("LoanCreator", fields: [createdById], references: [id])
+  approvalRequestId String?
+  approvalRequest   ApprovalRequest? @relation(fields: [approvalRequestId], references: [id])
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([status])
+  @@index([inventoryItemId])
 }
 
 model Vehicle {
@@ -416,6 +532,9 @@ model WorkshopItem {
   notes           String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+
+  approvalRequests ApprovalRequest[]
+  bitacora         BitacoraEntry[]
 
   @@index([status])
   @@index([inventoryItemId])
@@ -527,6 +646,8 @@ model Order {
   returnById    String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  approvalRequests ApprovalRequest[]
+  bitacora         BitacoraEntry[]
 
   @@unique([orderNumber])
 }

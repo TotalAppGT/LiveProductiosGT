@@ -108,6 +108,8 @@ export function inventoryStatusColor(status: string): BadgeColor {
     EN_REPARACION: "yellow",
     PERDIDO: "red",
     DANADO: "orange",
+    PENDIENTE: "purple" as BadgeColor,
+    POR_RECIBIR: "yellow",
   };
   return map[status] || "gray";
 }
@@ -170,6 +172,8 @@ export function inventoryStatusLabel(status: string): string {
     EN_REPARACION: "En reparación",
     PERDIDO: "Perdido",
     DANADO: "Dañado",
+    PENDIENTE: "Pendiente aprobación",
+    POR_RECIBIR: "Por recibir",
   };
   return map[status] || status;
 }

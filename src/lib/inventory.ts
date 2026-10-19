@@ -1,12 +1,13 @@
 import type { InventoryCategory } from "@prisma/client";
 
 // Bodegas / ubicaciones de logística.
-export const WAREHOUSES = ["Bodega Elgin", "Bodega PP", "En evento", "En renta", "Taller"];
+export const DEFAULT_WAREHOUSE = "Bodega Cristo Rey";
+export const WAREHOUSES = ["Bodega Cristo Rey", "Casa Nómada", "Taller", "En evento", "En renta"];
 
 // Ubicación de bodegas (coordenadas aproximadas, editables) para el mapa.
 export const WAREHOUSE_COORDS: Record<string, { lat: number; lng: number; address: string }> = {
-  "Bodega Elgin": { lat: 14.5569333, lng: -90.5287741, address: "16 avenida A 28-76 zona 13 Elgin, Guatemala" },
-  "Bodega PP": { lat: 14.5931719, lng: -90.4592617, address: "Carretera a Piedra Parada, Zona 16, Guatemala (editable)" },
+  "Bodega Cristo Rey": { lat: 14.5569333, lng: -90.5287741, address: "Bodega Cristo Rey (editable)" },
+  "Casa Nómada": { lat: 14.6349, lng: -90.5069, address: "Casa Nómada (editable)" },
 };
 
 // Secciones de inventario (agrupación fina, como en el Excel maestro).

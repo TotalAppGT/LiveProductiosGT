@@ -13,6 +13,8 @@ import {
   ChevronDown,
   ChevronUp,
   Upload,
+  Camera,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -39,10 +41,11 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const LOCATION_LABELS: Record<string, string> = {
-  BODEGA_ELGIN: "Bodega Elgin",
-  BODEGA_PP: "Bodega PP",
-  EN_EVENTO: "En Evento",
-  EN_RENTA: "En Renta",
+  "Bodega Cristo Rey": "Bodega Cristo Rey",
+  "Casa Nómada": "Casa Nómada",
+  "Taller": "Taller",
+  "En evento": "En evento",
+  "En renta": "En renta",
 };
 
 export default function InventarioPage() {
@@ -64,7 +67,7 @@ export default function InventarioPage() {
   const [importing, setImporting] = useState(false);
   const [showLogistics, setShowLogistics] = useState(false);
   const [movements, setMovements] = useState<any[]>([]);
-  const [mov, setMov] = useState({ inventoryItemId: "", type: "TRANSFERENCIA", fromWarehouse: "Bodega Elgin", toWarehouse: "Bodega PP", quantity: "", note: "" });
+  const [mov, setMov] = useState({ inventoryItemId: "", type: "TRANSFERENCIA", fromWarehouse: "Bodega Cristo Rey", toWarehouse: "Casa Nómada", quantity: "", note: "" });
   const [savingMov, setSavingMov] = useState(false);
   const [byWarehouse, setByWarehouse] = useState<any[]>([]);
   const [showAlign, setShowAlign] = useState(false);
@@ -82,6 +85,10 @@ export default function InventarioPage() {
   const [needsDays, setNeedsDays] = useState(30);
   const [needs, setNeeds] = useState<any[]>([]);
   const [needsLoading, setNeedsLoading] = useState(false);
+  const [receivingItem, setReceivingItem] = useState<InventoryItem | null>(null);
+  const [receiveNotes, setReceiveNotes] = useState("");
+  const [receivePhotos, setReceivePhotos] = useState<string[]>([]);
+  const [receiveSaving, setReceiveSaving] = useState(false);
   const [needsEdits, setNeedsEdits] = useState<Record<string, { action: string; comment: string }>>({});
   const [needsSaving, setNeedsSaving] = useState(false);
   const [needsWeeks, setNeedsWeeks] = useState<any[]>([]);
@@ -335,6 +342,47 @@ export default function InventarioPage() {
       }
     } catch {
       toast.error("Error al eliminar");
+    }
+  }
+
+  async function uploadReceivePhoto(files: FileList | null) {
+    if (!files) return;
+    const urls: string[] = [];
+    for (const file of Array.from(files)) {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/files/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const json = await res.json();
+      if (json.success) urls.push(json.data.fileUrl);
+    }
+    setReceivePhotos((prev) => [...prev, ...urls]);
+  }
+
+  async function receiveInWarehouse() {
+    if (!receivingItem) return;
+    setReceiveSaving(true);
+    try {
+      const res = await fetch("/api/inventory/receive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ inventoryItemId: receivingItem.id, notes: receiveNotes.trim() || null, photos: receivePhotos }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Recibido en bodega");
+        setReceivingItem(null);
+        setReceiveNotes("");
+        setReceivePhotos([]);
+        fetchItems();
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al recibir");
+    } finally {
+      setReceiveSaving(false);
     }
   }
 
@@ -681,6 +729,8 @@ export default function InventarioPage() {
             <option value="EN_REPARACION">En Reparación</option>
             <option value="DANADO">Dañado</option>
             <option value="PERDIDO">Perdido</option>
+            <option value="PENDIENTE">Pendiente aprobación</option>
+            <option value="POR_RECIBIR">Por recibir</option>
           </select>
           <select
             value={locationFilter}
@@ -755,6 +805,11 @@ export default function InventarioPage() {
                         {item.serialNumber && (
                           <p className="text-xs text-gray-400">SN: {item.serialNumber}</p>
                         )}
+                        {((item as any).photos?.length || 0) > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs text-blue-600 mt-0.5">
+                            <Camera className="h-3 w-3" /> {(item as any).photos.length} foto(s)
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -784,6 +839,11 @@ export default function InventarioPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {item.status === "POR_RECIBIR" && (
+                          <Button variant="success" size="sm" onClick={() => setReceivingItem(item)} title="Recibir en bodega">
+                            Recibir
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -857,6 +917,9 @@ export default function InventarioPage() {
                 </div>
               </div>
               <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                {item.status === "POR_RECIBIR" && (
+                  <Button variant="success" size="sm" onClick={() => setReceivingItem(item)}>Recibir</Button>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => setEditingItem(item)} title="Editar">
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -1303,6 +1366,41 @@ export default function InventarioPage() {
         </div>
       </Modal>
 
+      <Modal isOpen={!!receivingItem} onClose={() => setReceivingItem(null)} title="Recibir en bodega">
+        <div className="space-y-3 p-1">
+          <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm">
+            <strong>{receivingItem?.name}</strong> · Cant: {receivingItem?.quantity}
+            <p className="text-xs text-gray-600 mt-1">
+              Bodega: {receivingItem?.warehouse || "—"}. Al confirmar vuelve a <strong>Disponible</strong>.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notas de recepción</label>
+            <textarea value={receiveNotes} onChange={(e) => setReceiveNotes(e.target.value)} rows={2} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Estado, pruebas, observaciones..." />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Fotos de recepción</label>
+            <input type="file" accept="image/*" multiple onChange={(e) => uploadReceivePhoto(e.target.files)} className="text-sm" />
+            {receivePhotos.length > 0 && (
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {receivePhotos.map((p, i) => (
+                  <div key={i} className="relative">
+                    <img src={p} alt="recepción" className="w-16 h-16 object-cover rounded border" />
+                    <button type="button" onClick={() => setReceivePhotos((prev) => prev.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-white rounded-full border p-0.5">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setReceivingItem(null)}>Cancelar</Button>
+            <Button variant="success" onClick={receiveInWarehouse} isLoading={receiveSaving}>Recibir y dar de alta</Button>
+          </div>
+        </div>
+      </Modal>
+
       <InventoryFormModal
         isOpen={showAddModal || !!editingItem}
         onClose={() => {
@@ -1335,11 +1433,12 @@ function InventoryFormModal({
   const [category, setCategory] = useState(item?.category || "AUDIO");
   const [quantity, setQuantity] = useState(String(item?.quantity || 1));
   const [status, setStatus] = useState(item?.status || "DISPONIBLE");
-  const [location, setLocation] = useState(item?.location || "Bodega Elgin");
-  const [warehouse, setWarehouse] = useState(item?.warehouse || "Bodega Elgin");
+  const [location, setLocation] = useState(item?.location || "Bodega Cristo Rey");
+  const [warehouse, setWarehouse] = useState(item?.warehouse || "Bodega Cristo Rey");
   const [section, setSection] = useState(item?.section || "");
   const [serialNumber, setSerialNumber] = useState(item?.serialNumber || "");
   const [notes, setNotes] = useState(item?.notes || "");
+  const [photos, setPhotos] = useState<string[]>((item as any)?.photos || []);
   const [saving, setSaving] = useState(false);
 
   // Recarga los campos al abrir/editar (evita que el nombre se borre o quede el del ítem anterior).
@@ -1349,13 +1448,31 @@ function InventoryFormModal({
     setCategory(item?.category || "AUDIO");
     setQuantity(String(item?.quantity ?? 1));
     setStatus(item?.status || "DISPONIBLE");
-    setLocation(item?.location || "Bodega Elgin");
-    setWarehouse(item?.warehouse || "Bodega Elgin");
+    setLocation(item?.location || "Bodega Cristo Rey");
+    setWarehouse(item?.warehouse || "Bodega Cristo Rey");
     setSection(item?.section || "");
     setSerialNumber(item?.serialNumber || "");
     setNotes(item?.notes || "");
+    setPhotos((item as any)?.photos || []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, item]);
+
+  async function uploadPhoto(files: FileList | null) {
+    if (!files) return;
+    const urls: string[] = [];
+    for (const file of Array.from(files)) {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/files/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const json = await res.json();
+      if (json.success) urls.push(json.data.fileUrl);
+    }
+    setPhotos((prev) => [...prev, ...urls]);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1380,6 +1497,7 @@ function InventoryFormModal({
           section: section.trim() || undefined,
           serialNumber: serialNumber.trim() || undefined,
           notes: notes.trim() || undefined,
+          photos,
         }),
       });
       const json = await res.json();
@@ -1498,6 +1616,30 @@ function InventoryFormModal({
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 resize-none"
             rows={2}
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Fotos del estado
+          </label>
+          <input type="file" accept="image/*" multiple onChange={(e) => uploadPhoto(e.target.files)} className="text-sm" />
+          {photos.length > 0 && (
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {photos.map((p, i) => (
+                <div key={i} className="relative">
+                  <a href={p} target="_blank" rel="noreferrer">
+                    <img src={p} alt="estado" className="w-20 h-20 object-cover rounded border" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="absolute -top-1 -right-1 bg-white rounded-full border p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="ghost" onClick={onClose} type="button">Cancelar</Button>

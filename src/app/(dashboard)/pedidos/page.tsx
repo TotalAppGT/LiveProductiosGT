@@ -654,8 +654,21 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
     else toast.error(json.error || "Error");
   }
 
+  async function markAllGood() {
+    if (!confirm("¿Marcar todos los ítems como recibidos en buen estado?")) return;
+    for (const item of items as any[]) {
+      await fetch(`/api/order-items/${item.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ returnChecked: true, returnCondition: "BUENO" }),
+      });
+    }
+    toast.success("Todos marcados en buen estado");
+    refresh();
+  }
+
   async function processReturn() {
-    if (!confirm("¿Procesar devolución? Items buenos regresan a inventario, dañados/perdidos van a taller.")) return;
+    if (!confirm("¿Procesar devolución? Buen estado → inventario; vino malo → taller; no vino → pérdida. Taller y pérdida requieren aprobación de un admin.")) return;
     const res = await fetch(`/api/orders/${order.id}/return`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -864,6 +877,16 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
         ) : null}
 
         {!editing && (<>
+        {!isPreparing && order.status !== "DEVUELTO" && (
+          <div className="flex items-center justify-between text-sm bg-gray-50 border rounded-lg px-3 py-2">
+            <span className="text-gray-600">
+              Checklist: {items.filter((i: any) => i.returnChecked && i.returnCondition).length} / {items.length}
+            </span>
+            <button onClick={markAllGood} className="text-blue-600 text-xs font-medium hover:underline">
+              Marcar todos en buen estado
+            </button>
+          </div>
+        )}
         {items.map((item: any) => (
           <div key={item.id} className="border rounded-lg p-3">
             <div className="flex items-center justify-between">
@@ -927,7 +950,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
                           : "bg-gray-200 text-gray-700"
                       }`}
                     >
-                      {cond === "BUENO" ? "✅ Bueno" : cond === "DANADO" ? "🔧 Dañado" : "❌ Perdido"}
+                      {cond === "BUENO" ? "✅ Buen estado" : cond === "DANADO" ? "🔧 Vino malo" : "❌ No vino"}
                     </button>
                   ))}
                 </div>

@@ -12,7 +12,8 @@ import { Modal } from "@/components/ui/Modal";
 const STATUS_LABELS: Record<string, string> = {
   EN_REVISION: "En revisión",
   EN_REPARACION: "En reparación",
-  REPARADO: "Reparado",
+  REPARADO: "Reparado (esperando reintegro)",
+  POR_DESCARTAR: "Por descartar",
   DESCARTADO: "Descartado",
   DEVUELTO_A_BODEGA: "Devuelto a bodega",
 };
@@ -20,13 +21,14 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   EN_REVISION: "bg-yellow-100 text-yellow-700",
   EN_REPARACION: "bg-orange-100 text-orange-700",
-  REPARADO: "bg-green-100 text-green-700",
+  REPARADO: "bg-emerald-100 text-emerald-700",
+  POR_DESCARTAR: "bg-red-100 text-red-700",
   DESCARTADO: "bg-red-100 text-red-700",
   DEVUELTO_A_BODEGA: "bg-blue-100 text-blue-700",
 };
 
-const OPEN_STATUSES = ["EN_REVISION", "EN_REPARACION"];
-const CLOSED_STATUSES = ["REPARADO", "DEVUELTO_A_BODEGA", "DESCARTADO"];
+const OPEN_STATUSES = ["EN_REVISION", "EN_REPARACION", "REPARADO", "POR_DESCARTAR"];
+const CLOSED_STATUSES = ["DEVUELTO_A_BODEGA", "DESCARTADO"];
 
 function fmtDate(value?: string | null) {
   if (!value) return "—";
@@ -77,6 +79,8 @@ export default function TallerPage() {
   const [receiveItem, setReceiveItem] = useState<any>(null);
   const [receiveNotes, setReceiveNotes] = useState("");
   const [receptionPhotos, setReceptionPhotos] = useState<string[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [receiveWarehouse, setReceiveWarehouse] = useState("Bodega Cristo Rey");
 
   const isAdmin = user?.role === "DUENO" || user?.role === "ADMIN" || user?.role === "JEFE";
 
@@ -84,15 +88,17 @@ export default function TallerPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const [wRes, uRes, iRes] = await Promise.all([
+      const [woRes, uRes, iRes, whRes] = await Promise.all([
         fetch("/api/workshop", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/users/list", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/inventory?status=DISPONIBLE&limit=500", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/warehouses", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
-      const [wJson, uJson, iJson] = await Promise.all([wRes.json(), uRes.json(), iRes.json()]);
-      if (wJson.success) setItems(wJson.data || []);
+      const [woJson, uJson, iJson, whJson] = await Promise.all([woRes.json(), uRes.json(), iRes.json(), whRes.json()]);
+      if (woJson.success) setItems(woJson.data || []);
       if (Array.isArray(uJson)) setUsers(uJson);
       if (iJson.success) setInventory(iJson.data || []);
+      if (whJson.success) setWarehouses(whJson.data || []);
     } catch {
       toast.error("Error al cargar");
     } finally {
@@ -188,6 +194,7 @@ export default function TallerPage() {
     setReceiveItem(item);
     setReceiveNotes("");
     setReceptionPhotos([]);
+    setReceiveWarehouse(item.inventoryItem?.warehouse || "Bodega Cristo Rey");
   }
 
   async function confirmReceive() {
@@ -197,6 +204,7 @@ export default function TallerPage() {
       const ok = await updateStatus(receiveItem, "REPARADO", {
         notes: receiveNotes.trim() ? `${receiveItem.notes || ""}${receiveItem.notes ? " · " : ""}Recepción: ${receiveNotes.trim()}` : receiveItem.notes,
         receptionPhotos,
+        toWarehouse: receiveWarehouse,
       });
       if (ok) setReceiveItem(null);
     } finally {
@@ -248,7 +256,7 @@ export default function TallerPage() {
         </Card>
         <Card className="p-3">
           <p className="text-xs text-gray-500">Recibidos (reparados)</p>
-          <p className="text-2xl font-bold text-green-600">{closedItems.filter((i: any) => i.status === "REPARADO" || i.status === "DEVUELTO_A_BODEGA").length}</p>
+          <p className="text-2xl font-bold text-green-600">{closedItems.filter((i: any) => i.status === "DEVUELTO_A_BODEGA").length}</p>
         </Card>
       </div>
 
@@ -266,6 +274,9 @@ export default function TallerPage() {
                   </span>
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{item.category}</span>
                   <span className="text-xs text-gray-500">Cant: {item.quantity}</span>
+                  {item.approvalRequests?.length > 0 && (
+                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">⏳ Pendiente: {item.approvalRequests[0].type}</span>
+                  )}
                 </div>
                 <h3 className="font-semibold mt-2 text-lg">{item.itemName}</h3>
                 {item.inventoryItem && (
@@ -295,12 +306,21 @@ export default function TallerPage() {
                     🔧 Empezar reparación
                   </button>
                 )}
-                <button onClick={() => openReceive(item)} className="px-3 py-3 rounded-lg text-sm font-bold bg-green-500 text-white hover:bg-green-600">
-                  ✅ Reparado → devolver
-                </button>
-                <button onClick={() => discard(item)} className="px-3 py-2 rounded-lg text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200">
-                  ❌ Descartar (baja)
-                </button>
+                {item.status === "EN_REPARACION" && (
+                  <button onClick={() => openReceive(item)} className="px-3 py-3 rounded-lg text-sm font-bold bg-green-500 text-white hover:bg-green-600">
+                    ✅ Reparado → solicitar reintegro
+                  </button>
+                )}
+                {(item.status === "EN_REVISION" || item.status === "EN_REPARACION") && (
+                  <button onClick={() => discard(item)} className="px-3 py-2 rounded-lg text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200">
+                    ❌ Descartar (baja)
+                  </button>
+                )}
+                {(item.status === "REPARADO" || item.status === "POR_DESCARTAR") && (
+                  <div className="px-3 py-2 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 text-center">
+                    ⏳ Esperando aprobación admin
+                  </div>
+                )}
                 {isAdmin && (
                   <button onClick={() => deleteItem(item)} className="px-3 py-2 rounded-lg text-xs text-gray-500 hover:bg-gray-100">
                     🗑 Cancelar
@@ -435,11 +455,19 @@ export default function TallerPage() {
         </div>
       </Modal>
 
-      <Modal isOpen={!!receiveItem} onClose={() => setReceiveItem(null)} title="Recepción de taller">
+      <Modal isOpen={!!receiveItem} onClose={() => setReceiveItem(null)} title="Solicitar reintegro a bodega">
         <div className="space-y-3 p-1">
           <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm">
             <strong>{receiveItem?.itemName}</strong> · Cant: {receiveItem?.quantity}
-            <p className="text-xs text-gray-600 mt-1">Al confirmar vuelve a <strong>Disponible</strong> en bodega y se registra la recepción.</p>
+            <p className="text-xs text-gray-600 mt-1">Se crea una solicitud de <strong>reintegro</strong>. Al aprobarla un admin, la bodega destino debe dar "Recibido".</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Bodega destino</label>
+            <select value={receiveWarehouse} onChange={(e) => setReceiveWarehouse(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm">
+              {(warehouses.length ? warehouses.map((w: any) => w.name) : ["Bodega Cristo Rey", "Casa Nómada"]).map((name: string) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notas de recepción</label>
@@ -464,7 +492,7 @@ export default function TallerPage() {
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => setReceiveItem(null)}>Cancelar</Button>
             <Button onClick={confirmReceive} isLoading={saving}>
-              <PackageCheck className="w-4 h-4 mr-1" /> Recibir y devolver a bodega
+              <PackageCheck className="w-4 h-4 mr-1" /> Solicitar reintegro
             </Button>
           </div>
         </div>

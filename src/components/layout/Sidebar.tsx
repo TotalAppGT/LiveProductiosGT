@@ -32,6 +32,7 @@ import {
   NotebookPen,
   MapPin,
   ShoppingCart,
+  ArrowRightLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -147,6 +148,22 @@ const navItems: NavItem[] = [
     label: "Taller",
     href: "/taller",
     icon: Wrench,
+  },
+  {
+    label: "Préstamos",
+    href: "/prestamos",
+    icon: ArrowRightLeft,
+  },
+  {
+    label: "Aprobaciones",
+    href: "/aprobaciones",
+    icon: ClipboardCheck,
+    roles: ["DUENO", "ADMIN", "JEFE"],
+  },
+  {
+    label: "Bitácora inventario",
+    href: "/bitacora-inventario",
+    icon: BookOpen,
   },
   {
     label: "Seguimiento",

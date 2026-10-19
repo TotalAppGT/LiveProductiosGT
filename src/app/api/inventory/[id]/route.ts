@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
+import { logBitacora } from "@/lib/bitacora";
 
 export async function GET(
   request: NextRequest,
@@ -81,6 +82,7 @@ export async function PUT(
       notes,
       serialNumber,
       lastCheckedAt,
+      photos,
     } = body;
 
     const previousStatus = existingItem.status;
@@ -99,6 +101,8 @@ export async function PUT(
         notes: notes !== undefined ? notes : undefined,
         serialNumber: serialNumber !== undefined ? serialNumber : undefined,
         lastCheckedAt: lastCheckedAt !== undefined ? (lastCheckedAt ? new Date(lastCheckedAt) : null) : undefined,
+        photos: photos !== undefined ? photos : undefined,
+        photoUpdatedAt: photos !== undefined ? new Date() : undefined,
       },
       include: {
         assignedTo: {
@@ -124,6 +128,18 @@ export async function PUT(
         details: `Item "${item.name}" actualizado${changes.length ? ` (${changes.join(", ")})` : ""}`,
       },
     });
+
+    if (Array.isArray(photos) && photos.length !== (existingItem.photos || []).length) {
+      await logBitacora({
+        type: "FOTO",
+        itemName: item.name,
+        quantity: item.quantity,
+        inventoryItemId: id,
+        userId: auth.payload.userId,
+        notes: `Fotos de estado actualizadas (${photos.length})`,
+        photos,
+      });
+    }
 
     return NextResponse.json(
       { success: true, data: item, message: "Item de inventario actualizado exitosamente" },

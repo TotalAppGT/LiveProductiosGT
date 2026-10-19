@@ -78,8 +78,8 @@ export default function MapaPage() {
         .addTo(markersRef.current).bindPopup(`<b>📍 ${p.name}</b><br>${p.address || ""}`);
     }
 
-    // Eventos (rojo) + ruta desde Bodega Elgin
-    const source = coords.find((c) => c.name === "Bodega Elgin") || coords[0];
+    // Eventos (rojo) + ruta desde Bodega Cristo Rey
+    const source = coords.find((c) => c.name === "Bodega Cristo Rey") || coords[0];
     const today = new Date(); today.setHours(0, 0, 0, 0);
     for (const o of orders) {
       const place = places.find((p) => norm(p.name) === norm(o.eventLocation) || (o.eventLocation && norm(p.name).includes(norm(o.eventLocation))));

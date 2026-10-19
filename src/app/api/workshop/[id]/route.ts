@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
+import { notifyApprovers } from "@/lib/approvals";
+import { logBitacora } from "@/lib/bitacora";
+import { DEFAULT_WAREHOUSE } from "@/lib/inventory";
 
-const CLOSED = ["REPARADO", "DESCARTADO", "DEVUELTO_A_BODEGA"];
+const OPEN_FOR_CANCEL = ["EN_REVISION", "EN_REPARACION", "REPARADO", "POR_DESCARTAR"];
 
 export async function PUT(
   request: NextRequest,
@@ -14,20 +17,110 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { status, diagnostic, assignedToId, notes, receivedById, receptionPhotos, deliveryPhotos } = body;
+    const { status, diagnostic, assignedToId, notes, receivedById, receptionPhotos, deliveryPhotos, toWarehouse } = body;
 
     const current = await prisma.workshopItem.findUnique({ where: { id } });
     if (!current) return NextResponse.json({ success: false, error: "Registro no encontrado" }, { status: 404 });
 
     const data: Record<string, unknown> = {};
-    if (status !== undefined) data.status = status;
     if (diagnostic !== undefined) data.diagnostic = diagnostic;
     if (assignedToId !== undefined) data.assignedToId = assignedToId || null;
     if (notes !== undefined) data.notes = notes;
     if (Array.isArray(deliveryPhotos)) data.deliveryPhotos = deliveryPhotos;
 
-    // RECEPCIÓN: reparado / devuelto a bodega → vuelve a DISPONIBLE
-    if (status === "REPARADO" || status === "DEVUELTO_A_BODEGA") {
+    // REPARADO → solicitud de REINTEGRO (admin elige/confirma bodega). NO vuelve aún.
+    if (status === "REPARADO") {
+      const destino = toWarehouse || DEFAULT_WAREHOUSE;
+      if (Array.isArray(receptionPhotos)) data.receptionPhotos = receptionPhotos;
+      data.diagnostic = diagnostic || current.diagnostic;
+      data.status = "REPARADO";
+
+      const req = await prisma.approvalRequest.create({
+        data: {
+          type: "REINTEGRO",
+          itemName: current.itemName,
+          quantity: current.quantity,
+          inventoryItemId: current.inventoryItemId,
+          workshopItemId: current.id,
+          fromWarehouse: "Taller",
+          toWarehouse: destino,
+          previousStatus: "EN_REPARACION",
+          reason: diagnostic || "Reparación completada",
+          notes: notes || null,
+          photos: Array.isArray(receptionPhotos) ? receptionPhotos : [],
+          requestedById: auth.payload.userId,
+        },
+      });
+
+      const requester = await prisma.user.findUnique({ where: { id: auth.payload.userId }, select: { name: true } });
+      await notifyApprovers({
+        type: "REINTEGRO",
+        itemName: current.itemName,
+        quantity: current.quantity,
+        requestedByName: requester?.name || "Usuario",
+        warehouse: destino,
+        notes: diagnostic || "Reparación completada",
+      });
+
+      await logBitacora({
+        type: "RECEPCION_TALLER",
+        itemName: current.itemName,
+        quantity: current.quantity,
+        inventoryItemId: current.inventoryItemId,
+        workshopItemId: current.id,
+        approvalRequestId: req.id,
+        userId: auth.payload.userId,
+        fromWarehouse: "Taller",
+        toWarehouse: destino,
+        notes: `Reparado — pendiente aprobación y recepción en ${destino}`,
+        photos: Array.isArray(receptionPhotos) ? receptionPhotos : [],
+        toStatus: "REPARADO",
+      });
+
+      const updated = await prisma.workshopItem.update({ where: { id }, data });
+      return NextResponse.json({ success: true, data: updated, message: `Reparado. Solicitud enviada para reintegro a ${destino}.` });
+    }
+
+    // DESCARTAR → solicitud de DESCUENTO (admin).
+    if (status === "DESCARTADO") {
+      data.status = "POR_DESCARTAR";
+      const req = await prisma.approvalRequest.create({
+        data: {
+          type: "DESCUENTO",
+          itemName: current.itemName,
+          quantity: current.quantity,
+          inventoryItemId: current.inventoryItemId,
+          workshopItemId: current.id,
+          previousStatus: current.status,
+          reason: notes || diagnostic || "Descarte de taller",
+          requestedById: auth.payload.userId,
+        },
+      });
+      const requester = await prisma.user.findUnique({ where: { id: auth.payload.userId }, select: { name: true } });
+      await notifyApprovers({
+        type: "DESCUENTO",
+        itemName: current.itemName,
+        quantity: current.quantity,
+        requestedByName: requester?.name || "Usuario",
+        notes: notes || "Descarte de taller",
+      });
+      await logBitacora({
+        type: "APROBACION",
+        itemName: current.itemName,
+        quantity: current.quantity,
+        inventoryItemId: current.inventoryItemId,
+        workshopItemId: current.id,
+        approvalRequestId: req.id,
+        userId: auth.payload.userId,
+        notes: "Solicitud de descarte/baja",
+      });
+      const updated = await prisma.workshopItem.update({ where: { id }, data });
+      return NextResponse.json({ success: true, data: updated, message: "Solicitud de descarte enviada a aprobación." });
+    }
+
+    // Devuelto a bodega (compatibilidad / cierre directo).
+    if (status === "DEVUELTO_A_BODEGA") {
+      data.status = "DEVUELTO_A_BODEGA";
       data.completedAt = new Date();
       data.receptionAt = new Date();
       data.receivedById = receivedById || auth.payload.userId;
@@ -35,50 +128,42 @@ export async function PUT(
       if (current.inventoryItemId) {
         await prisma.inventoryItem.update({
           where: { id: current.inventoryItemId },
-          data: { status: "DISPONIBLE", location: "Bodega Elgin" },
+          data: { status: "DISPONIBLE", location: "Bodega Cristo Rey" },
         }).catch(() => {});
       }
     }
 
-    // DESCARTADO: baja definitiva (se marca perdido)
-    if (status === "DESCARTADO") {
-      data.completedAt = new Date();
+    if (status === "EN_REPARACION" || status === "EN_REVISION") {
+      data.status = status;
       if (current.inventoryItemId) {
         await prisma.inventoryItem.update({
           where: { id: current.inventoryItemId },
-          data: { status: "PERDIDO" },
+          data: { status: "EN_REPARACION", location: "Taller" },
         }).catch(() => {});
       }
     }
 
-    // En revisión / en reparación: el inventario sigue en taller
-    if ((status === "EN_REVISION" || status === "EN_REPARACION") && current.inventoryItemId) {
-      await prisma.inventoryItem.update({
-        where: { id: current.inventoryItemId },
-        data: { status: "EN_REPARACION", location: "Taller" },
-      }).catch(() => {});
-    }
-
+    if (status !== undefined && data.status === undefined) data.status = status;
     const item = await prisma.workshopItem.update({ where: { id }, data });
 
     if (status) {
-      const statusLabels: Record<string, string> = {
+      const labels: Record<string, string> = {
         EN_REVISION: "En revisión",
         EN_REPARACION: "En reparación",
-        REPARADO: "Reparado y devuelto a inventario",
-        DESCARTADO: "Descartado (baja)",
+        REPARADO: "Reparado",
+        DESCARTADO: "Descartado",
         DEVUELTO_A_BODEGA: "Devuelto a bodega",
       };
       const actor = await prisma.user.findUnique({ where: { id: auth.payload.userId }, select: { name: true } });
-      await prisma.activity.create({
-        data: {
-          userId: auth.payload.userId,
-          action: "TALLER_ACTUALIZAR",
-          resource: "WORKSHOP",
-          resourceId: id,
-          details: `${actor?.name || "Usuario"} cambió "${item.itemName}" a "${statusLabels[status] || status}"${diagnostic ? ` · Diagnóstico: ${diagnostic}` : ""}`,
-        },
-      }).catch(() => {});
+      await logBitacora({
+        type: status === "REPARADO" ? "RECEPCION_TALLER" : "AJUSTE",
+        itemName: item.itemName,
+        quantity: item.quantity,
+        inventoryItemId: item.inventoryItemId,
+        workshopItemId: item.id,
+        userId: auth.payload.userId,
+        notes: `${actor?.name || "Usuario"} cambió a "${labels[status] || status}"${diagnostic ? ` · ${diagnostic}` : ""}`,
+      });
     }
 
     return NextResponse.json({ success: true, data: item });
@@ -100,11 +185,10 @@ export async function DELETE(
     const item = await prisma.workshopItem.findUnique({ where: { id } });
     if (!item) return NextResponse.json({ success: false, error: "Registro no encontrado" }, { status: 404 });
 
-    // Si se cancela un ítem abierto, devolverlo a disponible
-    if (!CLOSED.includes(item.status) && item.inventoryItemId) {
+    if (OPEN_FOR_CANCEL.includes(item.status) && item.inventoryItemId) {
       await prisma.inventoryItem.update({
         where: { id: item.inventoryItemId },
-        data: { status: "DISPONIBLE", location: "Bodega Elgin" },
+        data: { status: "DISPONIBLE", location: "Bodega Cristo Rey" },
       }).catch(() => {});
     }
 

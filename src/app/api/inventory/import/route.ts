@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       section: it.section,
       category: it.category,
       quantity: it.quantity,
-      location: it.location || "Bodega Elgin",
+      location: it.location || "Bodega Cristo Rey",
       status: "DISPONIBLE" as const,
       serialNumber: it.serialNumber || null,
       notes: it.notes || null,

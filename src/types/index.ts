@@ -58,7 +58,9 @@ export type InventoryStatus =
   | 'ASIGNADO'
   | 'EN_REPARACION'
   | 'PERDIDO'
-  | 'DANADO';
+  | 'DANADO'
+  | 'PENDIENTE'
+  | 'POR_RECIBIR';
 
 export type InventoryLocation = string;
 

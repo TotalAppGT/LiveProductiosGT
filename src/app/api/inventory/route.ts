@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
       warehouse,
       notes,
       serialNumber,
+      photos,
     } = body;
 
     if (!name) {
@@ -110,10 +111,12 @@ export async function POST(request: NextRequest) {
         quantity: quantity || 1,
         assignedToId: assignedToId || null,
         status: status || "DISPONIBLE",
-        location: location || "Bodega Elgin",
-        warehouse: warehouse || "Bodega Elgin",
+        location: location || "Bodega Cristo Rey",
+        warehouse: warehouse || "Bodega Cristo Rey",
         notes: notes || null,
         serialNumber: serialNumber || null,
+        photos: Array.isArray(photos) ? photos : [],
+        photoUpdatedAt: Array.isArray(photos) && photos.length ? new Date() : null,
         lastCheckedAt: new Date(),
       },
       include: {
