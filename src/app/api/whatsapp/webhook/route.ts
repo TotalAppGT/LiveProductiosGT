@@ -1733,9 +1733,21 @@ async function handleCommand(
         dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
       }
     }
-    // 5.5) Sin vista de meses (solo por día o semana)
+    // 5.5) Día de la semana: "tareas del lunes", "tareas martes", "tareas el viernes"...
     else {
-      return "📅 Solo puedo consultar por *día* o por *semana*. Probá: *tareas mañana*, *tareas del lunes*, *tareas de la próxima semana*.";
+      const lower = cmd.toLowerCase();
+      for (const [name, idx] of Object.entries(dayMap)) {
+        if (lower.includes(name)) {
+          let delta = (idx - dayOfWeek + 7) % 7;
+          if (delta === 0) delta = 7; // si hoy es ese día, va a la próxima semana
+          const targetDate = new Date(today.getTime() + delta * 24 * 60 * 60 * 1000);
+          title = targetDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" });
+          dateFrom = new Date(targetDate);
+          dateTo = new Date(targetDate.getTime() + (23 * 60 + 59) * 60 * 1000 + 999);
+          queriedDay = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+          break;
+        }
+      }
     }
     // 6) Día específico de la semana (lunes, martes, etc.)
     if (!dateFrom && !dateTo) {
