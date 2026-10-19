@@ -982,8 +982,8 @@ export default function TareasPage() {
             if (mod.key === "PRE_EVENTO") {
               for (const sub of PRE_EVENTO_SUBLEVELS) {
                 const subTasks = fijas.filter((t) => sub.cats.includes(String(t.category)));
-                if (subTasks.length === 0) continue;
-                sections.push({ key: `${fKey}|s:${sub.key}`, label: sub.label, bg: "bg-blue-50 dark:bg-blue-900/30", level: 4, tasks: subTasks, insertCategory: sub.cats[sub.cats.length - 1], insertType: "FIJA" });
+                // Se muestran SIEMPRE (Esta/Próxima/3ra), aunque estén vacías.
+                sections.push({ key: `${fKey}|s:${sub.key}`, label: sub.label, bg: "bg-blue-50 dark:bg-blue-900/30", level: 4, tasks: subTasks, count: subTasks.length, insertCategory: sub.cats[sub.cats.length - 1], insertType: "FIJA" });
               }
             } else {
               sections[sections.length - 1].tasks = fijas;
@@ -1098,8 +1098,8 @@ export default function TareasPage() {
             // Sub-nivel temporal EXCLUSIVO de Pre Eventos · Fijas
             for (const sub of PRE_EVENTO_SUBLEVELS) {
               const subTasks = fijas.filter((t) => sub.cats.includes(String(t.category)));
-              if (subTasks.length === 0) continue;
-              sections.push({ key: `${fKey}|s:${sub.key}`, label: sub.label, bg: "bg-blue-50 dark:bg-blue-900/30", level: 4, tasks: subTasks, insertCategory: sub.cats[sub.cats.length - 1], insertType: "FIJA", insertDayOfWeek: dow });
+              // Se muestran SIEMPRE (Esta/Próxima/3ra), aunque estén vacías.
+              sections.push({ key: `${fKey}|s:${sub.key}`, label: sub.label, bg: "bg-blue-50 dark:bg-blue-900/30", level: 4, tasks: subTasks, count: subTasks.length, insertCategory: sub.cats[sub.cats.length - 1], insertType: "FIJA", insertDayOfWeek: dow });
             }
           } else {
             sections[sections.length - 1].tasks = fijas;

@@ -697,6 +697,26 @@ async function bihourlyReminder(hour: number) {
 }
 
 // Diario (8am): correr las tareas no cumplidas al día siguiente (lunes→martes→miércoles...)
+// Rotación semanal de Pre Eventos (cada lunes):
+//   3ra semana → Próxima semana → Esta semana.
+// El orden importa: primero Próxima→Esta y luego 3ra→Próxima (para no mover
+// dos veces la misma tarea en la misma corrida).
+async function rotatePreEventoWeeks() {
+  const w = getGuatemalaWallClock();
+  if (w.weekday !== 1) return; // solo lunes
+  const ACTIVE = ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"];
+  const toEsta = await prisma.task.updateMany({
+    where: { category: "PRE_EVENTO_PROXIMA_SEMANA", status: { in: ACTIVE as any } },
+    data: { category: "PRE_EVENTO_ESTA_SEMANA" as any },
+  });
+  const toProxima = await prisma.task.updateMany({
+    where: { category: "PRE_EVENTO_3RA_SEMANA", status: { in: ACTIVE as any } },
+    data: { category: "PRE_EVENTO_PROXIMA_SEMANA" as any },
+  });
+  console.log(`[Cron] Rotación Pre Eventos: ${toEsta.count} Próxima→Esta, ${toProxima.count} 3ra→Próxima`);
+  await logActivity("system", "CRON_PRE_EVENTO_ROTATE", `Rotación semanal: ${toEsta.count} Próxima→Esta, ${toProxima.count} 3ra→Próxima`);
+}
+
 async function dailyCarryOver() {
   try {
     const carried = await carryOverUncompletedTasks();
@@ -900,6 +920,7 @@ async function overdueMessage() {
 //  17:00  cierre de jornada (todos)  ·  domingo: cierre semanal
 // ============================================================
 const jobs: CronJob[] = [
+  { name: "preEventoRotate", schedule: { hour: 0, minute: 5 }, timezone: "America/Guatemala", handler: rotatePreEventoWeeks, catchUpUntilHour: 6 },
   { name: "weeklyClose", schedule: { hour: 17, minute: 0 }, timezone: "America/Guatemala", handler: weeklyClose, onlyOnSunday: true },
   { name: "taskMsg7", schedule: { hour: 7, minute: 0 }, timezone: "America/Guatemala", handler: () => scheduledTaskMessage(7), skipOnSunday: true, catchUpUntilHour: 11 },
   { name: "overdueMsg8", schedule: { hour: 8, minute: 0 }, timezone: "America/Guatemala", handler: overdueMessage, skipOnSunday: true, catchUpUntilHour: 12 },
