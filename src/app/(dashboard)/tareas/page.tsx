@@ -2629,43 +2629,44 @@ function CreateTaskModal({
           />
         </div>
         <p className="text-xs text-gray-400 -mt-2">Los minutos se redondean a múltiplos de 5. Si no pones hora, la tarea queda sin horario (solo fecha).</p>
-        {type === "FIJA" && (
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Frecuencia
-              </label>
-              <select
-                value={frequency}
-                onChange={(e) => setFrequency(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="DIARIA">Diaria</option>
-                <option value="SEMANAL">Semanal</option>
-                <option value="MENSUAL">Mensual</option>
-              </select>
-            </div>
-            {frequency === "SEMANAL" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Día de la semana
-                </label>
-                <select
-                  value={dayOfWeek}
-                  onChange={(e) => setDayOfWeek(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  <option value="LUNES">Lunes</option>
-                  <option value="MARTES">Martes</option>
-                  <option value="MIERCOLES">Miércoles</option>
-                  <option value="JUEVES">Jueves</option>
-                  <option value="VIERNES">Viernes</option>
-                  <option value="SABADO">Sábado</option>
-                </select>
-              </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Frecuencia
+            </label>
+            <select
+              value={frequency}
+              onChange={(e) => setFrequency(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            >
+              <option value="DIARIA">Diaria</option>
+              <option value="SEMANAL">Semanal</option>
+              <option value="MENSUAL">Mensual</option>
+            </select>
+            {type !== "FIJA" && (
+              <p className="text-[11px] text-gray-400 mt-1">Solo aplica a tareas Fijas.</p>
             )}
           </div>
-        )}
+          {frequency === "SEMANAL" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Día de la semana
+              </label>
+              <select
+                value={dayOfWeek}
+                onChange={(e) => setDayOfWeek(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="LUNES">Lunes</option>
+                <option value="MARTES">Martes</option>
+                <option value="MIERCOLES">Miércoles</option>
+                <option value="JUEVES">Jueves</option>
+                <option value="VIERNES">Viernes</option>
+                <option value="SABADO">Sábado</option>
+              </select>
+            </div>
+          )}
+        </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="ghost" onClick={onClose} type="button">
             Cancelar
@@ -2854,32 +2855,33 @@ function EditTaskModal({
           <Input label="Fecha" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           <Input label="Hora" type="time" step="300" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
         </div>
-        {type === "FIJA" && (
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frecuencia</label>
-              <select value={frequency} onChange={(e) => setFrequency(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                <option value="DIARIA">Diaria</option>
-                <option value="SEMANAL">Semanal</option>
-                <option value="MENSUAL">Mensual</option>
-              </select>
-            </div>
-            {frequency === "SEMANAL" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Día de la semana</label>
-                <select value={dayOfWeek} onChange={(e) => setDayOfWeek(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                  <option value="LUNES">Lunes</option>
-                  <option value="MARTES">Martes</option>
-                  <option value="MIERCOLES">Miércoles</option>
-                  <option value="JUEVES">Jueves</option>
-                  <option value="VIERNES">Viernes</option>
-                  <option value="SABADO">Sábado</option>
-                  <option value="DOMINGO">Domingo</option>
-                </select>
-              </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frecuencia</label>
+            <select value={frequency} onChange={(e) => setFrequency(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="DIARIA">Diaria</option>
+              <option value="SEMANAL">Semanal</option>
+              <option value="MENSUAL">Mensual</option>
+            </select>
+            {type !== "FIJA" && (
+              <p className="text-[11px] text-gray-400 mt-1">Solo aplica a tareas Fijas.</p>
             )}
           </div>
-        )}
+          {frequency === "SEMANAL" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Día de la semana</label>
+              <select value={dayOfWeek} onChange={(e) => setDayOfWeek(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <option value="LUNES">Lunes</option>
+                <option value="MARTES">Martes</option>
+                <option value="MIERCOLES">Miércoles</option>
+                <option value="JUEVES">Jueves</option>
+                <option value="VIERNES">Viernes</option>
+                <option value="SABADO">Sábado</option>
+                <option value="DOMINGO">Domingo</option>
+              </select>
+            </div>
+          )}
+        </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="ghost" onClick={onClose} type="button">Cancelar</Button>
           <Button variant="primary" type="submit" isLoading={saving}>Guardar Cambios</Button>
