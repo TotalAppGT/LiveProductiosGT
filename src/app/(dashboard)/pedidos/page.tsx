@@ -638,7 +638,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
     await fetch(`/api/order-items/${itemId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ returnCondition: condition }),
+      body: JSON.stringify({ returnCondition: condition, returnChecked: true }),
     });
     refresh();
   }

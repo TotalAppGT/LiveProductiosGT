@@ -158,7 +158,7 @@ export default function TallerPage() {
       });
       const json = await res.json();
       if (json.success) {
-        toast.success("Ítem entregado al taller");
+        toast.success(json.message || "Solicitud enviada a aprobación");
         setShowSend(false);
         resetSend();
         fetchData();
