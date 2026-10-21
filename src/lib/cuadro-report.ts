@@ -8,6 +8,8 @@ import { computeDemandAll, computeNeedsByWeek, type NeedItem, type NeedWeek } fr
 import { normName } from "@/lib/reconcile";
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+const actionLabel = (a: string) => a === "COMPRAR" ? "Comprar" : a === "RENTAR" ? "Alquilar" : a === "CONSULTAR" ? "Consultar" : (a || "—");
+const fmtDateOnly = (s: string) => s === "sin-fecha" ? "—" : new Date(`${s}T12:00:00`).toLocaleDateString("es-GT", { day: "2-digit", month: "short", year: "numeric" });
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "short", year: "numeric" }) : "—";
 // Día corto SIN convertir zona (las semanas ya vienen como medianoche local).
@@ -201,7 +203,7 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
     for (const a of aggregated) {
       const need = needByKey.get(normName(a.name));
       if (need && need.shortfall > 0) {
-        resumen.push({ name: need.name || a.name, qty: a.needed, action: need.action, shortfall: need.shortfall });
+        resumen.push({ name: need.name || a.name, qty: a.needed, action: actionLabel(need.action), shortfall: need.shortfall });
       }
       const key = need?.key || `name:${normName(a.name)}`;
       const cur: MatrixRow = matrix.get(key) || {
@@ -214,7 +216,7 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
         repair: need?.repair ?? 0,
         faltante: need?.shortfall ?? 0,
         saldo: (need?.supply ?? 0) - (need?.peak ?? 0),
-        action: need?.action ?? "—",
+        action: need ? actionLabel(need.action) : "—",
       };
       cur.perEvent[String(o.orderNumber)] = (cur.perEvent[String(o.orderNumber)] || 0) + a.needed;
       cur.total += a.needed;
@@ -403,16 +405,16 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
   doc.font("Helvetica-Bold").fontSize(10).fillColor(blue).text("POR EVENTO");
   const evCols: Col[] = [
     { w: 120, t: "Evento" }, { w: 50, t: "Fecha" }, { w: 75, t: "Lugar" },
-    { w: 35, t: "Inv.", align: "right" }, { w: 38, t: "Ítems", align: "right" },
+    { w: 35, t: "Inv.", align: "right" }, { w: 42, t: "Demanda", align: "right" },
     { w: 45, t: "Con falta", align: "right" }, { w: 45, t: "Comprar", align: "right" },
-    { w: 45, t: "Alquilar", align: "right" }, { w: 57, t: "Camión" },
+    { w: 45, t: "Alquilar", align: "right" }, { w: 53, t: "Camión" },
   ];
   drawTable(doc, evCols, report.events.map((e) => ([
     { v: `#${e.orderNumber} ${e.eventName}` },
     { v: fmtDate(e.eventDate) },
     { v: e.location || "—" },
     { v: String(e.guests ?? "—") },
-    { v: String(e.itemCount) },
+    { v: String(e.demand) },
     { v: String(e.faltantes), color: e.faltantes > 0 ? "#b91c1c" : "#222", bold: e.faltantes > 0 },
     { v: String(e.comprar), color: e.comprar > 0 ? "#b91c1c" : "#222", bold: e.comprar > 0 },
     { v: String(e.alquilar), color: e.alquilar > 0 ? "#c2410c" : "#222", bold: e.alquilar > 0 },
@@ -439,7 +441,7 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
       { w: 182, t: "Resumen" },
     ];
     drawTable(doc, dCols, report.dates.map((d) => [
-      { v: d.date === "sin-fecha" ? "—" : fmtDate(d.date) },
+      { v: fmtDateOnly(d.date) },
       { v: String(d.orders) },
       { v: String(d.demand) },
       { v: String(d.faltantes), color: d.faltantes > 0 ? "#b91c1c" : "#222", bold: d.faltantes > 0 },
@@ -464,7 +466,7 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
     doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text(`RENTA / COMPRA — SEMANA ${fmtDay(w.start)} al ${fmtDay(w.end)} (${w.items.length})`);
     const rcCols: Col[] = [{ w: 190, t: "Equipo" }, { w: 46, t: "Cant.", align: "right" }, { w: 58, t: "Disponible", align: "right" }, { w: 58, t: "Reparación", align: "right" }, { w: 48, t: "Faltan", align: "right" }, { w: 65, t: "Acción" }];
     drawTable(doc, rcCols, w.items.map((m) => ([
-      { v: m.name }, { v: String(m.peak) }, { v: String(m.supply) }, { v: String(m.repair) }, { v: String(m.shortfall), color: "#b91c1c", bold: true }, { v: m.action },
+      { v: m.name }, { v: String(m.peak) }, { v: String(m.supply) }, { v: String(m.repair) }, { v: String(m.shortfall), color: "#b91c1c", bold: true }, { v: actionLabel(m.action) },
     ])));
     doc.moveDown(0.4);
   }
@@ -537,9 +539,9 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
 
   // ---------- RESUMEN ----------
   const rs = wb.addWorksheet("Resumen", { properties: { defaultRowHeight: 18 } });
-  rs.columns = [11, 34, 14, 24, 10, 10, 12, 12, 12, 12, 26, 60].map((w) => ({ width: w }));
-  title(rs, 1, "REPORTE GENERAL DE CUADROS — Live Productions GT", 12);
-  rs.mergeCells("A2:L2");
+  rs.columns = [11, 34, 14, 24, 10, 10, 10, 11, 12, 12, 12, 26, 60].map((w) => ({ width: w }));
+  title(rs, 1, "REPORTE GENERAL DE CUADROS — Live Productions GT", 13);
+  rs.mergeCells("A2:M2");
   rs.getCell("A2").value = `Generado: ${new Date(report.generatedAt).toLocaleString("es-GT", { timeZone: "America/Guatemala" })}${report.rangeLabel ? ` · ${report.rangeLabel}` : ""}`;
   rs.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
   const kpis: [string, number][] = [
@@ -551,28 +553,28 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     const vc = rs.getCell(5, i + 1); vc.value = val; vc.font = { bold: true, size: 13 }; vc.fill = headFill("F3F4F6"); vc.border = border; vc.alignment = center;
   });
   const evHeader = 7;
-  rs.mergeCells(evHeader, 1, evHeader, 12);
-  rs.getCell(evHeader, 1).value = "POR EVENTO — COMPRAR / ALQUILAR";
+  rs.mergeCells(evHeader, 1, evHeader, 13);
+  rs.getCell(evHeader, 1).value = "POR EVENTO — DEMANDA, COMPRAR / ALQUILAR";
   rs.getCell(evHeader, 1).font = { bold: true, size: 11, color: { argb: "FF" + BRAND } };
   rs.getRow(evHeader).height = 20;
-  headerRow(rs, evHeader + 1, ["Cuadro", "Evento", "Fecha", "Lugar", "Invitados", "Ítems", "Faltantes", "Comprar", "Alquilar", "Cobertura %", "Camión", "Resumen (comprar / alquilar)"]);
+  headerRow(rs, evHeader + 1, ["Cuadro", "Evento", "Fecha", "Lugar", "Invitados", "Ítems", "Demanda (u)", "Ítems c/falta", "Comprar", "Alquilar", "Cobertura %", "Camión", "Resumen (comprar / alquilar)"]);
   let r = evHeader + 2;
   for (const e of report.events) {
     const vals: any[] = [
       `#${e.orderNumber}`, e.eventName, fmtDate(e.eventDate), e.location || "", e.guests || "",
-      e.itemCount, e.faltantes, e.comprar, e.alquilar, e.coverage, e.truck,
+      e.itemCount, e.demand, e.faltantes, e.comprar, e.alquilar, e.coverage, e.truck,
       e.resumen.map((x) => `${x.action}: ${x.name} (necesita ${x.qty}, faltan ${x.shortfall})`).join(" · "),
     ];
     vals.forEach((v, i) => {
       const c = rs.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
-      c.alignment = i === 11 ? { vertical: "middle", wrapText: true } : i >= 4 && i <= 9 ? center : { vertical: "middle", wrapText: true };
+      c.alignment = i === 12 ? { vertical: "middle", wrapText: true } : i >= 4 && i <= 10 ? center : { vertical: "middle", wrapText: true };
     });
-    if (e.faltantes > 0) rs.getCell(r, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-    if (e.comprar > 0) rs.getCell(r, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-    if (e.alquilar > 0) rs.getCell(r, 9).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
+    if (e.faltantes > 0) rs.getCell(r, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (e.comprar > 0) rs.getCell(r, 9).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (e.alquilar > 0) rs.getCell(r, 10).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
     r++;
   }
-  rs.autoFilter = { from: { row: evHeader + 1, column: 1 }, to: { row: r - 1, column: 12 } };
+  rs.autoFilter = { from: { row: evHeader + 1, column: 1 }, to: { row: r - 1, column: 13 } };
   rs.views = [{ state: "frozen", ySplit: evHeader + 1 }];
 
   // ---------- FALTANTES POR EVENTO / DÍA (FILTRABLE) ----------
@@ -624,7 +626,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   headerRow(df, 3, ["Fecha", "Eventos", "Demanda (u)", "Ítems con faltante", "Comprar", "Alquilar", "Resumen"]);
   let rd = 4;
   for (const d of report.dates) {
-    const vals: any[] = [d.date === "sin-fecha" ? "—" : fmtDate(d.date), d.orders, d.demand, d.faltantes, d.comprar, d.alquilar, d.resumen.map((x) => `${x.action}: ${x.name} (faltan ${x.shortfall})`).join(" · ")];
+    const vals: any[] = [fmtDateOnly(d.date), d.orders, d.demand, d.faltantes, d.comprar, d.alquilar, d.resumen.map((x) => `${x.action}: ${x.name} (faltan ${x.shortfall})`).join(" · ")];
     vals.forEach((v, i) => {
       const c = df.getCell(rd, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
       c.alignment = i >= 1 && i <= 5 ? center : { vertical: "middle", wrapText: true };
@@ -684,7 +686,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     headerRow(rc, r, rcLabels, "0F766E");
     r++;
     for (const m of consolidated) {
-      const vals: any[] = [m.name, m.section || "", m.peak, m.supply, m.repair, m.shortfall, m.action, (m.weeks || []).join(", ")];
+      const vals: any[] = [m.name, m.section || "", m.peak, m.supply, m.repair, m.shortfall, actionLabel(m.action), (m.weeks || []).join(", ")];
       vals.forEach((v, i) => { const c = rc.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 }; c.alignment = i >= 2 && i <= 6 ? center : { vertical: "middle", wrapText: true }; });
       rc.getCell(r, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
       r++;
@@ -698,7 +700,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     headerRow(rc, r, rcLabels);
     r++;
     for (const m of w.items) {
-      const vals: any[] = [m.name, m.section || "", m.peak, m.supply, m.repair, m.shortfall, m.action, m.events.map((e) => `#${e.orderNumber} ${e.eventName}`).join(", ")];
+      const vals: any[] = [m.name, m.section || "", m.peak, m.supply, m.repair, m.shortfall, actionLabel(m.action), m.events.map((e) => `#${e.orderNumber} ${e.eventName}`).join(", ")];
       vals.forEach((v, i) => { const c = rc.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 }; c.alignment = i >= 2 && i <= 6 ? center : { vertical: "middle", wrapText: true }; });
       rc.getCell(r, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
       r++;
