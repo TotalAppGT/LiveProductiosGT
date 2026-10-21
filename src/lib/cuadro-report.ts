@@ -51,7 +51,7 @@ export interface EventSummary {
   faltantes: number;
   comprar: number;
   alquilar: number;
-  resumen: { name: string; qty: number; action: string; shortfall: number }[];
+  resumen: { name: string; qty: number; action: string; shortfall: number; dayShortfall: number }[];
   coverage: number;
   truck: string;
 }
@@ -192,18 +192,40 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
   }
   const warehouseStock = Array.from(wmap.values()).sort((a, b) => b.units - a.units);
 
+  // Faltante por DÍA (para que al filtrar el Excel por fecha se vea el día real).
+  const ordersByDate = new Map<string, string[]>();
+  for (const o of orders) {
+    const dk = (o as any).eventDate ? new Date((o as any).eventDate).toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }) : "sin-fecha";
+    if (!ordersByDate.has(dk)) ordersByDate.set(dk, []);
+    ordersByDate.get(dk)!.push(o.id);
+  }
+  const dayNeeds = new Map<string, Map<string, NeedItem>>();
+  for (const [dk, dayOrderIds] of ordersByDate) {
+    const arr = await computeDemandAll("all", dayOrderIds);
+    dayNeeds.set(dk, new Map(arr.map((d) => [d.key, d])));
+  }
+
   const events: EventSummary[] = [];
   const matrix = new Map<string, MatrixRow>();
 
   for (const o of orders) {
     const aggregated = aggregate(o.items, byId, byName);
-    const resumen: { name: string; qty: number; action: string; shortfall: number }[] = [];
+    const resumen: { name: string; qty: number; action: string; shortfall: number; dayShortfall: number }[] = [];
     const demandTotal = aggregated.reduce((s, a) => s + a.needed, 0);
+    const dk = (o as any).eventDate ? new Date((o as any).eventDate).toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }) : "sin-fecha";
+    const dayMap = dayNeeds.get(dk);
 
     for (const a of aggregated) {
       const need = needByKey.get(normName(a.name));
       if (need && need.shortfall > 0) {
-        resumen.push({ name: need.name || a.name, qty: a.needed, action: actionLabel(need.action), shortfall: need.shortfall });
+        const dayNeed = dayMap?.get(normName(a.name));
+        resumen.push({
+          name: need.name || a.name,
+          qty: a.needed,
+          action: actionLabel(need.action),
+          shortfall: need.shortfall,
+          dayShortfall: dayNeed?.shortfall ?? 0,
+        });
       }
       const key = need?.key || `name:${normName(a.name)}`;
       const cur: MatrixRow = matrix.get(key) || {
@@ -579,12 +601,12 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
 
   // ---------- FALTANTES POR EVENTO / DÍA (FILTRABLE) ----------
   const fe = wb.addWorksheet("Faltantes por evento", { properties: { defaultRowHeight: 17 } });
-  fe.columns = [12, 34, 9, 36, 16, 10, 10, 11, 11, 11, 18].map((w) => ({ width: w }));
-  title(fe, 1, "FALTANTES POR EVENTO / DÍA — COMPRAR / ALQUILAR", 11);
-  fe.mergeCells("A2:K2");
-  fe.getCell("A2").value = "Filtrá por Fecha, Evento o Cuadro. 'Necesita' = cantidad del evento · 'Falta total' = faltante global del período.";
+  fe.columns = [12, 34, 9, 36, 16, 10, 10, 10, 11, 11, 11, 18].map((w) => ({ width: w }));
+  title(fe, 1, "FALTANTES POR EVENTO / DÍA — COMPRAR / ALQUILAR", 12);
+  fe.mergeCells("A2:L2");
+  fe.getCell("A2").value = "'Necesita' = cantidad del evento · 'Falta del día' = faltante de esa fecha · 'Falta total' = faltante del período seleccionado.";
   fe.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
-  headerRow(fe, 3, ["Fecha", "Evento", "Cuadro", "Equipo", "Sección", "Necesita", "Falta total", "Acción", "Disponible", "Reparación", "Semana"]);
+  headerRow(fe, 3, ["Fecha", "Evento", "Cuadro", "Equipo", "Sección", "Necesita", "Falta del día", "Falta total", "Acción", "Disponible", "Reparación", "Semana"]);
   const itemByName = new Map(report.items.map((m) => [m.name, m]));
   const weekLabelOf = (iso: string | null) => {
     if (!iso) return "";
@@ -601,19 +623,20 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     const week = weekLabelOf(e.eventDate);
     for (const rr of e.resumen || []) {
       const m = itemByName.get(rr.name);
-      const vals: any[] = [fmtDate(e.eventDate), e.eventName, `#${e.orderNumber}`, rr.name, m?.section || "", rr.qty, rr.shortfall, rr.action, m?.stock ?? 0, m?.repair ?? 0, week];
+      const vals: any[] = [fmtDate(e.eventDate), e.eventName, `#${e.orderNumber}`, rr.name, m?.section || "", rr.qty, rr.dayShortfall, rr.shortfall, rr.action, m?.stock ?? 0, m?.repair ?? 0, week];
       vals.forEach((v, i) => {
         const c = fe.getCell(rf, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
-        c.alignment = i >= 5 && i <= 9 ? center : { vertical: "middle", wrapText: true };
+        c.alignment = i >= 5 && i <= 10 ? center : { vertical: "middle", wrapText: true };
       });
       fe.getCell(rf, 6).font = { bold: true, size: 9 };
-      fe.getCell(rf, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-      if (rr.action === "Comprar") fe.getCell(rf, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-      if (rr.action === "Alquilar") fe.getCell(rf, 8).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
+      fe.getCell(rf, 7).font = { bold: true, color: { argb: rr.dayShortfall > 0 ? "FFB91C1C" : "FF15803D" }, size: 9 };
+      fe.getCell(rf, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      if (rr.action === "Comprar") fe.getCell(rf, 9).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      if (rr.action === "Alquilar") fe.getCell(rf, 9).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
       rf++;
     }
   }
-  fe.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rf - 1), column: 11 } };
+  fe.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rf - 1), column: 12 } };
   fe.views = [{ state: "frozen", ySplit: 3 }];
 
   // ---------- RESUMEN POR FECHA ----------

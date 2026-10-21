@@ -304,16 +304,16 @@ export default function PedidosPage() {
             className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-gray-900 dark:text-white"
             title="Fecha para el reporte por día o semana"
           />
-          <Button variant="outline" size="sm" onClick={() => downloadReport(`/api/orders/report?format=xlsx&date=${reportDate}`, `cuadros-${reportDate}.xlsx`)}>
+          <Button variant="outline" size="sm" onClick={() => downloadReport(`/api/orders/report?format=xlsx&date=${reportDate}&t=${Date.now()}`, `cuadros-${reportDate}.xlsx`)}>
             📊 Día
           </Button>
-          <Button variant="outline" size="sm" onClick={() => downloadReport(`/api/orders/report?format=pdf&date=${reportDate}`, `cuadros-${reportDate}.pdf`)}>
+          <Button variant="outline" size="sm" onClick={() => downloadReport(`/api/orders/report?format=pdf&date=${reportDate}&t=${Date.now()}`, `cuadros-${reportDate}.pdf`)}>
             📄 Día
           </Button>
-          <Button variant="outline" size="sm" onClick={() => { const w = weekRangeOf(reportDate); return downloadReport(`/api/orders/report?format=xlsx&from=${w.from}&to=${w.to}`, `cuadros-semana-${w.from}.xlsx`); }}>
+          <Button variant="outline" size="sm" onClick={() => { const w = weekRangeOf(reportDate); return downloadReport(`/api/orders/report?format=xlsx&from=${w.from}&to=${w.to}&t=${Date.now()}`, `cuadros-semana-${w.from}.xlsx`); }}>
             📊 Semana
           </Button>
-          <Button variant="outline" size="sm" onClick={() => { const w = weekRangeOf(reportDate); return downloadReport(`/api/orders/report?format=pdf&from=${w.from}&to=${w.to}`, `cuadros-semana-${w.from}.pdf`); }}>
+          <Button variant="outline" size="sm" onClick={() => { const w = weekRangeOf(reportDate); return downloadReport(`/api/orders/report?format=pdf&from=${w.from}&to=${w.to}&t=${Date.now()}`, `cuadros-semana-${w.from}.pdf`); }}>
             📄 Semana
           </Button>
           <Button variant="ghost" size="sm" onClick={() => downloadReport(`/api/orders/report?format=xlsx&t=${Date.now()}`, "reporte-general-cuadros.xlsx")}>
