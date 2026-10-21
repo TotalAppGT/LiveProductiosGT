@@ -29,16 +29,43 @@ function weekRangeOf(dateStr: string) {
   return { from, to };
 }
 
+function reportDateLabel(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("es-GT", {
+    timeZone: "UTC", weekday: "short", day: "2-digit", month: "short", year: "numeric",
+  });
+}
+
 export default function PedidosPage() {
   const { user, token } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [reportDate, setReportDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }));
+  const reportDateOptions = (() => {
+    const map = new Map<string, { date: string; count: number }>();
+    for (const o of orders) {
+      if (!o.eventDate) continue;
+      const d = new Date(o.eventDate).toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
+      const rec = map.get(d) || { date: d, count: 0 };
+      rec.count++;
+      map.set(d, rec);
+    }
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  })();
   const [templates, setTemplates] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+
+  // Si la fecha actual no tiene cuadros, usar la primera fecha con cuadros.
+  useEffect(() => {
+    if (reportDateOptions.length === 0) return;
+    if (!reportDateOptions.some((o) => o.date === reportDate)) {
+      setReportDate(reportDateOptions[0].date);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
 
   // Create form
   const [eventName, setEventName] = useState("");
@@ -155,7 +182,12 @@ export default function PedidosPage() {
     try {
       toast.loading("Generando reporte…", { id: "rep" });
       const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) { toast.error("Error al generar el reporte", { id: "rep" }); return; }
+      if (!res.ok) {
+        let msg = "Error al generar el reporte";
+        try { const j = await res.json(); msg = j.error || msg; } catch { /* sin JSON */ }
+        toast.error(msg, { id: "rep" });
+        return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -297,13 +329,28 @@ export default function PedidosPage() {
           <Package className="w-6 h-6" /> Cuadros de Evento
         </h1>
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="date"
-            value={reportDate}
-            onChange={(e) => setReportDate(e.target.value)}
-            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-gray-900 dark:text-white"
-            title="Fecha para el reporte por día o semana"
-          />
+          {reportDateOptions.length > 0 ? (
+            <select
+              value={reportDateOptions.some((o) => o.date === reportDate) ? reportDate : reportDateOptions[0].date}
+              onChange={(e) => setReportDate(e.target.value)}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-gray-900 dark:text-white"
+              title="Fecha del reporte (solo fechas con cuadros)"
+            >
+              {reportDateOptions.map((o) => (
+                <option key={o.date} value={o.date}>
+                  {reportDateLabel(o.date)} · {o.count} evento(s)
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="date"
+              value={reportDate}
+              onChange={(e) => setReportDate(e.target.value)}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-gray-900 dark:text-white"
+              title="Fecha del reporte"
+            />
+          )}
           <Button variant="outline" size="sm" onClick={() => downloadReport(`/api/orders/report?format=xlsx&date=${reportDate}&t=${Date.now()}`, `cuadros-${reportDate}.xlsx`)}>
             📊 Día
           </Button>
