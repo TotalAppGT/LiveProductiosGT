@@ -96,6 +96,7 @@ export interface GeneralReport {
   warehouseStock: { warehouse: string; items: number; units: number; available: number; repair: number }[];
   totals: { orders: number; items: number; demand: number; faltantes: number; comprar: number; alquilar: number };
   dates: { date: string; orders: number; demand: number; faltantes: number; comprar: number; alquilar: number; resumen: { name: string; shortfall: number; action: string }[] }[];
+  dateDetail: { date: string; name: string; section: string | null; need: number; supply: number; repair: number; shortfall: number; action: string; orders: string }[];
   weeks?: NeedWeek[];
   consolidated?: NeedItem[];
 }
@@ -217,14 +218,14 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
 
     for (const a of aggregated) {
       const need = needByKey.get(normName(a.name));
-      if (need && need.shortfall > 0) {
-        const dayNeed = dayMap?.get(normName(a.name));
+      const dayNeed = dayMap?.get(normName(a.name));
+      if (dayNeed && dayNeed.shortfall > 0) {
         resumen.push({
-          name: need.name || a.name,
+          name: dayNeed.name || a.name,
           qty: a.needed,
-          action: actionLabel(need.action),
-          shortfall: need.shortfall,
-          dayShortfall: dayNeed?.shortfall ?? 0,
+          action: actionLabel(dayNeed.action),
+          shortfall: dayNeed.shortfall,
+          dayShortfall: dayNeed.shortfall,
         });
       }
       const key = need?.key || `name:${normName(a.name)}`;
@@ -299,6 +300,26 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
     };
   }).sort((a, b) => a.date.localeCompare(b.date));
 
+  // Detalle por FECHA: suma de todos los cuadros de ese día, un ítem por fila.
+  const dateDetail: GeneralReport["dateDetail"] = [];
+  for (const dk of Array.from(ordersByDate.keys()).sort()) {
+    const needs = Array.from(dayNeeds.get(dk)?.values() || []);
+    for (const d of needs) {
+      dateDetail.push({
+        date: dk,
+        name: d.name,
+        section: d.section,
+        need: d.peak,
+        supply: d.supply,
+        repair: d.repair,
+        shortfall: d.shortfall,
+        action: d.shortfall > 0 ? actionLabel(d.action) : "—",
+        orders: Array.from(new Set(d.events.map((e) => `#${e.orderNumber}`))).join(", "),
+      });
+    }
+  }
+  dateDetail.sort((a, b) => a.date.localeCompare(b.date) || sectionRank(a.section) - sectionRank(b.section) || a.name.localeCompare(b.name));
+
   // Faltantes por semana + consolidado (una sola adquisición).
   let weeks: NeedWeek[] = [];
   let consolidated: NeedItem[] = [];
@@ -310,7 +331,7 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
     // si falla el cálculo por semana, el reporte general sigue funcionando
   }
 
-  return { kind: "general", generatedAt: new Date().toISOString(), events, items, faltantes, warehouseStock, totals, dates, weeks, consolidated };
+  return { kind: "general", generatedAt: new Date().toISOString(), events, items, faltantes, warehouseStock, totals, dates, dateDetail, weeks, consolidated };
 }
 
 // ================= PDF =================
@@ -599,45 +620,28 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   rs.autoFilter = { from: { row: evHeader + 1, column: 1 }, to: { row: r - 1, column: 13 } };
   rs.views = [{ state: "frozen", ySplit: evHeader + 1 }];
 
-  // ---------- FALTANTES POR EVENTO / DÍA (FILTRABLE) ----------
-  const fe = wb.addWorksheet("Faltantes por evento", { properties: { defaultRowHeight: 17 } });
-  fe.columns = [12, 34, 9, 36, 16, 10, 10, 10, 11, 11, 11, 18].map((w) => ({ width: w }));
-  title(fe, 1, "FALTANTES POR EVENTO / DÍA — COMPRAR / ALQUILAR", 12);
-  fe.mergeCells("A2:L2");
-  fe.getCell("A2").value = "'Necesita' = cantidad del evento · 'Falta del día' = faltante de esa fecha · 'Falta total' = faltante del período seleccionado.";
-  fe.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
-  headerRow(fe, 3, ["Fecha", "Evento", "Cuadro", "Equipo", "Sección", "Necesita", "Falta del día", "Falta total", "Acción", "Disponible", "Reparación", "Semana"]);
-  const itemByName = new Map(report.items.map((m) => [m.name, m]));
-  const weekLabelOf = (iso: string | null) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    const day = d.getDay() || 7;
-    const mon = new Date(d); mon.setDate(d.getDate() - (day - 1));
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    const f = (x: Date) => x.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "short" });
-    return `${f(mon)} al ${f(sun)}`;
-  };
-  const eventsSorted = [...report.events].sort((a, b) => String(a.eventDate || "").localeCompare(String(b.eventDate || "")));
-  let rf = 4;
-  for (const e of eventsSorted) {
-    const week = weekLabelOf(e.eventDate);
-    for (const rr of e.resumen || []) {
-      const m = itemByName.get(rr.name);
-      const vals: any[] = [fmtDate(e.eventDate), e.eventName, `#${e.orderNumber}`, rr.name, m?.section || "", rr.qty, rr.dayShortfall, rr.shortfall, rr.action, m?.stock ?? 0, m?.repair ?? 0, week];
-      vals.forEach((v, i) => {
-        const c = fe.getCell(rf, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
-        c.alignment = i >= 5 && i <= 10 ? center : { vertical: "middle", wrapText: true };
-      });
-      fe.getCell(rf, 6).font = { bold: true, size: 9 };
-      fe.getCell(rf, 7).font = { bold: true, color: { argb: rr.dayShortfall > 0 ? "FFB91C1C" : "FF15803D" }, size: 9 };
-      fe.getCell(rf, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-      if (rr.action === "Comprar") fe.getCell(rf, 9).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-      if (rr.action === "Alquilar") fe.getCell(rf, 9).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
-      rf++;
-    }
+  // ---------- NECESIDAD POR FECHA (un ítem por día, suma de cuadros) ----------
+  const nf = wb.addWorksheet("Necesidad por fecha", { properties: { defaultRowHeight: 17 } });
+  nf.columns = [12, 38, 17, 10, 11, 11, 10, 12, 22].map((w) => ({ width: w }));
+  title(nf, 1, "NECESIDAD POR FECHA — SUMA DE TODOS LOS CUADROS DEL DÍA", 9);
+  nf.mergeCells("A2:I2");
+  nf.getCell("A2").value = "Cada ítem aparece una sola vez por fecha, sumando todos los cuadros de ese día. Faltante = Necesito − Disponible. Para compra/alquiler consolidada ver Renta-Compra.";
+  nf.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
+  headerRow(nf, 3, ["Fecha", "Equipo", "Sección", "Necesito", "Disponible", "Reparación", "Faltante", "Acción", "Cuadros"]);
+  let rn = 4;
+  for (const d of report.dateDetail) {
+    const vals: any[] = [fmtDateOnly(d.date), d.name, d.section || "", d.need, d.supply, d.repair, d.shortfall, d.action, d.orders];
+    vals.forEach((v, i) => {
+      const c = nf.getCell(rn, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
+      c.alignment = i >= 3 && i <= 6 ? center : { vertical: "middle", wrapText: true };
+    });
+    if (d.shortfall > 0) nf.getCell(rn, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (d.action === "Comprar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (d.action === "Alquilar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
+    rn++;
   }
-  fe.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rf - 1), column: 12 } };
-  fe.views = [{ state: "frozen", ySplit: 3 }];
+  nf.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rn - 1), column: 9 } };
+  nf.views = [{ state: "frozen", ySplit: 3 }];
 
   // ---------- RESUMEN POR FECHA ----------
   const df = wb.addWorksheet("Por fecha", { properties: { defaultRowHeight: 18 } });
