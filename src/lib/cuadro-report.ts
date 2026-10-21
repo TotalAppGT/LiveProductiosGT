@@ -588,6 +588,22 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   const thin = { style: "thin" as const, color: { argb: "FFD1D5DB" } };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
   const center = { horizontal: "center" as const, vertical: "middle" as const, wrapText: true };
+  const greenFill = headFill("DCFCE7"); // Verde claro — Disponible
+  const orangeFill = headFill("FFE4D6"); // Naranja claro — Reparación
+  const medium = { style: "medium" as const, color: { argb: "FF94A3B8" } };
+  const tableBorder = (ws: any, startRow: number, endRow: number, startCol: number, endCol: number) => {
+    for (let rr = startRow; rr <= endRow; rr++) {
+      for (let cc = startCol; cc <= endCol; cc++) {
+        const c = ws.getCell(rr, cc);
+        c.border = {
+          top: rr === startRow ? medium : thin,
+          bottom: rr === endRow ? medium : thin,
+          left: cc === startCol ? medium : thin,
+          right: cc === endCol ? medium : thin,
+        };
+      }
+    }
+  };
   const headerRow = (ws: any, row: number, labels: string[], fill = BRAND) => {
     labels.forEach((t, i) => {
       const c = ws.getCell(row, i + 1);
@@ -649,6 +665,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   }
   rs.autoFilter = { from: { row: evHeader + 1, column: 1 }, to: { row: r - 1, column: 13 } };
   rs.views = [{ state: "frozen", ySplit: evHeader + 1 }];
+  tableBorder(rs, evHeader + 1, Math.max(evHeader + 1, r - 1), 1, 13);
 
   // ---------- NECESIDAD POR FECHA (un ítem por día, suma de cuadros) ----------
   const nf = wb.addWorksheet("Necesidad por fecha", { properties: { defaultRowHeight: 17 } });
@@ -665,6 +682,8 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       const c = nf.getCell(rn, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
       c.alignment = i >= 3 && i <= 6 ? center : { vertical: "middle", wrapText: true };
     });
+    nf.getCell(rn, 5).fill = greenFill;
+    nf.getCell(rn, 6).fill = orangeFill;
     if (d.shortfall > 0) nf.getCell(rn, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
     if (d.action === "Comprar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
     if (d.action === "Alquilar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
@@ -672,6 +691,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   }
   nf.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rn - 1), column: 9 } };
   nf.views = [{ state: "frozen", ySplit: 3 }];
+  tableBorder(nf, 3, Math.max(3, rn - 1), 1, 9);
 
   // ---------- RESUMEN POR FECHA ----------
   const df = wb.addWorksheet("Por fecha", { properties: { defaultRowHeight: 18 } });
@@ -693,6 +713,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   }
   df.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rd - 1), column: 7 } };
   df.views = [{ state: "frozen", ySplit: 3 }];
+  tableBorder(df, 3, Math.max(3, rd - 1), 1, 7);
 
   // ---------- RESUMEN DE EQUIPO ----------
   const re = wb.addWorksheet("Resumen de Equipo", { properties: { defaultRowHeight: 17 } });
@@ -720,10 +741,13 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       c.alignment = i >= 2 ? center : { vertical: "middle", wrapText: true };
     });
     if (m.faltante > 0) re.getCell(r, faltanteCol).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    re.getCell(r, report.events.length + 6).fill = orangeFill; // Reparación
+    re.getCell(r, report.events.length + 7).fill = greenFill; // Disponible
     r++;
   }
   re.autoFilter = { from: { row: 2, column: 1 }, to: { row: r - 1, column: re.columns.length } };
   re.views = [{ state: "frozen", ySplit: 2, xSplit: 2 }];
+  tableBorder(re, 2, Math.max(2, r - 1), 1, re.columns.length);
 
   // ---------- RENTA / COMPRA ----------
   const rc = wb.addWorksheet("Renta-Compra", { properties: { defaultRowHeight: 17 } });
@@ -746,6 +770,8 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       const vals: any[] = [m.name, m.section || "", m.peak, m.supply, m.repair, m.shortfall, actionLabel(m.action), (m.weeks || []).join(", ")];
       vals.forEach((v, i) => { const c = rc.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 }; c.alignment = i >= 2 && i <= 6 ? center : { vertical: "middle", wrapText: true }; });
       rc.getCell(r, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      rc.getCell(r, 4).fill = greenFill; // Disponible
+      rc.getCell(r, 5).fill = orangeFill; // Reparación
       r++;
     }
     r++;
@@ -760,6 +786,8 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       const vals: any[] = [m.name, m.section || "", m.peak, m.supply, m.repair, m.shortfall, actionLabel(m.action), m.events.map((e) => `#${e.orderNumber} ${e.eventName}`).join(", ")];
       vals.forEach((v, i) => { const c = rc.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 }; c.alignment = i >= 2 && i <= 6 ? center : { vertical: "middle", wrapText: true }; });
       rc.getCell(r, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      rc.getCell(r, 4).fill = greenFill; // Disponible
+      rc.getCell(r, 5).fill = orangeFill; // Reparación
       r++;
     }
     r++;
@@ -772,38 +800,40 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
 
   // ---------- PROYECCIÓN / SUGERENCIAS ----------
   const pr = wb.addWorksheet("Proyección", { properties: { defaultRowHeight: 18 } });
-  pr.columns = [42, 16, 9, 11, 10, 11, 28, 36, 22, 60].map((w) => ({ width: w }));
-  title(pr, 1, "PROYECCIÓN — QUÉ ALQUILAR / COMPRAR Y PARA QUÉ EVENTOS", 10);
-  pr.mergeCells("A2:J2");
+  pr.columns = [42, 16, 9, 11, 11, 10, 11, 28, 36, 22, 60].map((w) => ({ width: w }));
+  title(pr, 1, "PROYECCIÓN — QUÉ ALQUILAR / COMPRAR Y PARA QUÉ EVENTOS", 11);
+  pr.mergeCells("A2:K2");
   pr.getCell("A2").value = "Sugerencia dinámica: se adquiere el faltante del pico simultáneo (con montaje D-1) y se reutiliza en los demás eventos.";
   pr.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
-  headerRow(pr, 3, ["Equipo", "Sección", "Pico", "Disponible", "Te falta", "Acción", "Cubre el pico", "Te sirve para", "Semanas", "Sugerencia"]);
+  headerRow(pr, 3, ["Equipo", "Sección", "Pico", "Disponible", "Reparación", "Te falta", "Acción", "Cubre el pico", "Te sirve para", "Semanas", "Sugerencia"]);
   let rp = 4;
   for (const m of consolidated) {
     const accion = actionLabel(m.action);
     const peak = eventMini(m.peakEvents || []);
     const all = eventMini(m.events || []);
     const vals: any[] = [
-      m.name, m.section || "", m.peak, m.supply, m.shortfall, accion,
+      m.name, m.section || "", m.peak, m.supply, m.repair, m.shortfall, accion,
       peak || "—", all || "—", (m.weeks || []).join(", ") || "—",
       `${accion} ${m.shortfall} ${m.name}: cubre el pico (${peak || "—"}) y te sirve para ${all || "—"}.`,
     ];
     vals.forEach((v, i) => {
       const c = pr.getCell(rp, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
-      c.alignment = i >= 2 && i <= 5 ? center : { vertical: "middle", wrapText: true };
+      c.alignment = i >= 2 && i <= 6 ? center : { vertical: "middle", wrapText: true };
     });
-    pr.getCell(rp, 5).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-    if (accion === "Comprar") pr.getCell(rp, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-    if (accion === "Alquilar") pr.getCell(rp, 6).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
+    pr.getCell(rp, 4).fill = greenFill;
+    pr.getCell(rp, 5).fill = orangeFill;
+    pr.getCell(rp, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (accion === "Comprar") pr.getCell(rp, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (accion === "Alquilar") pr.getCell(rp, 7).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
     rp++;
   }
   if (consolidated.length === 0) {
-    pr.mergeCells(rp, 1, rp, 10);
+    pr.mergeCells(rp, 1, rp, 11);
     pr.getCell(rp, 1).value = "Sin faltantes con los cuadros seleccionados.";
     pr.getCell(rp, 1).font = { italic: true, size: 9, color: { argb: "FF15803D" } };
     rp++;
   } else {
-    pr.mergeCells(rp, 1, rp, 10);
+    pr.mergeCells(rp, 1, rp, 11);
     const total = pr.getCell(rp, 1);
     total.value = `TOTAL: ${report.totals.alquilarUnits} u a alquilar (${report.totals.alquilar} ítems) · ${report.totals.comprarUnits} u a comprar (${report.totals.comprar} ítems) · ${report.totals.consultarUnits} u a consultar`;
     total.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
@@ -812,8 +842,10 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     pr.getRow(rp).height = 20;
     rp++;
   }
-  pr.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rp - 2), column: 10 } };
+  pr.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rp - 2), column: 11 } };
   pr.views = [{ state: "frozen", ySplit: 3 }];
+  tableBorder(pr, 3, Math.max(3, rp - 2), 1, 11);
+  pr.getCell(rp - 1, 1).border = border;
 
   // ---------- STOCK POR BODEGA ----------
   const st = wb.addWorksheet("Stock por bodega", { properties: { defaultRowHeight: 18 } });
@@ -826,9 +858,12 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       const c = st.getCell(r, i + 1); c.value = v as any; c.border = border; c.font = { size: 9 };
       c.alignment = i >= 1 ? center : { vertical: "middle" };
     });
+    st.getCell(r, 4).fill = greenFill; // Disponibles
+    st.getCell(r, 5).fill = orangeFill; // En reparación
     r++;
   }
   st.autoFilter = { from: { row: 2, column: 1 }, to: { row: r - 1, column: 5 } };
+  tableBorder(st, 2, Math.max(2, r - 1), 1, 5);
 
   // ---------- DETALLE ----------
   const det = wb.addWorksheet("Detalle", { properties: { defaultRowHeight: 17 } });
@@ -846,11 +881,14 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
         const c = det.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
         c.alignment = i >= 5 ? center : { vertical: "middle", wrapText: true };
       });
+      det.getCell(r, 8).fill = orangeFill; // Reparación
+      det.getCell(r, 9).fill = greenFill; // Disponible
       r++;
     }
   }
   det.autoFilter = { from: { row: 2, column: 1 }, to: { row: r - 1, column: 9 } };
   det.views = [{ state: "frozen", ySplit: 2 }];
+  tableBorder(det, 2, Math.max(2, r - 1), 1, 9);
 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
