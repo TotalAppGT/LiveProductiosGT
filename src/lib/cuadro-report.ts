@@ -4,7 +4,8 @@ import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { recommendTruck } from "@/lib/inventory-availability";
 import { INVENTORY_SECTIONS } from "@/lib/inventory";
-import { computeNeedsByWeek, type NeedItem, type NeedWeek } from "@/lib/needs";
+import { computeDemandAll, computeNeedsByWeek, type NeedItem, type NeedWeek } from "@/lib/needs";
+import { normName } from "@/lib/reconcile";
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 const fmtDate = (iso: string | null) =>
@@ -44,10 +45,11 @@ export interface EventSummary {
   location: string | null;
   guests: number | null;
   itemCount: number;
+  demand: number;
   faltantes: number;
   comprar: number;
   alquilar: number;
-  resumen: { name: string; qty: number; action: string }[];
+  resumen: { name: string; qty: number; action: string; shortfall: number }[];
   coverage: number;
   truck: string;
 }
@@ -57,6 +59,7 @@ export interface MatrixRow {
   section: string | null;
   perEvent: Record<string, number>;
   total: number;
+  peak: number;
   stock: number;
   repair: number;
   faltante: number;
@@ -90,6 +93,7 @@ export interface GeneralReport {
   faltantes: MatrixRow[];
   warehouseStock: { warehouse: string; items: number; units: number; available: number; repair: number }[];
   totals: { orders: number; items: number; demand: number; faltantes: number; comprar: number; alquilar: number };
+  dates: { date: string; orders: number; demand: number; faltantes: number; comprar: number; alquilar: number; resumen: { name: string; shortfall: number; action: string }[] }[];
   weeks?: NeedWeek[];
   consolidated?: NeedItem[];
 }
@@ -169,6 +173,10 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
   if (orders.length === 0) return null;
   const { items: invItems, byId, byName } = await getInventoryIndex();
 
+  // Demanda real: pico simultáneo (considera montaje D-1) + inventario agregado.
+  const demandAll = await computeDemandAll("all", ids);
+  const needByKey = new Map(demandAll.map((d) => [d.key, d]));
+
   // Stock por bodega (de todo el inventario)
   const wmap = new Map<string, { warehouse: string; items: number; units: number; available: number; repair: number }>();
   for (const it of invItems) {
@@ -187,23 +195,32 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
 
   for (const o of orders) {
     const aggregated = aggregate(o.items, byId, byName);
-    let falt = 0;
-    const resumen: { name: string; qty: number; action: string }[] = [];
+    const resumen: { name: string; qty: number; action: string; shortfall: number }[] = [];
+    const demandTotal = aggregated.reduce((s, a) => s + a.needed, 0);
+
     for (const a of aggregated) {
-      const r = row(a.name, a.inv?.section ?? null, a.inv, a.needed);
-      if (r.faltante > 0) {
-        falt++;
-        resumen.push({ name: a.name, qty: r.faltante, action: r.action });
+      const need = needByKey.get(normName(a.name));
+      if (need && need.shortfall > 0) {
+        resumen.push({ name: need.name || a.name, qty: a.needed, action: need.action, shortfall: need.shortfall });
       }
-      const key = a.inv ? `id:${a.inv.id}` : `name:${norm(a.name)}`;
+      const key = need?.key || `name:${normName(a.name)}`;
       const cur: MatrixRow = matrix.get(key) || {
-        name: a.name, section: a.inv?.section ?? null, perEvent: {}, total: 0,
-        stock: r.stock, repair: r.repair, faltante: 0, saldo: 0, action: actionFor(a.inv?.section ?? null),
+        name: need?.name || a.name,
+        section: need?.section || a.inv?.section || null,
+        perEvent: {},
+        total: 0,
+        peak: need?.peak ?? 0,
+        stock: need?.supply ?? 0,
+        repair: need?.repair ?? 0,
+        faltante: need?.shortfall ?? 0,
+        saldo: (need?.supply ?? 0) - (need?.peak ?? 0),
+        action: need?.action ?? "—",
       };
       cur.perEvent[String(o.orderNumber)] = (cur.perEvent[String(o.orderNumber)] || 0) + a.needed;
       cur.total += a.needed;
       matrix.set(key, cur);
     }
+
     events.push({
       orderId: o.id,
       orderNumber: o.orderNumber,
@@ -212,22 +229,17 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
       location: (o as any).eventLocation ?? null,
       guests: (o as any).guestCount ?? null,
       itemCount: aggregated.length,
-      faltantes: falt,
+      demand: demandTotal,
+      faltantes: resumen.length,
       comprar: resumen.filter((x) => x.action === "Comprar").length,
       alquilar: resumen.filter((x) => x.action === "Alquilar").length,
       resumen,
-      coverage: aggregated.length ? Math.round(((aggregated.length - falt) / aggregated.length) * 100) : 100,
+      coverage: aggregated.length ? Math.round(((aggregated.length - resumen.length) / aggregated.length) * 100) : 100,
       truck: truckForEvent(aggregated),
     });
   }
 
   const items = Array.from(matrix.values())
-    .map((m) => {
-      const available = Math.max(0, m.stock - m.repair);
-      m.faltante = Math.max(0, m.total - available);
-      m.saldo = available - m.total;
-      return m;
-    })
     .sort((a, b) => sectionRank(a.section) - sectionRank(b.section) || a.name.localeCompare(b.name));
 
   const faltantes = items.filter((m) => m.faltante > 0);
@@ -240,6 +252,29 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
     alquilar: faltantes.filter((m) => m.action === "Alquilar").length,
   };
 
+  // Datos generales por fecha (eventos agrupados por día).
+  const dateMap = new Map<string, { date: string; orders: number; demand: number; resumen: Map<string, { name: string; shortfall: number; action: string }> }>();
+  for (const e of events) {
+    const dk = e.eventDate ? new Date(e.eventDate).toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }) : "sin-fecha";
+    const rec = dateMap.get(dk) || { date: dk, orders: 0, demand: 0, resumen: new Map() };
+    rec.orders++;
+    rec.demand += e.demand;
+    for (const r of e.resumen) rec.resumen.set(normName(r.name), { name: r.name, shortfall: r.shortfall, action: r.action });
+    dateMap.set(dk, rec);
+  }
+  const dates = Array.from(dateMap.values()).map((r) => {
+    const res = Array.from(r.resumen.values());
+    return {
+      date: r.date,
+      orders: r.orders,
+      demand: r.demand,
+      faltantes: res.length,
+      comprar: res.filter((x) => x.action === "Comprar").length,
+      alquilar: res.filter((x) => x.action === "Alquilar").length,
+      resumen: res,
+    };
+  }).sort((a, b) => a.date.localeCompare(b.date));
+
   // Faltantes por semana + consolidado (una sola adquisición).
   let weeks: NeedWeek[] = [];
   let consolidated: NeedItem[] = [];
@@ -251,7 +286,7 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
     // si falla el cálculo por semana, el reporte general sigue funcionando
   }
 
-  return { kind: "general", generatedAt: new Date().toISOString(), events, items, faltantes, warehouseStock, totals, weeks, consolidated };
+  return { kind: "general", generatedAt: new Date().toISOString(), events, items, faltantes, warehouseStock, totals, dates, weeks, consolidated };
 }
 
 // ================= PDF =================
@@ -369,8 +404,8 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
   const evCols: Col[] = [
     { w: 120, t: "Evento" }, { w: 50, t: "Fecha" }, { w: 75, t: "Lugar" },
     { w: 35, t: "Inv.", align: "right" }, { w: 38, t: "Ítems", align: "right" },
-    { w: 42, t: "Faltan", align: "right" }, { w: 45, t: "Comprar", align: "right" },
-    { w: 45, t: "Alquilar", align: "right" }, { w: 60, t: "Camión" },
+    { w: 45, t: "Con falta", align: "right" }, { w: 45, t: "Comprar", align: "right" },
+    { w: 45, t: "Alquilar", align: "right" }, { w: 57, t: "Camión" },
   ];
   drawTable(doc, evCols, report.events.map((e) => ([
     { v: `#${e.orderNumber} ${e.eventName}` },
@@ -390,9 +425,28 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
     doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text("RESUMEN POR EVENTO — COMPRAR / ALQUILAR");
     for (const e of conResumen) {
       doc.font("Helvetica-Bold").fontSize(9).fillColor("#111").text(`${e.eventName} — ${fmtDate(e.eventDate)} (${e.comprar} comprar · ${e.alquilar} alquilar)`);
-      doc.font("Helvetica").fontSize(8).fillColor("#374151").text(e.resumen.map((x) => `${x.action}: ${x.name} (${x.qty})`).join(" · "));
+      doc.font("Helvetica").fontSize(8).fillColor("#374151").text(e.resumen.map((x) => `${x.action}: ${x.name} (necesita ${x.qty}, faltan ${x.shortfall})`).join(" · "));
       doc.moveDown(0.2);
     }
+  }
+
+  if (report.dates?.length) {
+    doc.moveDown(0.5);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor(blue).text("RESUMEN POR FECHA");
+    const dCols: Col[] = [
+      { w: 70, t: "Fecha" }, { w: 45, t: "Eventos", align: "right" }, { w: 65, t: "Demanda", align: "right" },
+      { w: 60, t: "Con falta", align: "right" }, { w: 55, t: "Comprar", align: "right" }, { w: 55, t: "Alquilar", align: "right" },
+      { w: 182, t: "Resumen" },
+    ];
+    drawTable(doc, dCols, report.dates.map((d) => [
+      { v: d.date === "sin-fecha" ? "—" : fmtDate(d.date) },
+      { v: String(d.orders) },
+      { v: String(d.demand) },
+      { v: String(d.faltantes), color: d.faltantes > 0 ? "#b91c1c" : "#222", bold: d.faltantes > 0 },
+      { v: String(d.comprar) },
+      { v: String(d.alquilar) },
+      { v: (d.resumen || []).map((x) => `${x.action}: ${x.name} (faltan ${x.shortfall})`).join(" · ") || "—" },
+    ]));
   }
 
   const weeks = report.weeks || [];
@@ -507,7 +561,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     const vals: any[] = [
       `#${e.orderNumber}`, e.eventName, fmtDate(e.eventDate), e.location || "", e.guests || "",
       e.itemCount, e.faltantes, e.comprar, e.alquilar, e.coverage, e.truck,
-      e.resumen.map((x) => `${x.action}: ${x.name} (${x.qty})`).join(" · "),
+      e.resumen.map((x) => `${x.action}: ${x.name} (necesita ${x.qty}, faltan ${x.shortfall})`).join(" · "),
     ];
     vals.forEach((v, i) => {
       const c = rs.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
@@ -523,12 +577,12 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
 
   // ---------- FALTANTES POR EVENTO / DÍA (FILTRABLE) ----------
   const fe = wb.addWorksheet("Faltantes por evento", { properties: { defaultRowHeight: 17 } });
-  fe.columns = [12, 34, 9, 36, 16, 9, 11, 11, 11, 18].map((w) => ({ width: w }));
-  title(fe, 1, "FALTANTES POR EVENTO / DÍA — COMPRAR / ALQUILAR", 10);
-  fe.mergeCells("A2:J2");
-  fe.getCell("A2").value = "Usá las flechas del encabezado para filtrar por Fecha, Evento o Cuadro.";
+  fe.columns = [12, 34, 9, 36, 16, 10, 10, 11, 11, 11, 18].map((w) => ({ width: w }));
+  title(fe, 1, "FALTANTES POR EVENTO / DÍA — COMPRAR / ALQUILAR", 11);
+  fe.mergeCells("A2:K2");
+  fe.getCell("A2").value = "Filtrá por Fecha, Evento o Cuadro. 'Necesita' = cantidad del evento · 'Falta total' = faltante global del período.";
   fe.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
-  headerRow(fe, 3, ["Fecha", "Evento", "Cuadro", "Equipo", "Sección", "Faltan", "Acción", "Disponible", "Reparación", "Semana"]);
+  headerRow(fe, 3, ["Fecha", "Evento", "Cuadro", "Equipo", "Sección", "Necesita", "Falta total", "Acción", "Disponible", "Reparación", "Semana"]);
   const itemByName = new Map(report.items.map((m) => [m.name, m]));
   const weekLabelOf = (iso: string | null) => {
     if (!iso) return "";
@@ -545,27 +599,49 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     const week = weekLabelOf(e.eventDate);
     for (const rr of e.resumen || []) {
       const m = itemByName.get(rr.name);
-      const vals: any[] = [fmtDate(e.eventDate), e.eventName, `#${e.orderNumber}`, rr.name, m?.section || "", rr.qty, rr.action, m?.stock ?? 0, m?.repair ?? 0, week];
+      const vals: any[] = [fmtDate(e.eventDate), e.eventName, `#${e.orderNumber}`, rr.name, m?.section || "", rr.qty, rr.shortfall, rr.action, m?.stock ?? 0, m?.repair ?? 0, week];
       vals.forEach((v, i) => {
         const c = fe.getCell(rf, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
-        c.alignment = i >= 5 && i <= 8 ? center : { vertical: "middle", wrapText: true };
+        c.alignment = i >= 5 && i <= 9 ? center : { vertical: "middle", wrapText: true };
       });
-      fe.getCell(rf, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-      if (rr.action === "Comprar") fe.getCell(rf, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-      if (rr.action === "Alquilar") fe.getCell(rf, 7).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
+      fe.getCell(rf, 6).font = { bold: true, size: 9 };
+      fe.getCell(rf, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      if (rr.action === "Comprar") fe.getCell(rf, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      if (rr.action === "Alquilar") fe.getCell(rf, 8).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
       rf++;
     }
   }
-  fe.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rf - 1), column: 10 } };
+  fe.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rf - 1), column: 11 } };
   fe.views = [{ state: "frozen", ySplit: 3 }];
+
+  // ---------- RESUMEN POR FECHA ----------
+  const df = wb.addWorksheet("Por fecha", { properties: { defaultRowHeight: 18 } });
+  df.columns = [14, 10, 14, 14, 10, 10, 60].map((w) => ({ width: w }));
+  title(df, 1, "RESUMEN POR FECHA — DEMANDA Y COMPRAR / ALQUILAR", 7);
+  df.mergeCells("A2:G2");
+  df.getCell("A2").value = "Demanda = suma de los eventos del día · Con faltante = ítems que no cubre el inventario.";
+  df.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
+  headerRow(df, 3, ["Fecha", "Eventos", "Demanda (u)", "Ítems con faltante", "Comprar", "Alquilar", "Resumen"]);
+  let rd = 4;
+  for (const d of report.dates) {
+    const vals: any[] = [d.date === "sin-fecha" ? "—" : fmtDate(d.date), d.orders, d.demand, d.faltantes, d.comprar, d.alquilar, d.resumen.map((x) => `${x.action}: ${x.name} (faltan ${x.shortfall})`).join(" · ")];
+    vals.forEach((v, i) => {
+      const c = df.getCell(rd, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
+      c.alignment = i >= 1 && i <= 5 ? center : { vertical: "middle", wrapText: true };
+    });
+    if (d.faltantes > 0) df.getCell(rd, 4).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    rd++;
+  }
+  df.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rd - 1), column: 7 } };
+  df.views = [{ state: "frozen", ySplit: 3 }];
 
   // ---------- RESUMEN DE EQUIPO ----------
   const re = wb.addWorksheet("Resumen de Equipo", { properties: { defaultRowHeight: 17 } });
   const evCols = report.events.map((e) => `#${e.orderNumber}`);
-  re.columns = [{ width: 40 }, { width: 16 }, ...evCols.map(() => ({ width: 9 })), { width: 10 }, { width: 10 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 10 }, { width: 12 }, { width: 11 }];
+  re.columns = [{ width: 40 }, { width: 16 }, ...evCols.map(() => ({ width: 9 })), { width: 10 }, { width: 10 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 11 }, { width: 12 }, { width: 11 }];
   title(re, 1, "RESUMEN DE EQUIPO (por evento)", re.columns.length);
-  headerRow(re, 2, ["Equipo", "Sección", ...evCols, "Total", "Inventario", "Reparación", "Disponible", "Faltante", "Saldo", "Utilización %", "Acción"]);
-  const faltanteCol = report.events.length + 7;
+  headerRow(re, 2, ["Equipo", "Sección", ...evCols, "Total", "Pico", "Inventario", "Reparación", "Disponible", "Faltante", "Saldo", "Utilización %", "Acción"]);
+  const faltanteCol = report.events.length + 8;
   let lastSec = "";
   r = 3;
   for (const m of report.items) {
@@ -577,9 +653,9 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       re.getRow(r).height = 18;
       r++; lastSec = sec;
     }
-    const available = Math.max(0, m.stock - m.repair);
-    const utilization = m.stock > 0 ? Math.round((m.total / m.stock) * 100) : 0;
-    const vals: any[] = [m.name, sec, ...report.events.map((e) => m.perEvent[String(e.orderNumber)] || ""), m.total, m.stock, m.repair, available, m.faltante, m.saldo, `${utilization}%`, m.faltante > 0 ? m.action : "—"];
+    const available = m.stock;
+    const utilization = m.stock > 0 ? Math.round((m.peak / m.stock) * 100) : 0;
+    const vals: any[] = [m.name, sec, ...report.events.map((e) => m.perEvent[String(e.orderNumber)] || ""), m.total, m.peak, m.stock, m.repair, available, m.faltante, m.saldo, `${utilization}%`, m.faltante > 0 ? m.action : "—"];
     vals.forEach((v, i) => {
       const c = re.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
       c.alignment = i >= 2 ? center : { vertical: "middle", wrapText: true };

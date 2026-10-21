@@ -47,7 +47,11 @@ async function loadContext(days: number | "all", orderIds?: string[]) {
     prisma.order.findMany({
       where: {
         status: { not: "CANCELADO" },
-        eventDate: { not: null, gte: start, ...(windowEnd ? { lte: windowEnd } : {}) },
+        // Con cuadros seleccionados se incluyen TODOS (aunque sean fechas pasadas).
+        eventDate: {
+          not: null,
+          ...(orderIds && orderIds.length ? {} : { gte: start, ...(windowEnd ? { lte: windowEnd } : {}) }),
+        },
         ...(orderIds && orderIds.length ? { id: { in: orderIds } } : {}),
       },
       select: { orderNumber: true, eventName: true, eventDate: true, eventEndDate: true, items: { select: { name: true, category: true, quantity: true } } },
@@ -76,7 +80,8 @@ function computeForOrders(
   catMap: Map<string, string>,
   sectionMap: Map<string, string>,
   repairMap: Map<string, number>,
-  reviews: { itemKey: string; action: string; comment: string | null }[]
+  reviews: { itemKey: string; action: string; comment: string | null }[],
+  onlyShortfall = true
 ): NeedItem[] {
   type Rec = { key: string; name: string; category: string; intervals: { s: number; e: number; q: number }[]; events: NeedItem["events"] };
   const items = new Map<string, Rec>();
@@ -111,13 +116,14 @@ function computeForOrders(
     }
     const sup = supply.get(rec.key) || 0;
     const shortfall = Math.max(0, peak - sup);
-    if (shortfall <= 0) continue;
+    if (shortfall <= 0 && onlyShortfall) continue;
     const inInventory = supply.has(rec.key) || catMap.has(rec.key);
     const cat = String(rec.category || "OTRO").toUpperCase();
     let suggested: NeedItem["suggestedAction"] = "RENTAR";
     if (!inInventory) suggested = "CONSULTAR";
     else if (BUY_CATEGORIES.includes(cat)) suggested = "COMPRAR";
-    out.push({ key: rec.key, name: rec.name, category: rec.category, section: sectionMap.get(rec.key) || null, supply: sup, repair: repairMap.get(rec.key) || 0, peak, shortfall, peakDate: peakDay ? new Date(peakDay) : null, events: rec.events, suggestedAction: suggested, action: suggested, comment: "", reviewed: false });
+    const action = shortfall > 0 ? suggested : "—";
+    out.push({ key: rec.key, name: rec.name, category: rec.category, section: sectionMap.get(rec.key) || null, supply: sup, repair: repairMap.get(rec.key) || 0, peak, shortfall, peakDate: peakDay ? new Date(peakDay) : null, events: rec.events, suggestedAction: suggested, action, comment: "", reviewed: false });
   }
 
   const rv = new Map(reviews.map((r) => [r.itemKey, r]));
@@ -133,6 +139,13 @@ function computeForOrders(
 export async function computeNeeds(days: number | "all", orderIds?: string[]): Promise<{ days: number | "all"; items: NeedItem[] }> {
   const { orders, supply, catMap, sectionMap, repairMap, reviews } = await loadContext(days, orderIds);
   return { days, items: computeForOrders(orders, supply, catMap, sectionMap, repairMap, reviews) };
+}
+
+// Igual que computeNeeds pero incluye TODOS los ítems (aunque no falten), con
+// su pico simultáneo, inventario disponible y faltante. Útil para el reporte.
+export async function computeDemandAll(days: number | "all", orderIds?: string[]): Promise<NeedItem[]> {
+  const { orders, supply, catMap, sectionMap, repairMap, reviews } = await loadContext(days, orderIds);
+  return computeForOrders(orders, supply, catMap, sectionMap, repairMap, reviews, false);
 }
 
 function weekStartOf(d: Date): number {
