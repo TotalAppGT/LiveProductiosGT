@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
     if (!report) {
       return NextResponse.json({ success: false, error: "No hay cuadros para reportar" }, { status: 404 });
     }
+    report.rangeLabel = date ? `Día ${date}` : from ? `Del ${from} al ${to || from}` : "General";
 
     if (format === "pdf") {
       const buf = await reportPdf(report);

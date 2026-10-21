@@ -84,6 +84,7 @@ export interface CuadroReport {
 export interface GeneralReport {
   kind: "general";
   generatedAt: string;
+  rangeLabel?: string;
   events: EventSummary[];
   items: MatrixRow[];
   faltantes: MatrixRow[];
@@ -356,7 +357,7 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
 
   // GENERAL
   doc.moveDown(0.4);
-  doc.font("Helvetica-Bold").fontSize(14).fillColor("#111").text("Reporte general de cuadros");
+  doc.font("Helvetica-Bold").fontSize(14).fillColor("#111").text(`Reporte general de cuadros${report.rangeLabel ? ` — ${report.rangeLabel}` : ""}`);
   doc.moveDown(0.3);
   doc.font("Helvetica-Bold").fontSize(10).fillColor(blue).text("RESUMEN GENERAL");
   doc.font("Helvetica").fontSize(9).fillColor("#222");
@@ -485,7 +486,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   rs.columns = [11, 34, 14, 24, 10, 10, 12, 12, 12, 12, 26, 60].map((w) => ({ width: w }));
   title(rs, 1, "REPORTE GENERAL DE CUADROS — Live Productions GT", 12);
   rs.mergeCells("A2:L2");
-  rs.getCell("A2").value = `Generado: ${new Date(report.generatedAt).toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`;
+  rs.getCell("A2").value = `Generado: ${new Date(report.generatedAt).toLocaleString("es-GT", { timeZone: "America/Guatemala" })}${report.rangeLabel ? ` · ${report.rangeLabel}` : ""}`;
   rs.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
   const kpis: [string, number][] = [
     ["Cuadros", report.totals.orders], ["Ítems", report.totals.items], ["Demanda (u)", report.totals.demand],
@@ -519,6 +520,44 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   }
   rs.autoFilter = { from: { row: evHeader + 1, column: 1 }, to: { row: r - 1, column: 12 } };
   rs.views = [{ state: "frozen", ySplit: evHeader + 1 }];
+
+  // ---------- FALTANTES POR EVENTO / DÍA (FILTRABLE) ----------
+  const fe = wb.addWorksheet("Faltantes por evento", { properties: { defaultRowHeight: 17 } });
+  fe.columns = [12, 34, 9, 36, 16, 9, 11, 11, 11, 18].map((w) => ({ width: w }));
+  title(fe, 1, "FALTANTES POR EVENTO / DÍA — COMPRAR / ALQUILAR", 10);
+  fe.mergeCells("A2:J2");
+  fe.getCell("A2").value = "Usá las flechas del encabezado para filtrar por Fecha, Evento o Cuadro.";
+  fe.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
+  headerRow(fe, 3, ["Fecha", "Evento", "Cuadro", "Equipo", "Sección", "Faltan", "Acción", "Disponible", "Reparación", "Semana"]);
+  const itemByName = new Map(report.items.map((m) => [m.name, m]));
+  const weekLabelOf = (iso: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const day = d.getDay() || 7;
+    const mon = new Date(d); mon.setDate(d.getDate() - (day - 1));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const f = (x: Date) => x.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "short" });
+    return `${f(mon)} al ${f(sun)}`;
+  };
+  const eventsSorted = [...report.events].sort((a, b) => String(a.eventDate || "").localeCompare(String(b.eventDate || "")));
+  let rf = 4;
+  for (const e of eventsSorted) {
+    const week = weekLabelOf(e.eventDate);
+    for (const rr of e.resumen || []) {
+      const m = itemByName.get(rr.name);
+      const vals: any[] = [fmtDate(e.eventDate), e.eventName, `#${e.orderNumber}`, rr.name, m?.section || "", rr.qty, rr.action, m?.stock ?? 0, m?.repair ?? 0, week];
+      vals.forEach((v, i) => {
+        const c = fe.getCell(rf, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
+        c.alignment = i >= 5 && i <= 8 ? center : { vertical: "middle", wrapText: true };
+      });
+      fe.getCell(rf, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      if (rr.action === "Comprar") fe.getCell(rf, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+      if (rr.action === "Alquilar") fe.getCell(rf, 7).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
+      rf++;
+    }
+  }
+  fe.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rf - 1), column: 10 } };
+  fe.views = [{ state: "frozen", ySplit: 3 }];
 
   // ---------- RESUMEN DE EQUIPO ----------
   const re = wb.addWorksheet("Resumen de Equipo", { properties: { defaultRowHeight: 17 } });
