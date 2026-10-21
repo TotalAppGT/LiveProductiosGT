@@ -95,6 +95,12 @@ const navItems: NavItem[] = [
     icon: Calendar,
   },
   {
+    label: "Operaciones",
+    href: "/operaciones",
+    icon: CalendarClock,
+    roles: ["DUENO", "ADMIN", "JEFE"],
+  },
+  {
     label: "Ciclo de Eventos",
     href: "/ciclo-eventos",
     icon: CalendarClock,

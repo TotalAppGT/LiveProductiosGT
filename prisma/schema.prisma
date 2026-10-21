@@ -194,6 +194,7 @@ model User {
   remindersAssigned Reminder[]           @relation("ReminderAssignee")
   pushTokens        PushToken[]
   attendance        AttendanceRecord[]
+  staffProfile      StaffProfile?
   createdGroups     Group[]              @relation("GroupCreator")
   groupMemberships  GroupMember[]
   createdAlerts     ScheduledAlert[]     @relation("AlertCreator")
@@ -299,6 +300,11 @@ model Event {
   status        EventStatus @default(COTIZACION)
   serviceType   String?
   audioType     String?
+  montageAt     DateTime?
+  eventStartAt  DateTime?
+  eventEndAt    DateTime?
+  venue         String?
+  salon         String?
   plannerId     String?
   responsibleId String?
   notes         String?
@@ -314,6 +320,10 @@ model Event {
   whatsappMessages WhatsAppMessage[]
   attachments      FileAttachment[]
   incomeRecords    IncomeRecord[]
+  crewRequirements EventCrewRequirement[]
+  crewAssignments  EventCrewAssignment[]
+  eventVehicles    EventVehicle[]
+  musicianShows    MusicianShow[]
 }
 
 model InventoryItem {
@@ -528,6 +538,9 @@ model Vehicle {
   assignedToId       String?
   mileage            Int?
   fuelLevel          Int?
+  seats              Int?
+  cargoM3            Decimal?      @db.Decimal(10, 2)
+  cargoKg            Decimal?      @db.Decimal(10, 2)
   brand              String?
   model              String?
   year               Int?
@@ -546,6 +559,8 @@ model Vehicle {
   tenant             Tenant?              @relation(fields: [tenantId], references: [id])
   maintenanceRecords VehicleMaintenance[]
   vehicleLogs        VehicleLog[]
+  eventVehicles      EventVehicle[]
+  crewAssignments    EventCrewAssignment[] @relation("AssignmentVehicle")
 }
 
 model VehicleMaintenance {
@@ -791,6 +806,96 @@ model VehicleLogFuel {
   createdAt DateTime   @default(now())
 
   @@index([logId])
+}
+
+model StaffProfile {
+  id        String   @id @default(cuid())
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id])
+  name      String
+  phone     String?
+  roles     String[] @default([])
+  active    Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments EventCrewAssignment[]
+  shows       MusicianShow[]
+  driverTrips EventVehicle[]         @relation("EventVehicleDriver")
+
+  @@index([name])
+}
+
+model EventCrewRequirement {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  role      String
+  quantity  Int      @default(1)
+  startTime String?
+  endTime   String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
+}
+
+model EventCrewAssignment {
+  id           String       @id @default(cuid())
+  eventId      String
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  staffId      String
+  staff        StaffProfile @relation(fields: [staffId], references: [id])
+  role         String
+  callTime     String?
+  status       String       @default("PENDIENTE") // PENDIENTE | CONFIRMADO | RECHAZADO
+  vehicleId    String?
+  vehicle      Vehicle?     @relation("AssignmentVehicle", fields: [vehicleId], references: [id])
+  checkedInAt  DateTime?
+  checkedOutAt DateTime?
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([eventId])
+  @@index([staffId])
+}
+
+model EventVehicle {
+  id          String       @id @default(cuid())
+  eventId     String
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  vehicleId   String
+  vehicle     Vehicle      @relation(fields: [vehicleId], references: [id])
+  driverId    String?
+  driver      StaffProfile? @relation("EventVehicleDriver", fields: [driverId], references: [id])
+  cargoNotes  String?
+  cargoM3     Decimal?     @db.Decimal(10, 2)
+  cargoKg     Decimal?     @db.Decimal(10, 2)
+  departureAt DateTime?
+  returnAt    DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@index([eventId])
+}
+
+model MusicianShow {
+  id         String       @id @default(cuid())
+  eventId    String
+  event      Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  service    String
+  venue      String?
+  clientName String?
+  startAt    DateTime?
+  endAt      DateTime?
+  musicianId String?
+  musician   StaffProfile? @relation(fields: [musicianId], references: [id])
+  status     String       @default("PENDIENTE")
+  notes      String?
+  createdAt  DateTime     @default(now())
+
+  @@index([eventId])
 }
 
 model Report {
