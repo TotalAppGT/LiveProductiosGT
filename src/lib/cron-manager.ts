@@ -166,7 +166,7 @@ async function morningBriefing() {
         take: 6,
       });
 
-      const { formatTaskHierarchy } = await import("@/lib/task-view");
+      const { formatTasksByModule } = await import("@/lib/task-view");
 
       // Mensaje diario = SOLO lo de HOY (lo demás se consulta con `tareas`).
       // Vencidas y de hoy SIN solaparse (una tarea no aparece dos veces).
@@ -177,13 +177,13 @@ async function morningBriefing() {
       let cursor = 1;
       let overdueBlock = "";
       if (stillOverdue.length > 0) {
-        const h = formatTaskHierarchy(stillOverdue, cursor);
+        const h = formatTasksByModule(stillOverdue, cursor);
         overdueBlock = `⚠️ *VENCIDAS (${h.ordered.length})*\n${h.text}`;
         cursor = h.next;
       }
       let todayBlock = "";
       if (todayTasks.length > 0) {
-        const h = formatTaskHierarchy(todayTasks, cursor);
+        const h = formatTasksByModule(todayTasks, cursor);
         todayBlock = `📌 *TAREAS DE HOY — ${todayLabel} (${h.ordered.length})*\n${h.text}`;
       }
 
