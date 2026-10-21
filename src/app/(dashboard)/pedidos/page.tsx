@@ -20,9 +20,19 @@ const STATUS_LABELS: Record<string, string> = {
   EN_EVENTO: "En evento", DEVUELTO: "Devuelto", POR_RECIBIR: "Por recibir",
 };
 
+function weekRangeOf(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const day = dt.getUTCDay() || 7;
+  const from = new Date(dt.getTime() - (day - 1) * 86400000).toISOString().slice(0, 10);
+  const to = new Date(dt.getTime() + (7 - day) * 86400000).toISOString().slice(0, 10);
+  return { from, to };
+}
+
 export default function PedidosPage() {
   const { user, token } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
+  const [reportDate, setReportDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }));
   const [templates, setTemplates] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -286,12 +296,28 @@ export default function PedidosPage() {
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Package className="w-6 h-6" /> Cuadros de Evento
         </h1>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => downloadReport(`/api/orders/report?format=xlsx&t=${Date.now()}`, `reporte-general-cuadros-${new Date().toISOString().slice(0, 10)}.xlsx`)}>
-            📊 Reporte general (Excel)
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            value={reportDate}
+            onChange={(e) => setReportDate(e.target.value)}
+            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-gray-900 dark:text-white"
+            title="Fecha para el reporte por día o semana"
+          />
+          <Button variant="outline" size="sm" onClick={() => downloadReport(`/api/orders/report?format=xlsx&date=${reportDate}`, `cuadros-${reportDate}.xlsx`)}>
+            📊 Día
           </Button>
-          <Button variant="outline" onClick={() => downloadReport(`/api/orders/report?format=pdf&t=${Date.now()}`, `reporte-general-cuadros-${new Date().toISOString().slice(0, 10)}.pdf`)}>
-            📄 (PDF)
+          <Button variant="outline" size="sm" onClick={() => downloadReport(`/api/orders/report?format=pdf&date=${reportDate}`, `cuadros-${reportDate}.pdf`)}>
+            📄 Día
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { const w = weekRangeOf(reportDate); return downloadReport(`/api/orders/report?format=xlsx&from=${w.from}&to=${w.to}`, `cuadros-semana-${w.from}.xlsx`); }}>
+            📊 Semana
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { const w = weekRangeOf(reportDate); return downloadReport(`/api/orders/report?format=pdf&from=${w.from}&to=${w.to}`, `cuadros-semana-${w.from}.pdf`); }}>
+            📄 Semana
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => downloadReport(`/api/orders/report?format=xlsx&t=${Date.now()}`, "reporte-general-cuadros.xlsx")}>
+            📊 Todo
           </Button>
           <Button variant="outline" onClick={() => downloadReport("/api/orders/template", "plantilla-cuadros.xlsx")}>
             ⬇️ Plantilla Excel

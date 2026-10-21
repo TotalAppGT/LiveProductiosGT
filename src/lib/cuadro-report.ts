@@ -45,6 +45,9 @@ export interface EventSummary {
   guests: number | null;
   itemCount: number;
   faltantes: number;
+  comprar: number;
+  alquilar: number;
+  resumen: { name: string; qty: number; action: string }[];
   coverage: number;
   truck: string;
 }
@@ -184,9 +187,13 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
   for (const o of orders) {
     const aggregated = aggregate(o.items, byId, byName);
     let falt = 0;
+    const resumen: { name: string; qty: number; action: string }[] = [];
     for (const a of aggregated) {
       const r = row(a.name, a.inv?.section ?? null, a.inv, a.needed);
-      if (r.faltante > 0) falt++;
+      if (r.faltante > 0) {
+        falt++;
+        resumen.push({ name: a.name, qty: r.faltante, action: r.action });
+      }
       const key = a.inv ? `id:${a.inv.id}` : `name:${norm(a.name)}`;
       const cur: MatrixRow = matrix.get(key) || {
         name: a.name, section: a.inv?.section ?? null, perEvent: {}, total: 0,
@@ -205,6 +212,9 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
       guests: (o as any).guestCount ?? null,
       itemCount: aggregated.length,
       faltantes: falt,
+      comprar: resumen.filter((x) => x.action === "Comprar").length,
+      alquilar: resumen.filter((x) => x.action === "Alquilar").length,
+      resumen,
       coverage: aggregated.length ? Math.round(((aggregated.length - falt) / aggregated.length) * 100) : 100,
       truck: truckForEvent(aggregated),
     });
@@ -355,7 +365,12 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
   doc.moveDown(0.6);
 
   doc.font("Helvetica-Bold").fontSize(10).fillColor(blue).text("POR EVENTO");
-  const evCols: Col[] = [{ w: 148, t: "Evento" }, { w: 55, t: "Fecha" }, { w: 104, t: "Lugar" }, { w: 42, t: "Inv.", align: "right" }, { w: 46, t: "Ítems", align: "right" }, { w: 52, t: "Faltan", align: "right" }, { w: 72, t: "Camión" }];
+  const evCols: Col[] = [
+    { w: 120, t: "Evento" }, { w: 50, t: "Fecha" }, { w: 75, t: "Lugar" },
+    { w: 35, t: "Inv.", align: "right" }, { w: 38, t: "Ítems", align: "right" },
+    { w: 42, t: "Faltan", align: "right" }, { w: 45, t: "Comprar", align: "right" },
+    { w: 45, t: "Alquilar", align: "right" }, { w: 60, t: "Camión" },
+  ];
   drawTable(doc, evCols, report.events.map((e) => ([
     { v: `#${e.orderNumber} ${e.eventName}` },
     { v: fmtDate(e.eventDate) },
@@ -363,8 +378,21 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
     { v: String(e.guests ?? "—") },
     { v: String(e.itemCount) },
     { v: String(e.faltantes), color: e.faltantes > 0 ? "#b91c1c" : "#222", bold: e.faltantes > 0 },
+    { v: String(e.comprar), color: e.comprar > 0 ? "#b91c1c" : "#222", bold: e.comprar > 0 },
+    { v: String(e.alquilar), color: e.alquilar > 0 ? "#c2410c" : "#222", bold: e.alquilar > 0 },
     { v: e.truck },
   ])));
+
+  const conResumen = report.events.filter((e) => (e.resumen || []).length > 0);
+  if (conResumen.length) {
+    doc.moveDown(0.5);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text("RESUMEN POR EVENTO — COMPRAR / ALQUILAR");
+    for (const e of conResumen) {
+      doc.font("Helvetica-Bold").fontSize(9).fillColor("#111").text(`${e.eventName} — ${fmtDate(e.eventDate)} (${e.comprar} comprar · ${e.alquilar} alquilar)`);
+      doc.font("Helvetica").fontSize(8).fillColor("#374151").text(e.resumen.map((x) => `${x.action}: ${x.name} (${x.qty})`).join(" · "));
+      doc.moveDown(0.2);
+    }
+  }
 
   const weeks = report.weeks || [];
   const consolidated = report.consolidated || [];
@@ -454,9 +482,9 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
 
   // ---------- RESUMEN ----------
   const rs = wb.addWorksheet("Resumen", { properties: { defaultRowHeight: 18 } });
-  rs.columns = [{ width: 11 }, { width: 34 }, { width: 14 }, { width: 24 }, { width: 10 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 24 }];
-  title(rs, 1, "REPORTE GENERAL DE CUADROS — Live Productions GT", 9);
-  rs.mergeCells("A2:I2");
+  rs.columns = [11, 34, 14, 24, 10, 10, 12, 12, 12, 12, 26, 60].map((w) => ({ width: w }));
+  title(rs, 1, "REPORTE GENERAL DE CUADROS — Live Productions GT", 12);
+  rs.mergeCells("A2:L2");
   rs.getCell("A2").value = `Generado: ${new Date(report.generatedAt).toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`;
   rs.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
   const kpis: [string, number][] = [
@@ -468,22 +496,28 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     const vc = rs.getCell(5, i + 1); vc.value = val; vc.font = { bold: true, size: 13 }; vc.fill = headFill("F3F4F6"); vc.border = border; vc.alignment = center;
   });
   const evHeader = 7;
-  rs.mergeCells(evHeader, 1, evHeader, 9);
-  rs.getCell(evHeader, 1).value = "POR EVENTO";
+  rs.mergeCells(evHeader, 1, evHeader, 12);
+  rs.getCell(evHeader, 1).value = "POR EVENTO — COMPRAR / ALQUILAR";
   rs.getCell(evHeader, 1).font = { bold: true, size: 11, color: { argb: "FF" + BRAND } };
   rs.getRow(evHeader).height = 20;
-  headerRow(rs, evHeader + 1, ["Cuadro", "Evento", "Fecha", "Lugar", "Invitados", "Ítems", "Faltantes", "Cobertura %", "Camión"]);
+  headerRow(rs, evHeader + 1, ["Cuadro", "Evento", "Fecha", "Lugar", "Invitados", "Ítems", "Faltantes", "Comprar", "Alquilar", "Cobertura %", "Camión", "Resumen (comprar / alquilar)"]);
   let r = evHeader + 2;
   for (const e of report.events) {
-    const vals: any[] = [`#${e.orderNumber}`, e.eventName, fmtDate(e.eventDate), e.location || "", e.guests || "", e.itemCount, e.faltantes, e.coverage, e.truck];
+    const vals: any[] = [
+      `#${e.orderNumber}`, e.eventName, fmtDate(e.eventDate), e.location || "", e.guests || "",
+      e.itemCount, e.faltantes, e.comprar, e.alquilar, e.coverage, e.truck,
+      e.resumen.map((x) => `${x.action}: ${x.name} (${x.qty})`).join(" · "),
+    ];
     vals.forEach((v, i) => {
       const c = rs.getCell(r, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
-      c.alignment = i >= 4 && i <= 7 ? center : { vertical: "middle", wrapText: true };
+      c.alignment = i === 11 ? { vertical: "middle", wrapText: true } : i >= 4 && i <= 9 ? center : { vertical: "middle", wrapText: true };
     });
     if (e.faltantes > 0) rs.getCell(r, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (e.comprar > 0) rs.getCell(r, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (e.alquilar > 0) rs.getCell(r, 9).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
     r++;
   }
-  rs.autoFilter = { from: { row: evHeader + 1, column: 1 }, to: { row: r - 1, column: 9 } };
+  rs.autoFilter = { from: { row: evHeader + 1, column: 1 }, to: { row: r - 1, column: 12 } };
   rs.views = [{ state: "frozen", ySplit: evHeader + 1 }];
 
   // ---------- RESUMEN DE EQUIPO ----------
