@@ -10,6 +10,14 @@ import { normName } from "@/lib/reconcile";
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 const actionLabel = (a: string) => a === "COMPRAR" ? "Comprar" : a === "RENTAR" ? "Alquilar" : a === "CONSULTAR" ? "Consultar" : (a || "—");
 const fmtDateOnly = (s: string) => s === "sin-fecha" ? "—" : new Date(`${s}T12:00:00`).toLocaleDateString("es-GT", { day: "2-digit", month: "short", year: "numeric" });
+const eventMini = (events: { orderNumber: number; date: Date | string | null }[] = []) => {
+  const seen = new Set<number>();
+  return [...events]
+    .filter((e) => { if (seen.has(e.orderNumber)) return false; seen.add(e.orderNumber); return true; })
+    .sort((a, b) => (a.date ? new Date(a.date).getTime() : 0) - (b.date ? new Date(b.date).getTime() : 0))
+    .map((e) => `#${e.orderNumber} ${e.date ? new Date(e.date).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "short" }) : "—"}`)
+    .join(", ");
+};
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "short", year: "numeric" }) : "—";
 // Día corto SIN convertir zona (las semanas ya vienen como medianoche local).
@@ -94,7 +102,7 @@ export interface GeneralReport {
   items: MatrixRow[];
   faltantes: MatrixRow[];
   warehouseStock: { warehouse: string; items: number; units: number; available: number; repair: number }[];
-  totals: { orders: number; items: number; demand: number; faltantes: number; comprar: number; alquilar: number };
+  totals: { orders: number; items: number; demand: number; faltantes: number; comprar: number; alquilar: number; comprarUnits: number; alquilarUnits: number; consultarUnits: number };
   dates: { date: string; orders: number; demand: number; faltantes: number; comprar: number; alquilar: number; resumen: { name: string; shortfall: number; action: string }[] }[];
   dateDetail: { date: string; name: string; section: string | null; need: number; supply: number; repair: number; shortfall: number; action: string; orders: string }[];
   weeks?: NeedWeek[];
@@ -275,6 +283,9 @@ export async function buildGeneralReport(ids?: string[]): Promise<GeneralReport 
     faltantes: faltantes.length,
     comprar: faltantes.filter((m) => m.action === "Comprar").length,
     alquilar: faltantes.filter((m) => m.action === "Alquilar").length,
+    comprarUnits: faltantes.filter((m) => m.action === "Comprar").reduce((s, m) => s + m.faltante, 0),
+    alquilarUnits: faltantes.filter((m) => m.action === "Alquilar").reduce((s, m) => s + m.faltante, 0),
+    consultarUnits: faltantes.filter((m) => m.action === "Consultar").reduce((s, m) => s + m.faltante, 0),
   };
 
   // Datos generales por fecha (eventos agrupados por día).
@@ -496,6 +507,24 @@ export async function reportPdf(report: CuadroReport | GeneralReport): Promise<B
 
   const weeks = report.weeks || [];
   const consolidated = report.consolidated || [];
+
+  if (consolidated.length) {
+    doc.moveDown(0.5);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#b91c1c").text("PROYECCIÓN — QUÉ ALQUILAR / COMPRAR Y PARA QUÉ EVENTOS");
+    doc.font("Helvetica").fontSize(8).fillColor("#374151").text("Se adquiere el faltante del pico simultáneo (con montaje D-1) y se reutiliza en los demás eventos.");
+    const pCols: Col[] = [
+      { w: 150, t: "Equipo" }, { w: 40, t: "Falta", align: "right" }, { w: 55, t: "Acción" },
+      { w: 120, t: "Cubre el pico" }, { w: 167, t: "Te sirve para" },
+    ];
+    drawTable(doc, pCols, consolidated.map((m) => [
+      { v: m.name },
+      { v: String(m.shortfall), color: "#b91c1c", bold: true },
+      { v: actionLabel(m.action) },
+      { v: eventMini(m.peakEvents || []) || "—" },
+      { v: eventMini(m.events || []) || "—" },
+    ]));
+  }
+
   doc.moveDown(0.6);
   if (consolidated.length) {
     doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f766e").text("CONSOLIDADO — adquirir UNA sola vez (cubre todas las semanas)");
@@ -590,6 +619,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   const kpis: [string, number][] = [
     ["Cuadros", report.totals.orders], ["Ítems", report.totals.items], ["Demanda (u)", report.totals.demand],
     ["Faltantes", report.totals.faltantes], ["Comprar", report.totals.comprar], ["Alquilar", report.totals.alquilar],
+    ["Comprar (u)", report.totals.comprarUnits], ["Alquilar (u)", report.totals.alquilarUnits],
   ];
   kpis.forEach(([label, val], i) => {
     const lc = rs.getCell(4, i + 1); lc.value = label; lc.font = { bold: true, size: 8, color: { argb: "FF6B7280" } }; lc.fill = headFill("F3F4F6"); lc.border = border; lc.alignment = center;
@@ -739,6 +769,51 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     rc.getCell(r, 1).value = "Sin faltantes en las fechas futuras.";
     rc.getCell(r, 1).font = { italic: true, size: 9, color: { argb: "FF15803D" } };
   }
+
+  // ---------- PROYECCIÓN / SUGERENCIAS ----------
+  const pr = wb.addWorksheet("Proyección", { properties: { defaultRowHeight: 18 } });
+  pr.columns = [42, 16, 9, 11, 10, 11, 28, 36, 22, 60].map((w) => ({ width: w }));
+  title(pr, 1, "PROYECCIÓN — QUÉ ALQUILAR / COMPRAR Y PARA QUÉ EVENTOS", 10);
+  pr.mergeCells("A2:J2");
+  pr.getCell("A2").value = "Sugerencia dinámica: se adquiere el faltante del pico simultáneo (con montaje D-1) y se reutiliza en los demás eventos.";
+  pr.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
+  headerRow(pr, 3, ["Equipo", "Sección", "Pico", "Disponible", "Te falta", "Acción", "Cubre el pico", "Te sirve para", "Semanas", "Sugerencia"]);
+  let rp = 4;
+  for (const m of consolidated) {
+    const accion = actionLabel(m.action);
+    const peak = eventMini(m.peakEvents || []);
+    const all = eventMini(m.events || []);
+    const vals: any[] = [
+      m.name, m.section || "", m.peak, m.supply, m.shortfall, accion,
+      peak || "—", all || "—", (m.weeks || []).join(", ") || "—",
+      `${accion} ${m.shortfall} ${m.name}: cubre el pico (${peak || "—"}) y te sirve para ${all || "—"}.`,
+    ];
+    vals.forEach((v, i) => {
+      const c = pr.getCell(rp, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
+      c.alignment = i >= 2 && i <= 5 ? center : { vertical: "middle", wrapText: true };
+    });
+    pr.getCell(rp, 5).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (accion === "Comprar") pr.getCell(rp, 6).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+    if (accion === "Alquilar") pr.getCell(rp, 6).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
+    rp++;
+  }
+  if (consolidated.length === 0) {
+    pr.mergeCells(rp, 1, rp, 10);
+    pr.getCell(rp, 1).value = "Sin faltantes con los cuadros seleccionados.";
+    pr.getCell(rp, 1).font = { italic: true, size: 9, color: { argb: "FF15803D" } };
+    rp++;
+  } else {
+    pr.mergeCells(rp, 1, rp, 10);
+    const total = pr.getCell(rp, 1);
+    total.value = `TOTAL: ${report.totals.alquilarUnits} u a alquilar (${report.totals.alquilar} ítems) · ${report.totals.comprarUnits} u a comprar (${report.totals.comprar} ítems) · ${report.totals.consultarUnits} u a consultar`;
+    total.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
+    total.fill = headFill("1E40AF");
+    total.alignment = { indent: 1, vertical: "middle" };
+    pr.getRow(rp).height = 20;
+    rp++;
+  }
+  pr.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rp - 2), column: 10 } };
+  pr.views = [{ state: "frozen", ySplit: 3 }];
 
   // ---------- STOCK POR BODEGA ----------
   const st = wb.addWorksheet("Stock por bodega", { properties: { defaultRowHeight: 18 } });

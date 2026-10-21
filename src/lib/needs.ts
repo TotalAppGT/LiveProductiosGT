@@ -13,6 +13,7 @@ export interface NeedItem {
   peak: number;
   shortfall: number;
   peakDate: Date | null;
+  peakEvents: { orderNumber: number; eventName: string; date: Date | null; needed: number }[];
   events: { orderNumber: number; eventName: string; date: Date | null; needed: number }[];
   suggestedAction: "COMPRAR" | "RENTAR" | "CONSULTAR";
   action: string;
@@ -83,7 +84,13 @@ function computeForOrders(
   reviews: { itemKey: string; action: string; comment: string | null }[],
   onlyShortfall = true
 ): NeedItem[] {
-  type Rec = { key: string; name: string; category: string; intervals: { s: number; e: number; q: number }[]; events: NeedItem["events"] };
+  type Rec = {
+    key: string;
+    name: string;
+    category: string;
+    intervals: { s: number; e: number; q: number; orderNumber: number; eventName: string; date: Date | null }[];
+    events: NeedItem["events"];
+  };
   const items = new Map<string, Rec>();
   for (const o of orders) {
     if (!o.eventDate) continue;
@@ -98,7 +105,7 @@ function computeForOrders(
         rec = { key: k, name: it.name, category: catMap.get(k) || it.category || "OTRO", intervals: [], events: [] };
         items.set(k, rec);
       }
-      rec.intervals.push({ s, e, q: it.quantity });
+      rec.intervals.push({ s, e, q: it.quantity, orderNumber: o.orderNumber, eventName: o.eventName, date: o.eventDate });
       rec.events.push({ orderNumber: o.orderNumber, eventName: o.eventName, date: o.eventDate, needed: it.quantity });
     }
   }
@@ -109,10 +116,22 @@ function computeForOrders(
     const e0 = Math.max(...rec.intervals.map((i) => i.e));
     let peak = 0;
     let peakDay: number | null = null;
+    let peakEvents: NeedItem["peakEvents"] = [];
     for (let d = s0; d <= e0; d += 86400000) {
       let sum = 0;
       for (const iv of rec.intervals) if (iv.s <= d && d <= iv.e) sum += iv.q;
-      if (sum > peak) { peak = sum; peakDay = d; }
+      if (sum > peak) {
+        peak = sum;
+        peakDay = d;
+        const byOrder = new Map<number, { orderNumber: number; eventName: string; date: Date | null; needed: number }>();
+        for (const iv of rec.intervals) {
+          if (iv.s > d || d > iv.e) continue;
+          const cur = byOrder.get(iv.orderNumber) || { orderNumber: iv.orderNumber, eventName: iv.eventName, date: iv.date, needed: 0 };
+          cur.needed += iv.q;
+          byOrder.set(iv.orderNumber, cur);
+        }
+        peakEvents = Array.from(byOrder.values());
+      }
     }
     const sup = supply.get(rec.key) || 0;
     const shortfall = Math.max(0, peak - sup);
@@ -123,7 +142,7 @@ function computeForOrders(
     if (!inInventory) suggested = "CONSULTAR";
     else if (BUY_CATEGORIES.includes(cat)) suggested = "COMPRAR";
     const action = shortfall > 0 ? suggested : "—";
-    out.push({ key: rec.key, name: rec.name, category: rec.category, section: sectionMap.get(rec.key) || null, supply: sup, repair: repairMap.get(rec.key) || 0, peak, shortfall, peakDate: peakDay ? new Date(peakDay) : null, events: rec.events, suggestedAction: suggested, action, comment: "", reviewed: false });
+    out.push({ key: rec.key, name: rec.name, category: rec.category, section: sectionMap.get(rec.key) || null, supply: sup, repair: repairMap.get(rec.key) || 0, peak, shortfall, peakDate: peakDay ? new Date(peakDay) : null, peakEvents, events: rec.events, suggestedAction: suggested, action, comment: "", reviewed: false });
   }
 
   const rv = new Map(reviews.map((r) => [r.itemKey, r]));
