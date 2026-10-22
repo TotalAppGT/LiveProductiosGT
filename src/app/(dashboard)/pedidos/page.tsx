@@ -82,6 +82,13 @@ export default function PedidosPage() {
   const [tab, setTab] = useState<"cuadros" | "plantillas">("cuadros");
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkPreview, setBulkPreview] = useState<any | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkFrom, setBulkFrom] = useState("");
+  const [bulkTo, setBulkTo] = useState("");
+  const [bulkReplace, setBulkReplace] = useState(true);
   const [uploadItems, setUploadItems] = useState<any[] | null>(null);
   const [uploadDiscrepancies, setUploadDiscrepancies] = useState<any[]>([]);
   const [uploadEvent, setUploadEvent] = useState({ eventName: "", clientName: "", eventLocation: "", eventDate: "" });
@@ -203,22 +210,54 @@ export default function PedidosPage() {
     }
   }
 
-  async function uploadBulkOrders(file: File) {
-    setUploading(true);
+  async function previewBulk(file: File) {
+    setBulkLoading(true);
+    setBulkPreview(null);
+    setBulkFile(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/orders/import-bulk", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      fd.append("mode", "preview");
+      fd.append("replace", bulkReplace ? "1" : "0");
+      if (bulkFrom) fd.append("from", bulkFrom);
+      if (bulkTo) fd.append("to", bulkTo);
+      const res = await fetch("/api/orders/import-sheets", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
       const json = await res.json();
       if (json.success) {
-        toast.success(`${json.created} cuadro(s) cargados (${json.totalItems} ítems)${json.unmatched?.length ? ` · ${json.unmatched.length} sin coincidencia` : ""}`);
-        if (json.unmatched?.length) console.warn("Sin coincidencia en inventario:", json.unmatched);
+        setBulkPreview(json.data);
+        setBulkFile(file);
+      } else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al leer el Excel");
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  async function applyBulk() {
+    if (!bulkFile) return;
+    setBulkLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", bulkFile);
+      fd.append("mode", "apply");
+      fd.append("replace", bulkReplace ? "1" : "0");
+      if (bulkFrom) fd.append("from", bulkFrom);
+      if (bulkTo) fd.append("to", bulkTo);
+      const res = await fetch("/api/orders/import-sheets", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const json = await res.json();
+      if (json.success) {
+        const d = json.data;
+        toast.success(`${d.created} nuevos, ${d.updated} actualizados${d.skipped ? `, ${d.skipped} omitidos` : ""}${json.data.unmatched?.length ? ` · ${json.data.unmatched.length} sin coincidencia` : ""}`);
+        setShowBulk(false);
+        setBulkPreview(null);
+        setBulkFile(null);
         fetchData();
       } else toast.error(json.error || "Error");
     } catch {
-      toast.error("Error al subir cuadros");
+      toast.error("Error al importar cuadros");
     } finally {
-      setUploading(false);
+      setBulkLoading(false);
     }
   }
 
@@ -369,10 +408,9 @@ export default function PedidosPage() {
           <Button variant="outline" onClick={() => downloadReport("/api/orders/template", "plantilla-cuadros.xlsx")}>
             ⬇️ Plantilla Excel
           </Button>
-          <label className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">
-            {uploading ? "Subiendo…" : "⬆️ Subir cuadros (Excel)"}
-            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadBulkOrders(f); e.target.value = ""; }} />
-          </label>
+          <Button variant="outline" onClick={() => setShowBulk(true)}>
+            ⬆️ Subir cuadros (Excel)
+          </Button>
           <Button variant="outline" onClick={() => setShowUpload(true)}>
             ⬆️ Subir cuadro
           </Button>
@@ -503,6 +541,124 @@ export default function PedidosPage() {
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setShowUpload(false)}>Cerrar</Button>
                 <Button onClick={createFromUpload} isLoading={creating}>Crear cuadro</Button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showBulk}
+        onClose={() => {
+          setShowBulk(false);
+          setBulkPreview(null);
+          setBulkFile(null);
+        }}
+        title="Importar cuadros desde Excel"
+        size="lg"
+      >
+        <div className="space-y-4 p-1">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Subí el Excel tal como lo exportás de Sheets. Detecta las hojas con <b>Fecha del evento</b> y <b>CUADRO DE MONTAJE</b> (Cantidad | Ítem), con uno o varios eventos por hoja. Compara cada ítem con el inventario y muestra los que no coinciden.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Desde (opcional)"
+              type="date"
+              value={bulkFrom}
+              onChange={(e) => { setBulkFrom(e.target.value); setBulkPreview(null); setBulkFile(null); }}
+            />
+            <Input
+              label="Hasta (opcional)"
+              type="date"
+              value={bulkTo}
+              onChange={(e) => { setBulkTo(e.target.value); setBulkPreview(null); setBulkFile(null); }}
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+            <input
+              type="checkbox"
+              checked={bulkReplace}
+              onChange={(e) => { setBulkReplace(e.target.checked); setBulkPreview(null); setBulkFile(null); }}
+            />
+            Actualizar cuadros existentes (misma fecha y cliente)
+          </label>
+
+          <input
+            key={`${bulkFrom}-${bulkTo}-${bulkReplace}`}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) previewBulk(f); }}
+            className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 p-2"
+          />
+
+          {bulkLoading && <p className="text-xs text-gray-400">Procesando…</p>}
+
+          {bulkPreview && (
+            <>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+                <span><b>{bulkPreview.totals.events}</b> eventos</span>
+                <span><b>{bulkPreview.totals.items}</b> ítems</span>
+                <span><b>{bulkPreview.totals.matched}</b> con inventario</span>
+                <span className={bulkPreview.totals.unmatched ? "text-red-600" : "text-green-600"}><b>{bulkPreview.totals.unmatched}</b> sin coincidencia</span>
+                <span><b>{bulkPreview.totals.create}</b> nuevos · <b>{bulkPreview.totals.update}</b> actualizar{bulkPreview.totals.skip ? ` · ${bulkPreview.totals.skip} omitir` : ""}</span>
+              </div>
+
+              <div className="max-h-64 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
+                    <tr>
+                      <th className="text-left px-2 py-1.5">Fecha</th>
+                      <th className="text-left px-2 py-1.5">Cliente</th>
+                      <th className="text-right px-2 py-1.5">Ítems</th>
+                      <th className="text-right px-2 py-1.5">Match</th>
+                      <th className="text-left px-2 py-1.5">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {bulkPreview.events.map((e: any, i: number) => (
+                      <tr key={i}>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{e.date}</td>
+                        <td className="px-2 py-1.5 truncate max-w-[180px]">{e.client}</td>
+                        <td className="px-2 py-1.5 text-right">{e.items}</td>
+                        <td className={`px-2 py-1.5 text-right ${e.matched < e.items ? "text-red-600" : "text-green-600"}`}>{e.matched}/{e.items}</td>
+                        <td className="px-2 py-1.5">
+                          {e.action === "update" ? (
+                            <span className="text-blue-600">Actualizar #{e.existingOrderNumber}</span>
+                          ) : e.action === "skip" ? (
+                            <span className="text-amber-600">Omitir #{e.existingOrderNumber} ({e.existingStatus})</span>
+                          ) : (
+                            <span className="text-green-600">Nuevo</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {bulkPreview.unmatched.length > 0 && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-red-600 font-medium">
+                    Ver {bulkPreview.unmatched.length} ítems sin coincidencia en inventario
+                  </summary>
+                  <div className="mt-1 max-h-40 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2 space-y-0.5">
+                    {bulkPreview.unmatched.map((name: string, i: number) => (
+                      <div key={i} className="truncate">{name}</div>
+                    ))}
+                  </div>
+                </details>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => { setShowBulk(false); setBulkPreview(null); setBulkFile(null); }}>
+                  Cancelar
+                </Button>
+                <Button onClick={applyBulk} isLoading={bulkLoading} disabled={!bulkFile}>
+                  Importar / Actualizar
+                </Button>
               </div>
             </>
           )}
