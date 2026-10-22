@@ -18,10 +18,11 @@ export async function GET(request: NextRequest) {
     const weekStart = startOfWeek(today, { weekStartsOn: 0 });
     const weekEnd = endOfWeek(today, { weekStartsOn: 0 });
 
-    // Empleados: el dashboard es PERSONAL (solo sus tareas, eventos y avances).
+    // El dashboard es PERSONAL para todos: las tareas que se muestran son
+    // siempre las del usuario. La vista de equipo está en Tareas → Todas.
     const isEmployee = auth.payload.role === "EMPLEADO";
     const uid = auth.payload.userId;
-    const taskScope = isEmployee ? { assignedToId: uid } : {};
+    const taskScope = { assignedToId: uid };
 
     const [
       pendingTasks,
@@ -36,13 +37,9 @@ export async function GET(request: NextRequest) {
       prisma.task.count({
         where: { status: { in: ["PENDIENTE", "EN_PROCESO"] }, ...taskScope },
       }),
-      isEmployee
-        ? prisma.taskHistory.count({
-            where: { newStatus: "COMPLETADA", createdAt: { gte: todayStart }, task: { assignedToId: uid } },
-          })
-        : prisma.taskHistory.count({
-            where: { newStatus: "COMPLETADA", createdAt: { gte: todayStart } },
-          }),
+      prisma.taskHistory.count({
+        where: { newStatus: "COMPLETADA", createdAt: { gte: todayStart }, task: { assignedToId: uid } },
+      }),
       prisma.event.count({
         where: {
           date: { gte: weekStart, lte: weekEnd },

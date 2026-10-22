@@ -32,7 +32,13 @@ export async function GET(request: NextRequest) {
     const where: Prisma.TaskWhereInput = {};
 
     if (status) where.status = status as any;
-    if (assignedToId) where.assignedToId = assignedToId;
+    // Los empleados solo pueden listar sus propias tareas; ADMIN/DUENO/JEFE
+    // pueden filtrar por cualquier usuario o ver todas.
+    if (auth.payload.role === "EMPLEADO") {
+      where.assignedToId = auth.payload.userId;
+    } else if (assignedToId) {
+      where.assignedToId = assignedToId;
+    }
     if (category) where.category = category as any;
     if (type) where.type = type as any;
     if (priority) where.priority = priority as any;
