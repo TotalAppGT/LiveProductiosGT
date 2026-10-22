@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
+import { parseGTInputDate } from "@/lib/task-utils";
 import * as XLSX from "xlsx";
 import {
   buildItemMatcher,
@@ -197,12 +198,15 @@ export async function POST(request: NextRequest) {
         quantity: i.quantity,
         inventoryItemId: i.inventoryItemId,
       }));
+      // Las fechas del Excel son date-only. Guardarlas a medianoche de
+      // Guatemala evita que el reporte (que muestra en GT) las corra un día.
+      const eventDate = parseGTInputDate(dateKey(event.date)) || event.date;
       const data = {
-        eventName: eventNameFor(event.date, event.client),
+        eventName: eventNameFor(eventDate, event.client),
         clientName: event.client || null,
         eventLocation: event.location || null,
         guestCount: event.guests,
-        eventDate: event.date,
+        eventDate,
         eventEndDate: null,
         contractNotes: event.contract || null,
       };
