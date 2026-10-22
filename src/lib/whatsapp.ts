@@ -267,7 +267,8 @@ export async function sendProactiveMessage(
       select: { lastInboundAt: true },
     });
     if (u?.lastInboundAt) {
-      windowOpen = Date.now() - new Date(u.lastInboundAt).getTime() < 23 * 3600 * 1000;
+      // Ventana real de Meta: 24h desde el último mensaje del usuario (2 min de margen).
+      windowOpen = Date.now() - new Date(u.lastInboundAt).getTime() < (24 * 3600 - 120) * 1000;
     }
   } catch {
     // si falla la consulta, se asume ventana cerrada → se usa plantilla
