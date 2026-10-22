@@ -184,7 +184,7 @@ export default function TareasPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("MIS_TAREAS");
+  const [activeTab, setActiveTab] = useState("HOY");
   const [viewMode, setViewMode] = useState<"list" | "kanban" | "sheet">("sheet");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -309,6 +309,19 @@ export default function TareasPage() {
     fetchPurchases();
     fetchReminders();
   }, [fetchTasks, fetchUsers, fetchPurchases, fetchReminders]);
+
+  // Refrescar al volver a la pestaña y cada minuto (por si completó desde WhatsApp).
+  useEffect(() => {
+    const refresh = () => { if (typeof document !== "undefined" && !document.hidden) fetchTasks(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const id = setInterval(refresh, 60000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      clearInterval(id);
+    };
+  }, [fetchTasks]);
 
   // Llama al endpoint de estado SIN refetch ni toast (para reusar en masivo)
   async function putTaskStatus(taskId: string, status: TaskStatus): Promise<boolean> {
@@ -702,7 +715,8 @@ export default function TareasPage() {
   const filteredTasks = tasks.filter((task) => {
     // "Hoy": tareas de hoy (Guatemala) + fijas diarias + fijas del día.
     if (activeTab === "HOY") {
-      return taskOccursOnDate(task, new Date());
+      // Hoy + vencidas: lo pendiente de ayer no desaparece hasta completarse.
+      return taskOccursOnDate(task, new Date()) || isTaskOverdueLocal(task);
     }
     // "Esta Semana": cualquier día de lunes a domingo de la semana actual.
     if (activeTab === "SEMANA") {
@@ -1470,7 +1484,7 @@ export default function TareasPage() {
         </div>
       )}
 
-      <Tabs defaultValue="TODAS" value={activeTab} onValueChange={setActiveTab}>
+      <Tabs defaultValue="HOY" value={activeTab} onValueChange={setActiveTab}>
         <TabList className="overflow-x-auto">
           {STATUS_TABS.map((tab) => (
             <Tab key={tab.value} value={tab.value}>{tab.label}</Tab>
@@ -1496,7 +1510,9 @@ export default function TareasPage() {
               />
             ) : viewMode === "kanban" ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:overflow-x-auto">
-                {Object.entries(kanbanColumns).map(([status, columnTasks]) => (
+                {Object.entries(kanbanColumns)
+                  .filter(([status]) => activeTab === "COMPLETADA" ? status === "COMPLETADA" : status !== "COMPLETADA" && status !== "CANCELADA")
+                  .map(([status, columnTasks]) => (
                   <div key={status} className="space-y-3">
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
