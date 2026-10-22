@@ -195,6 +195,7 @@ model User {
   pushTokens        PushToken[]
   attendance        AttendanceRecord[]
   staffProfile      StaffProfile?
+  taskView          UserTaskView?
   createdGroups     Group[]              @relation("GroupCreator")
   groupMemberships  GroupMember[]
   createdAlerts     ScheduledAlert[]     @relation("AlertCreator")
@@ -896,6 +897,22 @@ model MusicianShow {
   createdAt  DateTime     @default(now())
 
   @@index([eventId])
+}
+
+model UserTaskView {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ids       String[] @default([])
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+}
+
+model WhatsAppConversation {
+  phone     String   @id
+  state     String
+  data      Json     @default("{}")
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
 }
 
 model Report {

@@ -49,14 +49,41 @@ function normalizeGuatemalaDate(input: string): Date {
 function getConversation(phone: string) {
   const conv = conversations.get(phone);
   if (conv && Date.now() > conv.expires) {
-    conversations.delete(phone);
+    clearConversation(phone);
     return null;
   }
   return conv;
 }
 
 function setConversation(phone: string, state: string, data: any) {
-  conversations.set(phone, { state, data, expires: Date.now() + 300000 });
+  const expires = Date.now() + 300000;
+  conversations.set(phone, { state, data, expires });
+  prisma.whatsAppConversation.upsert({
+    where: { phone },
+    update: { state, data, expiresAt: new Date(expires) },
+    create: { phone, state, data, expiresAt: new Date(expires) },
+  }).catch((error) => console.error("setConversation:", error));
+}
+
+function clearConversation(phone: string) {
+  conversations["delete"](phone);
+  prisma.whatsAppConversation.delete({ where: { phone } }).catch(() => {});
+}
+
+// Recupera la conversación desde la base tras un deploy/reinicio.
+async function loadConversation(phone: string) {
+  if (conversations.has(phone)) return;
+  try {
+    const row = await prisma.whatsAppConversation.findUnique({ where: { phone } });
+    if (!row) return;
+    if (row.expiresAt.getTime() <= Date.now()) {
+      await prisma.whatsAppConversation.delete({ where: { phone } }).catch(() => {});
+      return;
+    }
+    conversations.set(phone, { state: row.state, data: row.data, expires: row.expiresAt.getTime() });
+  } catch (error) {
+    console.error("loadConversation:", error);
+  }
 }
 
 async function transcribeAudio(mediaId: string): Promise<string | null> {
@@ -424,7 +451,7 @@ async function formatTasksForUser(userId: string, period?: string) {
     } else {
       output += `✅ No tienes tareas nuevas para hoy.\n`;
     }
-    saveTaskView(userId, displayed);
+    await saveTaskView(userId, displayed);
     output += `\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output;
   }
@@ -450,7 +477,7 @@ async function formatTasksForUser(userId: string, period?: string) {
       semanaView.push(...hf.ordered);
       semanaNum = hf.next;
     }
-    saveTaskView(userId, semanaView);
+    await saveTaskView(userId, semanaView);
     output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output;
   }
@@ -468,7 +495,7 @@ async function formatTasksForUser(userId: string, period?: string) {
       semana2View.push(...hf.ordered);
       s2num = hf.next;
     }
-    saveTaskView(userId, semana2View);
+    await saveTaskView(userId, semana2View);
     output += `\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 proceso 1 → En proceso\n#3 posponer 1 → Posponer mañana\n#4 transferir 1 a Diana → Transferir\n#5 comentar 1 texto → Comentar`;
     return output || "No hay tareas para la próxima semana.";
   }
@@ -504,7 +531,7 @@ async function formatTasksForUser(userId: string, period?: string) {
     orderedForView.push(...hf.ordered);
     runningNum = hf.next;
   }
-  if (orderedForView.length > 0) saveTaskView(userId, orderedForView);
+  if (orderedForView.length > 0) await saveTaskView(userId, orderedForView);
 
   // Si no hay ninguna tarea que mostrar
   if (orderedForView.length === 0 && !hasFixed) {
@@ -571,7 +598,7 @@ async function formatTaskSchemeView(userId: string, role?: string): Promise<stri
     cursor = hier.next;
   }
 
-  if (displayed.length > 0) saveTaskView(userId, displayed);
+  if (displayed.length > 0) await saveTaskView(userId, displayed);
 
   // ⏰ Recordatorios de HOY (avisos aparte; se muestran para que la persona sepa)
   try {
@@ -1082,7 +1109,7 @@ Responde SOLO JSON sin markdown.`
 }
 
 async function resolveTaskByNumber(userId: string, num: number) {
-  const ids = getTaskViewIds(userId);
+  const ids = await getTaskViewIds(userId);
   if (ids && num >= 1 && num <= ids.length) {
     const t = await prisma.task.findUnique({ where: { id: ids[num - 1] } });
     if (t) return t;
@@ -1365,7 +1392,7 @@ async function createReminderFromText(
     await prisma.user.findMany({ where: { id: { in: assignees } }, select: { name: true } })
   ).map((u) => u.name);
   const who = assignees.length > 1 ? names.join(", ") : names[0] || "ti";
-  if (fromNumber) conversations.delete(fromNumber);
+  if (fromNumber) clearConversation(fromNumber);
 
   const dateStr = `${parsed.remindAt.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", weekday: "long", day: "numeric", month: "long" })} a las ${parsed.remindAt.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit" })}`;
 
@@ -1668,7 +1695,7 @@ async function handleCommand(
     });
     if (fixed.length === 0) return "No tienes actividades fijas. ¡Todo al día! 🎉";
     const h = formatTasksByModule(fixed);
-    saveTaskView(user.id, h.ordered);
+    await saveTaskView(user.id, h.ordered);
     const out = `📌 *Actividades Fijas (${fixed.length})*\n\n${h.text}\n\n⚡ *Acciones (usa el #):*\n#1 hecho 1 → Completada\n#2 posponer 1 → Posponer\n#3 transferir 1 a Diana → Transferir`;
     return out.trim();
   }
@@ -2497,18 +2524,18 @@ async function handleConversationStep(
 
   // Cancelar cualquier flujo en curso.
   if (/^(cancelar|cancela|cancel|olvidalo|olvídalo|salir|menu)$/i.test(cmdLower)) {
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
     return "Listo, cancelado. ¿En qué más te ayudo?";
   }
 
   if (conv.state === "waiting_postpone" && isBareNumber) {
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
     const postponeText = "posponer " + text;
     return await handleCommand(postponeText, user);
   }
 
   if (conv.state === "waiting_postpone") {
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
     const postponeText = "posponer " + text;
     return await handleCommand(postponeText, user);
   }
@@ -2540,7 +2567,7 @@ async function handleConversationStep(
     const reason = /sin\s+motivo/i.test(cmdLower) ? "Sin motivo especificado" : text;
     const dueDate = new Date(conv.data.dueDate);
     await postponeTask(conv.data.taskId, dueDate, reason, user);
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
     const dateStr = dueDate.toLocaleDateString("es-GT", { timeZone: "America/Guatemala",  weekday: "long", day: "numeric", month: "long" });
     const timeStr = dueDate.toLocaleTimeString("es-GT", { timeZone: "America/Guatemala",  hour: "2-digit", minute: "2-digit" });
     return `✅ Tarea *${conv.data.taskTitle}* pospuesta para *${dateStr} a las ${timeStr}*.\nMotivo: ${reason}\n_Se notificará al administrador._`;
@@ -2578,7 +2605,7 @@ async function handleConversationStep(
 
     const dueDate = applyGuatemalaTime(new Date(conv.data.dueDate), time.hours, time.minutes);
     const data = conv.data;
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
 
     // Prioridad: por defecto MEDIA (las prioridades casi no se usan).
     // Solo se usa si el título o la respuesta lo dice ("urgente", "alta", "baja").
@@ -2637,7 +2664,7 @@ async function handleConversationStep(
     }
 
     const data = conv.data;
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
 
     let assignToId: string | undefined;
     if (data.assignToName && data.assignToName !== user.name) {
@@ -2726,7 +2753,7 @@ async function handleConversationStep(
       assignToId = user.id;
     }
 
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
     const remindAt = new Date(data.remindAt);
 
     await prisma.reminder.create({
@@ -2778,7 +2805,7 @@ async function handleConversationStep(
     } else if (time) {
       when = applyGuatemalaTime(when, time.hours, time.minutes);
     }
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
 
     const msgText = conv.data.message || "Mensaje de Live Productions";
     await prisma.scheduledMessage.create({
@@ -2796,7 +2823,7 @@ async function handleConversationStep(
 
   // ── Botón "✅ Completar": espera el número de tarea ─────────────
   if (conv.state === "action_complete") {
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
     if (!/\d/.test(text)) {
       return "Escribí el *número* de la tarea. Ej: `1` (o varios: `1 2 3`).\n\nEscribí *tareas* para ver los números.";
     }
@@ -2805,7 +2832,7 @@ async function handleConversationStep(
 
   // ── Botón "⏰ Posponer": espera el número de tarea ──────────────
   if (conv.state === "action_postpone") {
-    conversations.delete(fromNumber);
+    clearConversation(fromNumber);
     if (!/\d/.test(text)) {
       return "Escribí el *número* de la tarea. Ej: `1`.\n\nEscribí *tareas* para ver los números.";
     }
@@ -3044,12 +3071,13 @@ export async function POST(request: NextRequest) {
                     continue;
                   }
                   prisma.user.update({ where: { id: u.id }, data: { lastInboundAt: new Date() } }).catch(() => {});
+                  await loadConversation(nFrom);
                   const conv = getConversation(nFrom);
                   const atype = (conv?.data?.type as string) || "ENTRADA";
                   const placeName = (conv?.data?.place as string) || null;
                   const { registerAttendance } = await import("@/lib/attendance");
                   const res = await registerAttendance({ userId: u.id, lat, lng, type: atype, placeName, source: "WHATSAPP" });
-                  conversations.delete(nFrom);
+                  clearConversation(nFrom);
                   const sys = await getSystemUserId();
                   if (sys) {
                     await prisma.whatsAppMessage.create({ data: { userId: sys, toNumber: fromNumber, message: `[ASISTENCIA] ${atype} ${res.place?.name || "?"} valid=${res.valid}`, type: "CHAT", status: "DELIVERED" } }).catch(() => {});
@@ -3122,11 +3150,12 @@ export async function POST(request: NextRequest) {
                   // Marca la ventana de 24h: el usuario escribió ahora → mensajes libres permitidos.
                   prisma.user.update({ where: { id: user.id }, data: { lastInboundAt: new Date() } }).catch(() => {});
 
+                  await loadConversation(normalizedFrom);
                   const conv = getConversation(normalizedFrom);
                   const isBareNumber = /^\d+$/.test(text.toLowerCase().trim());
 
                   if (conv && isKnownCommand(text) && !isBareNumber) {
-                    conversations.delete(normalizedFrom);
+                    clearConversation(normalizedFrom);
                   }
 
                   if (conv && !(isKnownCommand(text) && !isBareNumber)) {

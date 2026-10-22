@@ -804,7 +804,7 @@ async function scheduledTaskMessage(hour: number) {
 
       const { today } = partitionTasksByDay(tasks, startOfToday);
       const { text, ordered } = formatTasksByModule(today);
-      if (ordered.length > 0) saveTaskView(user.id, ordered);
+      if (ordered.length > 0) await saveTaskView(user.id, ordered);
 
       // ⏰ Recordatorios de HOY
       let remindersBlock = "";
@@ -893,7 +893,7 @@ async function overdueMessage() {
       const { overdue } = partitionTasksByDay(tasks, startOfToday);
       if (overdue.length === 0) continue;
       const { text, ordered } = formatTasksByModule(overdue);
-      saveTaskView(user.id, ordered);
+      await saveTaskView(user.id, ordered);
 
       const to = user.whatsappNumber || user.phone;
       if (!to) continue;
