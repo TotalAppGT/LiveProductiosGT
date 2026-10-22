@@ -257,14 +257,13 @@ export default function TareasPage() {
     setError("");
     try {
       const params = new URLSearchParams();
-      if (activeTab === "TODAS") {
-        if (assignedFilter) params.set("assignedToId", assignedFilter);
-      } else if (activeTab === "MIS_TAREAS") {
+      const scopeAll = assignedFilter === "__ALL__";
+      if (activeTab === "MIS_TAREAS") {
         if (user?.id) params.set("assignedToId", user.id);
       } else {
-        if (assignedFilter) params.set("assignedToId", assignedFilter);
-        else if (user?.id) params.set("assignedToId", user.id);
-        if (activeTab !== "HOY" && activeTab !== "SEMANA" && activeTab !== "MES") {
+        if (assignedFilter && !scopeAll) params.set("assignedToId", assignedFilter);
+        else if (!scopeAll && user?.id) params.set("assignedToId", user.id);
+        if (activeTab !== "TODAS" && activeTab !== "HOY" && activeTab !== "SEMANA" && activeTab !== "MES") {
           params.set("status", activeTab);
         }
       }
@@ -1349,25 +1348,11 @@ export default function TareasPage() {
 
       <div className="flex flex-col sm:flex-row gap-3">
         <select
-          value={
-            activeTab === "TODAS" && !assignedFilter && isAdminOrJefe
-              ? "__ALL__"
-              : activeTab === "MIS_TAREAS"
-              ? ""
-              : assignedFilter
-          }
+          value={assignedFilter}
           onChange={(e) => {
             const value = e.target.value;
-            if (value === "__ALL__") {
-              setAssignedFilter("");
-              setActiveTab("TODAS");
-            } else if (value) {
-              setAssignedFilter(value);
-              setActiveTab("TODAS");
-            } else {
-              setAssignedFilter("");
-              setActiveTab("MIS_TAREAS");
-            }
+            setAssignedFilter(value);
+            setActiveTab(value === "" ? "MIS_TAREAS" : "TODAS");
           }}
           className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white sm:w-48"
         >
@@ -1485,7 +1470,8 @@ export default function TareasPage() {
               }}
               className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              <option value="">{activeTab === "TODAS" ? "Todos" : "Mis tareas"}</option>
+              <option value="">Mis tareas</option>
+              {isAdminOrJefe && <option value="__ALL__">Todo el equipo</option>}
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
@@ -1508,7 +1494,14 @@ export default function TareasPage() {
         </div>
       )}
 
-      <Tabs defaultValue="HOY" value={activeTab} onValueChange={setActiveTab}>
+      <Tabs
+        defaultValue="HOY"
+        value={activeTab}
+        onValueChange={(value) => {
+          setActiveTab(value);
+          if (value === "MIS_TAREAS") setAssignedFilter("");
+        }}
+      >
         <TabList className="overflow-x-auto">
           {STATUS_TABS.map((tab) => (
             <Tab key={tab.value} value={tab.value}>{tab.label}</Tab>
