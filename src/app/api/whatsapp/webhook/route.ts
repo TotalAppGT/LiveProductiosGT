@@ -1475,6 +1475,7 @@ async function handleCommand(
     const nums = extractNumbers(numStr);
     if (nums.length === 0) return "¿Cuáles tareas? Ejemplo: *hecho 3* o *hecho 1 2 3* o *hechos 1 y 2*";
     const completed: string[] = [];
+    const completedIds: string[] = [];
     const failed: string[] = [];
     for (const num of nums) {
       const task = await resolveTaskByNumber(user.id, num);
@@ -1482,6 +1483,7 @@ async function handleCommand(
       if (task.status === "COMPLETADA") { failed.push(`${num} (ya estaba hecha)`); continue; }
       await completeTask(task.id, user);
       completed.push(task.title);
+      completedIds.push(task.id);
     }
     if (completed.length === 0) {
       return `⚠️ No pude completar: ${failed.join(", ")}. Escribí *tareas* para ver la lista actual.`;
@@ -1489,6 +1491,33 @@ async function handleCommand(
     let reply = `✅ *${completed.length} tarea${completed.length > 1 ? "s" : ""} completada${completed.length > 1 ? "s" : ""}:*\n${completed.map((t) => `• ${t}`).join("\n")}`;
     if (failed.length > 0) reply += `\n\n⚠️ No se pudo: ${failed.join(", ")}`;
     reply += `\n\n_Si fue un error, escribe *deshacer [número]*._`;
+
+    // Reenviar la lista en el MISMO orden de la vista guardada, sin las
+    // completadas. Así los números se renumeran (ej. 6 → 4) y el siguiente
+    // "hecho N" usa la lista nueva. No se re-consulta ni se reordena nada.
+    try {
+      const view = await getTaskViewIds(user.id);
+      if (view && view.length > 0) {
+        const remainingIds = view.filter((id) => !completedIds.includes(id));
+        const remaining = remainingIds.length
+          ? await prisma.task.findMany({
+              where: { id: { in: remainingIds }, assignedToId: user.id, status: { in: ["PENDIENTE", "EN_PROCESO", "REPROGRAMADA"] } },
+            })
+          : [];
+        const byId = new Map(remaining.map((t) => [t.id, t]));
+        const ordered = remainingIds.map((id) => byId.get(id)).filter(Boolean) as typeof remaining;
+        if (ordered.length > 0) {
+          const h = formatTasksByModule(ordered);
+          await saveTaskView(user.id, h.ordered);
+          reply += `\n\n📋 *Lista actualizada (${h.ordered.length})*\n${h.text}`;
+        } else {
+          await saveTaskView(user.id, []);
+          reply += `\n\n✅ No quedan tareas en esta lista.`;
+        }
+      }
+    } catch {
+      // silencioso: no romper la confirmación si falla la vista
+    }
     return reply;
   }
 
