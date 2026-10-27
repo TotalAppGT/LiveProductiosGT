@@ -66,7 +66,7 @@ export async function uploadFile(buf: Buffer, key: string, contentType: string):
   const res = await client(cfg).fetch(endpoint, {
     method: "PUT",
     body: new Uint8Array(buf) as unknown as BodyInit,
-    headers: { "Content-Type": contentType },
+    headers: { "Content-Type": contentType, "Content-Length": String(buf.length) },
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
