@@ -766,13 +766,15 @@ export default function PedidosPage() {
           onClose={() => setSelectedOrder(null)}
           token={token || ""}
           onUpdated={fetchData}
+          inventory={inventory}
+          orders={orders}
         />
       )}
     </div>
   );
 }
 
-function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; onClose: () => void; token: string; onUpdated: () => void }) {
+function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], orders = [] }: { order: any; onClose: () => void; token: string; onUpdated: () => void; inventory?: any[]; orders?: any[] }) {
   const { user } = useAuth();
   const [items, setItems] = useState<any[]>(order.items || []);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -1073,8 +1075,37 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
     }
   }
 
+  const dayKey = (d: any) => {
+    const x = new Date(d);
+    return `${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, "0")}-${String(x.getUTCDate()).padStart(2, "0")}`;
+  };
+  const normalize = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const sameDayOrders = orders.filter((o: any) => o.eventDate && dayKey(o.eventDate) === dayKey(order.eventDate));
+  const rowMap = new Map<string, { name: string; category: string; inventoryItemId: string | null; need: number; selected: number; labels: string[] }>();
+  for (const o of sameDayOrders) {
+    for (const it of o.items || []) {
+      const key = it.inventoryItemId || `n:${normalize(it.name)}`;
+      let r = rowMap.get(key);
+      if (!r) {
+        r = { name: it.name, category: it.category || "OTRO", inventoryItemId: it.inventoryItemId || null, need: 0, selected: 0, labels: [] };
+        rowMap.set(key, r);
+      }
+      r.need += Number(it.quantity) || 0;
+      if (o.id === order.id) r.selected += Number(it.quantity) || 0;
+      const label = `#${o.orderNumber}`;
+      if (!r.labels.includes(label)) r.labels.push(label);
+    }
+  }
+  const sheetRows = Array.from(rowMap.values()).map((r) => {
+    const invs = inventory.filter((i: any) => (r.inventoryItemId && i.id === r.inventoryItemId) || normalize(i.name) === normalize(r.name));
+    const have = invs.filter((i: any) => i.status === "DISPONIBLE").reduce((s: number, i: any) => s + Number(i.quantity || 0), 0);
+    const shortfall = Math.max(0, r.need - have);
+    const action = shortfall === 0 ? "OK" : invs.length === 0 ? "Consultar" : have > 0 ? "Rentar" : "Comprar";
+    return { ...r, have, shortfall, action };
+  }).sort((a, b) => (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name));
+
   return (
-    <Modal isOpen onClose={onClose} title={`Cuadro #${order.orderNumber} - ${order.eventName}`} size="lg">
+    <Modal isOpen onClose={onClose} title={`Cuadro #${order.orderNumber} - ${order.eventName}`} size="3xl">
       <div className="space-y-4 p-1">
         <div className="flex flex-wrap gap-2">
           <a
@@ -1115,6 +1146,57 @@ function OrderDetailModal({ order, onClose, token, onUpdated }: { order: any; on
               🗑️ Eliminar
             </button>
           )}
+        </div>
+
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/60">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+              Vista del cuadro · {sameDayOrders.length} cuadro(s) de la misma fecha
+            </p>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              Necesito = suma de todos los cuadros de la fecha · Tengo = inventario disponible
+            </p>
+          </div>
+          <div className="overflow-x-auto max-h-[48vh]">
+            <table className="w-full min-w-[900px] text-xs">
+              <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-right px-2 py-2 font-semibold">Cant.</th>
+                  <th className="text-left px-2 py-2 font-semibold">Ítem</th>
+                  <th className="text-left px-2 py-2 font-semibold">Categoría</th>
+                  <th className="text-right px-2 py-2 font-semibold">Necesito</th>
+                  <th className="text-right px-2 py-2 font-semibold">Tengo</th>
+                  <th className="text-right px-2 py-2 font-semibold">Faltante</th>
+                  <th className="text-left px-2 py-2 font-semibold">Acción</th>
+                  <th className="text-left px-2 py-2 font-semibold">Cuadros</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {sheetRows.map((r, i) => (
+                  <tr key={i} className={r.shortfall > 0 ? "bg-red-50/40 dark:bg-red-900/10" : ""}>
+                    <td className="px-2 py-1.5 text-right font-medium">{r.selected || "—"}</td>
+                    <td className="px-2 py-1.5">{r.name}</td>
+                    <td className="px-2 py-1.5 text-gray-500">{r.category}</td>
+                    <td className="px-2 py-1.5 text-right">{r.need}</td>
+                    <td className="px-2 py-1.5 text-right">{r.have}</td>
+                    <td className={`px-2 py-1.5 text-right font-semibold ${r.shortfall > 0 ? "text-red-600" : "text-green-600"}`}>{r.shortfall}</td>
+                    <td className="px-2 py-1.5">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                        r.action === "OK" ? "bg-green-100 text-green-700" :
+                        r.action === "Comprar" ? "bg-red-100 text-red-700" :
+                        r.action === "Rentar" ? "bg-amber-100 text-amber-700" :
+                        "bg-gray-100 text-gray-600"
+                      }`}>{r.action}</span>
+                    </td>
+                    <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{r.labels.join(", ")}</td>
+                  </tr>
+                ))}
+                {sheetRows.length === 0 && (
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Sin ítems.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {editing && (

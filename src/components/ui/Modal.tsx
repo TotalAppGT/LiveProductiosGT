@@ -11,7 +11,7 @@ interface ModalProps {
   title?: string;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "full";
   className?: string;
 }
 
@@ -20,6 +20,9 @@ const sizeStyles: Record<string, string> = {
   md: "max-w-md",
   lg: "max-w-lg",
   xl: "max-w-xl",
+  "2xl": "max-w-2xl",
+  "3xl": "max-w-5xl",
+  full: "max-w-[95vw]",
 };
 
 function Modal({
