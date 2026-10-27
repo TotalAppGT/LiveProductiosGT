@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { handleWhatsAppMessage, askAI, AI_ERROR_MESSAGE } from "@/lib/ai-brain";
-import { sendMessage, sendMessageChunked, sendInteractiveButtons } from "@/lib/whatsapp";
+import { sendMessage, sendMessageChunked, sendInteractiveButtons, sendDocument } from "@/lib/whatsapp";
+import { buildGeneralReport, reportXlsx } from "@/lib/cuadro-report";
+import { buildKey, uploadFile } from "@/lib/storage";
 import { normalizeGTPhone } from "@/lib/phone";
 import { orderTasksByDayHour, groupTasksByDayText, formatTaskDigest, formatTasksByModule, orderTasksHierarchical } from "@/lib/task-view";
 import { getGuatemalaWallClock, gtStartOfToday, gtEndOfToday, applyGuatemalaTime, guatemalaDate, isTaskDueOnDate, weekdayNameOf, nextFixedDueDate, isTaskOverdue, partitionTasksByDay } from "@/lib/task-utils";
@@ -1682,6 +1684,43 @@ async function handleCommand(
     const allUsers = await prisma.user.findMany({ where: { active: true }, select: { name: true, role: true, phone: true }, take: 20 });
     const list = allUsers.map(u => `• ${u.name} (${u.role})${u.phone ? ` - ${u.phone.slice(-8)}` : ""}`).join("\n");
     return `👥 *Equipo Live Productions*\n\n${list}\n\n_Para transferir una tarea: *transferir 2 a [nombre]*_`;
+  }
+
+  // 📊 Reporte de cuadros por WhatsApp: "reporte" (hoy), "reporte 05/11",
+  // "reporte 5 6 7" genera el Excel, lo sube a R2 y manda el documento + link.
+  if (cmd === "reporte" || cmd === "reporte de cuadros" || cmd.startsWith("compartir reporte") || cmd.startsWith("reporte ")) {
+    const nums = (cmd.match(/\d{1,2}(?:\/\d{1,2})?/g) || []).filter((n) => n.length > 0);
+    const dates: Date[] = [];
+    for (const n of nums.slice(0, 6)) {
+      const parts = n.split("/").map((x) => parseInt(x, 10));
+      const day = parts[0];
+      const month = parts[1] || getGuatemalaWallClock().month + 1;
+      const year = getGuatemalaWallClock().year;
+      if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+        dates.push(new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00-06:00`));
+      }
+    }
+    if (dates.length === 0) dates.push(gtStartOfToday());
+    const starts = dates.map((d) => new Date(d));
+    const ends = dates.map((d) => new Date(d.getTime() + 24 * 60 * 60 * 1000 - 1));
+    const orders = await prisma.order.findMany({
+      where: { OR: starts.map((s, i) => ({ eventDate: { gte: s, lte: ends[i] } })) },
+      select: { id: true },
+    });
+    if (orders.length === 0) return "📊 No hay cuadros para esa fecha. Probá *reporte 05/11* o *reporte 5 6 7*.";
+    const report = await buildGeneralReport(orders.map((o) => o.id));
+    if (!report) return "📊 No pude generar el reporte.";
+    const buf = await reportXlsx(report);
+    const label = dates.map((d) => d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "2-digit" })).join("-");
+    const filename = `cuadros-${label}.xlsx`;
+    const { url } = await uploadFile(buf, buildKey("reports", filename), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    const absolute = url.startsWith("http") ? url : `https://admin.liveproductionsgt.com${url}`;
+    const to = fromNumber || "";
+    if (to) {
+      await sendDocument(to, absolute, filename, `📊 Reporte de cuadros ${label}`);
+      await sendMessage(to, `📊 *Reporte de cuadros ${label}*\n${absolute}\n\n_Compartí este link con el grupo; Meta no permite que el bot publique en grupos._`).catch(() => {});
+    }
+    return `✅ Reporte generado y enviado:\n${absolute}\n\n_Compartilo con el grupo; WhatsApp API no publica en grupos._`;
   }
 
   if (cmd === "tareas hoy" || cmd === "hoy" || cmd === "tareas de hoy" || cmd === "tareas para hoy") {

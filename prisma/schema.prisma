@@ -944,6 +944,7 @@ model PersonalNote {
 
 model Purchase {
   id            String    @id @default(cuid())
+  type          String    @default("COMPRA") // COMPRA | RENTA | COTIZACION
   title         String
   description   String?
   amount        Decimal?  @db.Decimal(10, 2)
@@ -994,7 +995,10 @@ model Supplier {
   name        String
   contactName String?
   phone       String?
+  whatsapp    String?
+  email       String?
   nit         String?
+  categories  String[]   @default([])
   notes       String?
   createdAt   DateTime   @default(now())
   purchases   Purchase[]

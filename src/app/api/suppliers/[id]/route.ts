@@ -12,7 +12,8 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     const data: Record<string, unknown> = {};
-    for (const k of ["name", "contactName", "phone", "nit", "notes"]) if (body[k] !== undefined) data[k] = body[k] || null;
+    for (const k of ["name", "contactName", "phone", "whatsapp", "email", "nit", "notes"]) if (body[k] !== undefined) data[k] = body[k] || null;
+    if (Array.isArray(body.categories)) data.categories = body.categories;
     const supplier = await prisma.supplier.update({ where: { id }, data });
     return NextResponse.json({ success: true, data: supplier });
   } catch (error) {

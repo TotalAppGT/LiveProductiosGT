@@ -116,6 +116,42 @@ async function sendMetaMessage(
   return null;
 }
 
+async function sendMetaDocument(
+  to: string,
+  phoneNumberId: string,
+  accessToken: string,
+  link: string,
+  filename: string,
+  caption = ""
+): Promise<WhatsAppApiResponse | null> {
+  const WHATSAPP_API_VERSION = "v22.0";
+  const normalizedNumber = normalizeGTPhone(to).replace(/\D/g, "");
+  const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${phoneNumberId}/messages`;
+  const payload = JSON.stringify({
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: normalizedNumber,
+    type: "document",
+    document: { link, filename, caption },
+  });
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: payload,
+    });
+    const data: WhatsAppApiResponse = await response.json();
+    if (!response.ok || data.error) {
+      console.error("WhatsApp Meta document error:", data.error || data);
+      return null;
+    }
+    return data;
+  } catch (error) {
+    console.error("WhatsApp Meta document fetch error:", error);
+    return null;
+  }
+}
+
 async function sendTwilioMessage(
   to: string,
   twilioConfig: { accountSid: string; authToken: string; phoneNumber: string },
@@ -160,6 +196,62 @@ async function sendTwilioMessage(
     console.error("WhatsApp Twilio fetch error:", error);
     return null;
   }
+}
+
+async function sendTwilioDocument(
+  to: string,
+  twilioConfig: { accountSid: string; authToken: string; phoneNumber: string },
+  link: string,
+  filename: string,
+  caption = ""
+): Promise<WhatsAppApiResponse | null> {
+  try {
+    const normalizedNumber = to.replace(/[^0-9]/g, "");
+    const credentials = Buffer.from(`${twilioConfig.accountSid}:${twilioConfig.authToken}`).toString("base64");
+    const formBody = new URLSearchParams({
+      To: `whatsapp:+${normalizedNumber}`,
+      From: `whatsapp:+${twilioConfig.phoneNumber.replace(/[^0-9]/g, "")}`,
+      Body: caption || filename,
+      MediaUrl: link,
+    });
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${twilioConfig.accountSid}/Messages.json`,
+      {
+        method: "POST",
+        headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" },
+        body: formBody.toString(),
+      }
+    );
+    const data: TwilioApiResponse = await response.json();
+    if (!response.ok || data.error_message) {
+      console.error("WhatsApp Twilio document error:", data.error_message);
+      return null;
+    }
+    return { messaging_product: "whatsapp", messages: [{ id: data.sid }] };
+  } catch (error) {
+    console.error("WhatsApp Twilio document fetch error:", error);
+    return null;
+  }
+}
+
+/** Envía un documento (PDF/XLSX) por WhatsApp usando un link público (R2/Drive). */
+async function sendDocument(
+  to: string,
+  link: string,
+  filename: string,
+  caption = ""
+): Promise<WhatsAppApiResponse | null> {
+  const provider = await getProvider();
+  if (provider === "TWILIO") {
+    const twilioConfig = await getTwilioConfig();
+    if (!twilioConfig.accountSid || !twilioConfig.authToken || !twilioConfig.phoneNumber) return null;
+    return sendTwilioDocument(to, twilioConfig, link, filename, caption);
+  }
+  const config = await getWhatsAppConfig();
+  const phoneNumberId = config?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+  const accessToken = config?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN || "";
+  if (!phoneNumberId || !accessToken) return null;
+  return sendMetaDocument(to, phoneNumberId, accessToken, link, filename, caption);
 }
 
 async function sendMessage(
@@ -984,6 +1076,7 @@ async function sendInteractiveButtons(
 }
 
 export {
+  sendDocument,
   sendMessage,
   sendTextMessage,
   sendTemplateMessage,

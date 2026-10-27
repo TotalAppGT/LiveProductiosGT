@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, amount, advance, provider, category, status, dueDate, priority, invoiceNumber, invoiceDate, paymentMethod, supplierId, assignedToId } = body;
+    const { type, title, description, amount, advance, provider, category, status, dueDate, priority, invoiceNumber, invoiceDate, paymentMethod, supplierId, assignedToId } = body;
 
     if (!title || !title.trim()) {
       return NextResponse.json({ success: false, error: "El título es requerido" }, { status: 400 });
@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
 
     const purchase = await prisma.purchase.create({
       data: {
+        type: type || "COMPRA",
         title: title.trim(),
         description: description || "",
         amount: amount ? Number(amount) : null,

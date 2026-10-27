@@ -30,7 +30,10 @@ export async function POST(request: NextRequest) {
         name: body.name.trim(),
         contactName: body.contactName || null,
         phone: body.phone || null,
+        whatsapp: body.whatsapp || null,
+        email: body.email || null,
         nit: body.nit || null,
+        categories: Array.isArray(body.categories) ? body.categories : [],
         notes: body.notes || null,
       },
     });
