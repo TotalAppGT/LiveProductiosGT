@@ -3088,6 +3088,20 @@ export async function POST(request: NextRequest) {
                 // Evitar que la lista crezca sin límite
                 if (processedMessageIds.size > 5000) processedMessageIds.clear();
               }
+              // Números bloqueados: no responder nada (ni IA, ni comandos, ni media).
+              const blockedRaw = (await prisma.systemConfig.findUnique({ where: { key: "whatsapp_blocked_numbers" } }))?.value || "";
+              const fromDigits = String(fromNumber).replace(/\D/g, "");
+              const normFromDigits = normalizeGTPhone(fromNumber).replace(/\D/g, "");
+              const isBlocked = blockedRaw
+                .split(/[,;\s]+/)
+                .map((s) => s.replace(/\D/g, ""))
+                .filter(Boolean)
+                .some((b) => fromDigits === b || fromDigits.endsWith(b) || normFromDigits.endsWith(b));
+              if (isBlocked) {
+                console.log(`[WhatsApp] Número bloqueado, se ignora: ${fromNumber}`);
+                continue;
+              }
+
               const contact = contacts.find(
                 (c: unknown) => (c as Record<string, unknown>).wa_id === fromNumber
               );
