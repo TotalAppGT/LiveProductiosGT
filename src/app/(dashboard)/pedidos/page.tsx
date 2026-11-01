@@ -92,6 +92,10 @@ export default function PedidosPage() {
   const [uploadItems, setUploadItems] = useState<any[] | null>(null);
   const [uploadDiscrepancies, setUploadDiscrepancies] = useState<any[]>([]);
   const [uploadEvent, setUploadEvent] = useState({ eventName: "", clientName: "", eventLocation: "", eventDate: "" });
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [compareData, setCompareData] = useState<any | null>(null);
+  const [showCompare, setShowCompare] = useState(false);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -207,6 +211,40 @@ export default function PedidosPage() {
       toast.success("Reporte descargado", { id: "rep" });
     } catch {
       toast.error("Error al descargar", { id: "rep" });
+    }
+  }
+
+  async function openCompare() {
+    if (compareIds.length !== 2) return toast.error("Seleccioná exactamente 2 cuadros");
+    setCompareLoading(true);
+    try {
+      const res = await fetch("/api/orders/compare", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ids: compareIds }) });
+      const json = await res.json();
+      if (json.success) { setCompareData(json.data); setShowCompare(true); }
+      else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al comparar");
+    } finally {
+      setCompareLoading(false);
+    }
+  }
+
+  async function downloadCompare() {
+    if (compareIds.length !== 2) return;
+    try {
+      const res = await fetch("/api/orders/compare/report", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ids: compareIds }) });
+      if (!res.ok) { toast.error("Error al generar el Excel"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `comparativa-${compareData?.source?.orderNumber || ""}-${compareData?.target?.orderNumber || ""}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Error al descargar");
     }
   }
 
@@ -426,6 +464,13 @@ export default function PedidosPage() {
       </div>
 
       {tab === "cuadros" && (<>
+      {compareIds.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+          <span className="text-sm text-blue-800 dark:text-blue-200">{compareIds.length} cuadro(s) seleccionado(s). Elegí 2 para comparar.</span>
+          <Button size="sm" onClick={openCompare} isLoading={compareLoading} disabled={compareIds.length !== 2}>Comparar / Trasiego</Button>
+          <Button size="sm" variant="ghost" onClick={() => setCompareIds([])}>Limpiar</Button>
+        </div>
+      )}
       <div className="mb-4 flex gap-2">
         <Input
           placeholder="Buscar por # o evento"
@@ -441,6 +486,22 @@ export default function PedidosPage() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={compareIds.includes(o.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      if (e.target.checked) {
+                        if (compareIds.length >= 2) { toast.error("Solo podés comparar 2 cuadros a la vez"); return; }
+                        setCompareIds((prev) => [...prev, o.id]);
+                      } else {
+                        setCompareIds((prev) => prev.filter((id) => id !== o.id));
+                      }
+                    }}
+                    className="h-4 w-4 shrink-0 cursor-pointer"
+                    title="Seleccionar para comparar / trasiego"
+                  />
                   <span className="font-bold text-blue-600">#{o.orderNumber}</span>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                     o.status === "LISTO" ? "bg-green-100 text-green-700" :
@@ -758,6 +819,33 @@ export default function PedidosPage() {
             <Button onClick={createOrder} isLoading={creating}>Crear Pedido</Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal isOpen={showCompare} onClose={() => setShowCompare(false)} title="Comparativa / Trasiego entre cuadros" size="3xl">
+        {compareData ? (
+          <div className="space-y-4">
+            <div className="text-sm text-gray-700 dark:text-gray-200">
+              <b>#{compareData.source.orderNumber} {compareData.source.eventName}</b> ({compareData.source.eventDate})
+              <span className="mx-2">→</span>
+              <b>#{compareData.target.orderNumber} {compareData.target.eventName}</b> ({compareData.target.eventDate})
+              {compareData.target.montageDate && <span className="text-xs text-gray-500"> · traslado {compareData.target.montageDate}</span>}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+              <div className="rounded-lg border p-2"><p className="text-gray-500">Origen</p><p className="text-lg font-bold">{compareData.totals.source} u</p></div>
+              <div className="rounded-lg border p-2"><p className="text-gray-500">Destino</p><p className="text-lg font-bold">{compareData.totals.target} u</p></div>
+              <div className="rounded-lg border p-2"><p className="text-gray-500">Trasiego</p><p className="text-lg font-bold">{compareData.totals.transfer} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctTransferSource}% origen / {compareData.totals.pctTransferTarget}% destino</p></div>
+              <div className="rounded-lg border p-2"><p className="text-gray-500">Bodega destino</p><p className="text-lg font-bold">{compareData.totals.targetFromStock} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctStockTarget}%</p></div>
+              <div className="rounded-lg border p-2"><p className="text-gray-500">Faltante destino</p><p className="text-lg font-bold">{compareData.totals.targetShort} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctShortTarget}%</p></div>
+              <div className="rounded-lg border p-2"><p className="text-gray-500">Regresa origen</p><p className="text-lg font-bold">{compareData.totals.returnQty} u</p></div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setShowCompare(false)}>Cerrar</Button>
+              <Button onClick={downloadCompare}>Descargar Excel</Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">Cargando…</p>
+        )}
       </Modal>
 
       {selectedOrder && (
