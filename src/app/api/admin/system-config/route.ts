@@ -22,9 +22,12 @@ export async function GET(request: NextRequest) {
     const configs = await prisma.systemConfig.findMany({
       orderBy: { key: "asc" },
     });
+    const safeConfigs = configs.map((c) =>
+      c.key === "google_service_account_json" ? { ...c, value: "***" } : c
+    );
 
     return NextResponse.json(
-      { success: true, data: configs },
+      { success: true, data: safeConfigs },
       { status: 200 }
     );
   } catch (error) {
