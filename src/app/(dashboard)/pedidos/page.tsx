@@ -89,6 +89,7 @@ export default function PedidosPage() {
   const [bulkFrom, setBulkFrom] = useState("");
   const [bulkTo, setBulkTo] = useState("");
   const [bulkReplace, setBulkReplace] = useState(true);
+  const [bulkSource, setBulkSource] = useState<"file" | "google">("file");
   const [uploadItems, setUploadItems] = useState<any[] | null>(null);
   const [uploadDiscrepancies, setUploadDiscrepancies] = useState<any[]>([]);
   const [uploadEvent, setUploadEvent] = useState({ eventName: "", clientName: "", eventLocation: "", eventDate: "" });
@@ -272,6 +273,7 @@ export default function PedidosPage() {
     setBulkLoading(true);
     setBulkPreview(null);
     setBulkFile(null);
+    setBulkSource("file");
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -292,7 +294,53 @@ export default function PedidosPage() {
     }
   }
 
+  async function previewBulkGoogle() {
+    setBulkLoading(true);
+    setBulkPreview(null);
+    setBulkFile(null);
+    setBulkSource("google");
+    try {
+      const res = await fetch("/api/orders/import-sheets", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "google", mode: "preview", replace: bulkReplace, from: bulkFrom || undefined, to: bulkTo || undefined }),
+      });
+      const json = await res.json();
+      if (json.success) setBulkPreview(json.data);
+      else toast.error(json.error || "Error");
+    } catch {
+      toast.error("Error al leer Google Sheets");
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
   async function applyBulk() {
+    if (bulkSource === "google") {
+      if (!bulkPreview) return;
+      setBulkLoading(true);
+      try {
+        const res = await fetch("/api/orders/import-sheets", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ source: "google", mode: "apply", replace: bulkReplace, from: bulkFrom || undefined, to: bulkTo || undefined }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          const d = json.data;
+          toast.success(`${d.created} nuevos, ${d.updated} actualizados${d.skipped ? `, ${d.skipped} omitidos` : ""}${json.data.unmatched?.length ? ` · ${json.data.unmatched.length} sin coincidencia` : ""}`);
+          setShowBulk(false);
+          setBulkPreview(null);
+          setBulkSource("file");
+          fetchData();
+        } else toast.error(json.error || "Error");
+      } catch {
+        toast.error("Error al sincronizar cuadros");
+      } finally {
+        setBulkLoading(false);
+      }
+      return;
+    }
     if (!bulkFile) return;
     setBulkLoading(true);
     try {
@@ -467,7 +515,7 @@ export default function PedidosPage() {
             ⬇️ Plantilla Excel
           </Button>
           <Button variant="outline" onClick={() => setShowBulk(true)}>
-            ⬆️ Subir cuadros (Excel)
+            ⬆️ Importar / Sincronizar cuadros
           </Button>
           <Button variant="outline" onClick={() => setShowUpload(true)}>
             ⬆️ Subir cuadro
@@ -635,12 +683,12 @@ export default function PedidosPage() {
           setBulkPreview(null);
           setBulkFile(null);
         }}
-        title="Importar cuadros desde Excel"
+        title="Importar / sincronizar cuadros"
         size="lg"
       >
         <div className="space-y-4 p-1">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Subí el Excel tal como lo exportás de Sheets. Detecta las hojas con <b>Fecha del evento</b> y <b>CUADRO DE MONTAJE</b> (Cantidad | Ítem), con uno o varios eventos por hoja. Compara cada ítem con el inventario y muestra los que no coinciden.
+            Subí el Excel tal como lo exportás de Sheets o cargá directo desde la <b>hoja fija de cuadros</b>. Detecta las hojas con <b>Fecha del evento</b> y <b>CUADRO DE MONTAJE</b> (Cantidad | Ítem), con uno o varios eventos por hoja. Compara cada ítem con el inventario y muestra los que no coinciden.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -666,6 +714,15 @@ export default function PedidosPage() {
             />
             Actualizar cuadros existentes (misma fecha y cliente)
           </label>
+
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+            <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
+              Sincronizar desde la hoja fija respeta <b>Desde/Hasta</b> y la opción de <b>actualizar existentes</b>. Los cuadros ya en preparación o aprobados se omiten.
+            </p>
+            <Button variant="outline" size="sm" onClick={previewBulkGoogle} isLoading={bulkLoading}>
+              Cargar desde Google Sheets
+            </Button>
+          </div>
 
           <input
             key={`${bulkFrom}-${bulkTo}-${bulkReplace}`}
@@ -737,7 +794,7 @@ export default function PedidosPage() {
                 <Button variant="ghost" onClick={() => { setShowBulk(false); setBulkPreview(null); setBulkFile(null); }}>
                   Cancelar
                 </Button>
-                <Button onClick={applyBulk} isLoading={bulkLoading} disabled={!bulkFile}>
+                <Button onClick={applyBulk} isLoading={bulkLoading} disabled={bulkSource === "google" ? !bulkPreview : !bulkFile}>
                   Importar / Actualizar
                 </Button>
               </div>

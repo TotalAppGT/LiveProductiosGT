@@ -11,6 +11,8 @@ import {
   type SheetEvent,
 } from "@/lib/order-sheet-import";
 
+const CUADROS_SHEET_ID = "1OL9oQ5pGs45ZTu5L2qud8xMqKTmYOcrzNFFo0epSPe4";
+
 const norm = (s: unknown) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
 type ExistingOrder = Awaited<ReturnType<typeof findExistingOrders>>[number];
@@ -66,23 +68,61 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "No autorizado" }, { status: 403 });
     }
 
-    const form = await request.formData();
-    const file = form.get("file") as File | null;
-    if (!file) {
-      return NextResponse.json({ success: false, error: "Archivo requerido" }, { status: 400 });
+    const contentType = request.headers.get("content-type") || "";
+    let wb: any;
+    let mode = "preview";
+    let replace = false;
+    let from = "";
+    let to = "";
+    let sheets: string[] | undefined;
+
+    if (contentType.includes("application/json")) {
+      const body = await request.json();
+      mode = String(body.mode || "preview");
+      replace = !!body.replace;
+      from = String(body.from || "");
+      to = String(body.to || "");
+      const rawSheets = body.sheets;
+      sheets = Array.isArray(rawSheets)
+        ? rawSheets.map((s: unknown) => String(s).trim()).filter(Boolean)
+        : typeof rawSheets === "string"
+        ? rawSheets.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined;
+
+      if (body.source !== "google") {
+        return NextResponse.json({ success: false, error: "Origen no soportado" }, { status: 400 });
+      }
+      const sheetId = String(body.sheetId || CUADROS_SHEET_ID);
+      const res = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`, {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        return NextResponse.json(
+          { success: false, error: `No se pudo leer la hoja de cuadros (${res.status})` },
+          { status: 400 }
+        );
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      wb = XLSX.read(buf, { type: "buffer", cellDates: true });
+    } else {
+      const form = await request.formData();
+      const file = form.get("file") as File | null;
+      if (!file) {
+        return NextResponse.json({ success: false, error: "Archivo requerido" }, { status: 400 });
+      }
+      mode = String(form.get("mode") || "preview");
+      replace = String(form.get("replace") || "0") === "1";
+      from = String(form.get("from") || "");
+      to = String(form.get("to") || "");
+      const sheetsRaw = String(form.get("sheets") || "");
+      sheets = sheetsRaw
+        ? sheetsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined;
+
+      const buf = Buffer.from(await file.arrayBuffer());
+      wb = XLSX.read(buf, { type: "buffer", cellDates: true });
     }
 
-    const mode = String(form.get("mode") || "preview");
-    const replace = String(form.get("replace") || "0") === "1";
-    const from = String(form.get("from") || "");
-    const to = String(form.get("to") || "");
-    const sheetsRaw = String(form.get("sheets") || "");
-    const sheets = sheetsRaw
-      ? sheetsRaw.split(",").map((s) => s.trim()).filter(Boolean)
-      : undefined;
-
-    const buf = Buffer.from(await file.arrayBuffer());
-    const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
     const events = parseWorkbookEvents(wb, { sheets, from, to });
 
     if (events.length === 0) {

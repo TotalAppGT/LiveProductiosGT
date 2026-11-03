@@ -65,6 +65,7 @@ export default function InventarioPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importMode, setImportMode] = useState<"append" | "replace" | "merge">("merge");
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [showLogistics, setShowLogistics] = useState(false);
   const [movements, setMovements] = useState<any[]>([]);
   const [mov, setMov] = useState({ inventoryItemId: "", type: "TRANSFERENCIA", fromWarehouse: "Bodega Cristo Rey", toWarehouse: "Casa Nómada", quantity: "", note: "" });
@@ -267,6 +268,29 @@ export default function InventarioPage() {
       toast.error("Error al importar");
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function syncInventory() {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/inventory/import", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "google", mode: "sync", zeroMissing: true }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(json.message || "Inventario sincronizado");
+        setShowImportModal(false);
+        fetchItems();
+      } else {
+        toast.error(json.error || "Error al sincronizar");
+      }
+    } catch {
+      toast.error("Error al sincronizar inventario");
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -551,6 +575,9 @@ export default function InventarioPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={syncInventory} isLoading={syncing}>
+            Sincronizar Sheets
+          </Button>
           <Button variant="outline" size="sm" leftIcon={<Upload className="h-4 w-4" />} onClick={() => setShowImportModal(true)}>
             Importar
           </Button>
@@ -940,6 +967,12 @@ export default function InventarioPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Subí el Excel/CSV del inventario (mismo formato: <b>sección</b> + <b>cantidad</b> + <b>ítem</b>).
           </p>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+            <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
+              O sincronizá directo desde la hoja fija <b>INVENTARIO DISPONIBLE</b>: actualiza cantidades exactas, crea nuevos y pone en 0 los que ya no están.
+            </p>
+            <Button size="sm" onClick={syncInventory} isLoading={syncing}>Sincronizar ahora</Button>
+          </div>
           <input
             type="file"
             accept=".xlsx,.xls,.csv"
