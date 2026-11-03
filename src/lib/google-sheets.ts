@@ -69,6 +69,68 @@ async function shareEmail(): Promise<string> {
   return fromDb || DEFAULT_SHARE_EMAIL;
 }
 
+export async function getReportSheetId(): Promise<string> {
+  return process.env.GOOGLE_SHEETS_REPORT_ID || (await configValue("google_sheets_report_id"));
+}
+
+export async function writeComparisonToSheet(
+  data: CompareData,
+  spreadsheetId: string
+): Promise<{ url: string; spreadsheetId: string }> {
+  const sa = await getServiceAccount();
+  if (!sa) throw new Error("google-service-account-not-configured");
+  const token = await getAccessToken(sa);
+  const auth = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+
+  const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`, {
+    headers: auth,
+  });
+  const meta = await metaRes.json();
+  if (!metaRes.ok) throw new Error(meta?.error?.message || "sheet-read-failed");
+  const existing: string[] = (meta.sheets || []).map((s: { properties: { title: string } }) => s.properties.title);
+
+  const tabs = buildComparisonTabs(data);
+  const targets = tabs.map((t, i) => existing[i] || t.name);
+
+  if (existing.length < tabs.length) {
+    const requests = tabs.slice(existing.length).map((t) => ({ addSheet: { properties: { title: t.name } } }));
+    const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ requests }),
+    });
+    if (!addRes.ok) {
+      const err = await addRes.json().catch(() => ({}));
+      throw new Error(err?.error?.message || "sheet-add-failed");
+    }
+  }
+
+  for (const title of targets) {
+    const range = `'${title.replace(/'/g, "''")}'!A1:Z5000`;
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:clear`, {
+      method: "POST",
+      headers: auth,
+      body: "{}",
+    });
+  }
+
+  const values = tabs.map((t, i) => ({
+    range: `'${targets[i].replace(/'/g, "''")}'!A1`,
+    values: t.rows,
+  }));
+  const valRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ valueInputOption: "RAW", data: values }),
+  });
+  if (!valRes.ok) {
+    const err = await valRes.json().catch(() => ({}));
+    throw new Error(err?.error?.message || "sheet-values-failed");
+  }
+
+  return { url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, spreadsheetId };
+}
+
 export async function createComparisonSheet(data: CompareData): Promise<{ url: string; spreadsheetId: string }> {
   const sa = await getServiceAccount();
   if (!sa) throw new Error("google-service-account-not-configured");

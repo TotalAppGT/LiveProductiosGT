@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
 import { compareOrders } from "@/lib/order-compare";
-import { createComparisonSheet } from "@/lib/google-sheets";
+import { writeComparisonToSheet, getReportSheetId } from "@/lib/google-sheets";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,9 @@ export async function POST(request: NextRequest) {
     if (ids.length < 2) return NextResponse.json({ success: false, error: "Seleccioná al menos 2 cuadros" }, { status: 400 });
 
     const data = await compareOrders(ids);
-    const sheet = await createComparisonSheet(data);
+    const spreadsheetId = await getReportSheetId();
+    if (!spreadsheetId) return NextResponse.json({ success: false, error: "Falta configurar google_sheets_report_id" }, { status: 400 });
+    const sheet = await writeComparisonToSheet(data, spreadsheetId);
     return NextResponse.json({ success: true, data: sheet });
   } catch (error) {
     console.error("Error creando comparativa en Sheets:", error);
