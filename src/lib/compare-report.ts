@@ -28,7 +28,28 @@ const ddmmyy = (iso: string | null) => {
   return `${d}/${m}`;
 };
 
+const dayMonth = (iso: string | null) => {
+  if (!iso) return null;
+  const [, m, d] = iso.split("-");
+  return { d, m };
+};
+
+const windowLabel = (montage: string | null, event: string | null) => {
+  const a = dayMonth(montage);
+  const b = dayMonth(event);
+  if (a && b) return a.m === b.m ? `${a.d}/${b.d}` : `${a.d}/${a.m} - ${b.d}/${b.m}`;
+  return a ? `${a.d}/${a.m}` : b ? `${b.d}/${b.m}` : "";
+};
+
 const pctOf = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+
+const shortName = (eventName: string) => {
+  let t = String(eventName || "").trim();
+  t = t.replace(/^cuadro\s+\d{1,2}\/\d{1,2}\/\d{4}\s*[—–-]\s*/i, "");
+  const parts = t.split(/\s+[-–—]\s+/);
+  if (parts.length > 1) t = parts[parts.length - 1];
+  return t.split(/\s+/)[0] || t || "Evento";
+};
 
 const safeName = (s: string) => {
   const cleaned = String(s || "")
@@ -39,12 +60,10 @@ const safeName = (s: string) => {
   return cleaned || "Hoja";
 };
 
-function actionFor(data: CompareData, r: CompareData["rows"][number]): string {
-  const s = data.source.eventName;
-  const t = data.target.eventName;
-  if (r.targetQty === 0) return `No se usa en ${t}`;
+function actionFor(sName: string, tName: string, r: CompareData["rows"][number]): string {
+  if (r.targetQty === 0) return `No se usa en ${tName}`;
   const parts: string[] = [];
-  if (r.transfer > 0) parts.push(`Trasladar de ${s}`);
+  if (r.transfer > 0) parts.push(`Trasladar de ${sName}`);
   if (r.targetFromStock > 0) parts.push("Llevar de bodega");
   if (r.targetShort > 0) parts.push("Compra/renta");
   return parts.length ? parts.join(" + ") : "Cubierto";
@@ -66,10 +85,12 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
   const s = data.source;
   const t = data.target;
   const tt = data.totals;
+  const sName = shortName(s.eventName);
+  const tName = shortName(t.eventName);
   const sd = ddmmyy(s.eventDate);
   const td = ddmmyy(t.eventDate);
   const tm = ddmmyy(t.montageDate);
-  const targetWindow = tm && td ? `${tm}/${td}` : tm || td;
+  const targetWindow = windowLabel(t.montageDate, t.eventDate);
 
   const used = new Set<string>();
   const unique = (name: string) => {
@@ -86,8 +107,8 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
   const detailRows: Row[] = [
     [
       "DETALLE POR CATEGORÍA",
-      `${s.eventName} ${sd}`,
-      `${t.eventName} ${targetWindow}`,
+      `${sName} ${sd}`,
+      `${tName} ${targetWindow}`,
       "Bodega",
       "Qué hacer",
       "Cantidad",
@@ -105,41 +126,49 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
     detailSections.push(detailRows.length);
     detailRows.push([cat]);
     for (const r of rows) {
-      detailRows.push([r.name, r.sourceQty, r.targetQty, r.bodega, actionFor(data, r), quantityFor(r), coversFor(r)]);
+      detailRows.push([
+        r.name,
+        r.sourceQty,
+        r.targetQty,
+        r.bodega,
+        actionFor(sName, tName, r),
+        quantityFor(r),
+        coversFor(r),
+      ]);
     }
   }
 
   const resumen: Row[] = [
     ["COBERTURA", "Unidades", "%"],
-    [`${s.eventName} reutilizado en ${t.eventName} (trasiego)`, tt.transfer, `${tt.pctTransferSource}% de ${s.eventName}`],
-    [`${t.eventName} cubierto por ${s.eventName}`, tt.transfer, `${tt.pctTransferTarget}% de ${t.eventName}`],
-    [`${t.eventName} cargado de bodega`, tt.targetFromStock, `${tt.pctStockTarget}% de ${t.eventName}`],
-    [`${t.eventName} faltante (no cubierto)`, tt.targetShort, `${tt.pctShortTarget}% de ${t.eventName}`],
-    [`${s.eventName} faltante (no cubierto)`, tt.sourceShort, `${pctOf(tt.sourceShort, tt.source)}% de ${s.eventName}`],
-    [`${s.eventName} que regresa a bodega`, tt.returnQty, `${tt.pctReturnSource}% de ${s.eventName}`],
+    [`${sName} reutilizado en ${tName} (trasiego)`, tt.transfer, `${tt.pctTransferSource}% de ${sName}`],
+    [`${tName} cubierto por ${sName}`, tt.transfer, `${tt.pctTransferTarget}% de ${tName}`],
+    [`${tName} cargado de bodega`, tt.targetFromStock, `${tt.pctStockTarget}% de ${tName}`],
+    [`${tName} faltante (no cubierto)`, tt.targetShort, `${tt.pctShortTarget}% de ${tName}`],
+    [`${sName} faltante (no cubierto)`, tt.sourceShort, `${pctOf(tt.sourceShort, tt.source)}% de ${sName}`],
+    [`${sName} que regresa a bodega`, tt.returnQty, `${tt.pctReturnSource}% de ${sName}`],
   ];
 
   return [
-    { key: "resumen", name: unique("Resumen"), rows: resumen, widths: [46, 12, 32], headerRows: [0], sectionRows: [] },
+    { key: "resumen", name: unique("Resumen"), rows: resumen, widths: [42, 12, 26], headerRows: [0], sectionRows: [] },
     {
       key: "origen",
-      name: unique(s.eventName),
+      name: unique(sName),
       rows: [
-        [`LISTA PARA ${s.eventName} — ${sd}`, "Cantidad", "Sale de bodega", "Faltante", `Se traslada a ${t.eventName}`, "Regresa a bodega", "Comentario"],
+        [`LISTA PARA ${sName} — ${sd}`, "Cantidad", "Sale de bodega", "Faltante", `Se traslada a ${tName}`, "Regresa a bodega", "Comentario"],
         ...data.rows.filter((r) => r.sourceQty > 0).map((r) => [r.name, r.sourceQty, r.stockSource, r.sourceShort, r.transfer, r.returnQty, ""]),
       ],
-      widths: [46, 12, 14, 10, 20, 16, 32],
+      widths: [46, 12, 14, 10, 18, 16, 32],
       headerRows: [0],
       sectionRows: [],
     },
     {
       key: "destino",
-      name: unique(t.eventName),
+      name: unique(tName),
       rows: [
-        [`LISTA PARA ${t.eventName} — ${targetWindow}`, "Cantidad", `Viene de ${s.eventName}`, "Falta cargar de bodega", "Faltante", "Comentario"],
+        [`LISTA PARA ${tName} — ${targetWindow}`, "Cantidad", `Viene de ${sName}`, "Falta cargar de bodega", "Faltante", "Comentario"],
         ...data.rows.filter((r) => r.targetQty > 0).map((r) => [r.name, r.targetQty, r.transfer, r.targetFromStock, r.targetShort, ""]),
       ],
-      widths: [46, 12, 16, 20, 10, 32],
+      widths: [46, 12, 14, 20, 10, 32],
       headerRows: [0],
       sectionRows: [],
     },
@@ -147,20 +176,20 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       key: "trasiego",
       name: unique("Trasiego"),
       rows: [
-        [`TRASIEGO ${s.eventName} → ${t.eventName} — ${tm}`, "Cantidad", "Desde", "Hacia", "Comentario"],
+        [`TRASIEGO ${sName} → ${tName} — ${tm}`, "Cantidad", "Desde", "Hacia", "Comentario"],
         ...data.rows
           .filter((r) => r.transfer > 0)
-          .map((r) => [r.name, r.transfer, `Camion ${s.eventName} (${sd})`, `${t.eventName} (${tm})`, ""]),
+          .map((r) => [r.name, r.transfer, `Camion ${sName} (${sd})`, `${tName} (${tm})`, ""]),
       ],
-      widths: [46, 12, 24, 20, 32],
+      widths: [46, 12, 20, 16, 32],
       headerRows: [0],
       sectionRows: [],
     },
     {
       key: "camion",
-      name: unique(`Camion ${t.eventName}`),
+      name: unique(`Camion ${tName}`),
       rows: [
-        [`CAMION ${t.eventName} — SOLO LO QUE FALTA DE BODEGA`, "Cantidad", "¿Sale de bodega?", "Comentario"],
+        [`CAMION ${tName} — SOLO LO QUE FALTA DE BODEGA`, "Cantidad", "¿Sale de bodega?", "Comentario"],
         ...data.rows.filter((r) => r.targetFromStock > 0).map((r) => [r.name, r.targetFromStock, "Sí", ""]),
       ],
       widths: [46, 12, 14, 32],
@@ -169,9 +198,9 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
     },
     {
       key: "faltante",
-      name: unique(`${t.eventName} No cubierto`),
+      name: unique(`${tName} No cubierto`),
       rows: [
-        [`${t.eventName} FALTANTE — NO CUBIERTO`, "Cantidad", "Comentario"],
+        [`${tName} FALTANTE — NO CUBIERTO`, "Cantidad", "Comentario"],
         ...data.rows.filter((r) => r.targetShort > 0).map((r) => [r.name, r.targetShort, ""]),
       ],
       widths: [46, 12, 32],
@@ -182,10 +211,10 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       key: "regresa",
       name: unique("Regresa a Bodega"),
       rows: [
-        [`${s.eventName} QUE REGRESA A BODEGA — NO SE USA EN ${t.eventName}`, "Cantidad", "Motivo", "Comentario"],
+        [`${sName} QUE REGRESA A BODEGA — NO SE USA EN ${tName}`, "Cantidad", "Motivo", "Comentario"],
         ...data.rows
           .filter((r) => r.returnQty > 0)
-          .map((r) => [r.name, r.returnQty, r.targetQty === 0 ? `No lo pide ${t.eventName}` : `Solo se usa una parte en ${t.eventName}`, ""]),
+          .map((r) => [r.name, r.returnQty, r.targetQty === 0 ? `No lo pide ${tName}` : `Solo se usa una parte en ${tName}`, ""]),
       ],
       widths: [46, 12, 28, 32],
       headerRows: [0],
