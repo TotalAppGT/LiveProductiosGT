@@ -185,7 +185,7 @@ export async function writePurchasesToSheet(
   }
 
   const quoted = tabName.replace(/'/g, "''");
-  const clearRange = `'${quoted}'!A1:Z5000`;
+  const clearRange = `'${quoted}'!A1:H5000`;
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(clearRange)}:clear`, {
     method: "POST",
     headers: auth,
