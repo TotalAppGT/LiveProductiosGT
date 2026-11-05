@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
 import { compareOrders } from "@/lib/order-compare";
-import { buildComparisonTabs, EXCEL_TAB_NAMES } from "@/lib/compare-report";
+import { buildReportTabs } from "@/lib/compare-report";
 import * as XLSX from "xlsx";
 
 export async function POST(request: NextRequest) {
@@ -16,10 +16,10 @@ export async function POST(request: NextRequest) {
 
     const data = await compareOrders(ids);
     const wb = XLSX.utils.book_new();
-    for (const tab of buildComparisonTabs(data)) {
+    for (const tab of buildReportTabs(data)) {
       const ws = XLSX.utils.aoa_to_sheet(tab.rows);
       ws["!cols"] = tab.widths.map((wch) => ({ wch }));
-      XLSX.utils.book_append_sheet(wb, ws, EXCEL_TAB_NAMES[tab.key] || tab.name);
+      XLSX.utils.book_append_sheet(wb, ws, tab.name);
     }
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
 

@@ -1,4 +1,4 @@
-import type { CompareData } from "@/lib/order-compare";
+import type { CompareData, CompareMultiData, CompareResult } from "@/lib/order-compare";
 
 export type Row = (string | number)[];
 
@@ -79,6 +79,134 @@ function quantityFor(r: CompareData["rows"][number]): number {
 function coversFor(r: CompareData["rows"][number]): string {
   if (r.targetQty === 0) return "—";
   return r.targetShort === 0 ? "Sí" : "No";
+}
+
+export function buildReportTabs(data: CompareResult): CompareTab[] {
+  return data.mode === "multi" ? buildMultiComparisonTabs(data) : buildComparisonTabs(data);
+}
+
+export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
+  const eventName = (id: string) => {
+    const e = data.events.find((x) => x.id === id);
+    return e ? `${e.orderNumber} · ${shortName(e.eventName)} (${ddmmyy(e.eventDate)})` : "";
+  };
+
+  const resumen: Row[] = [
+    [`RESUMEN — ${data.events.length} CUADROS`, "Unidades", "%"],
+    ["Total necesario", data.totals.need, ""],
+    ["Inventario usado (sale de bodega)", data.totals.fromStock, `${data.totals.pctFromStock}%`],
+    ["Reutilizado entre cuadros (trasiego)", data.totals.reuse, `${data.totals.pctReuse}%`],
+    ["Renta / compra", data.totals.short, `${data.totals.pctShort}%`],
+    ["Regresa a bodega", data.totals.returnQty, `${data.totals.pctReturn}%`],
+    ["Bodega inicial", data.totals.bodega, ""],
+    ["Cobertura", data.totals.need - data.totals.short, `${data.totals.coverage}%`],
+  ];
+
+  const eventos: Row[] = [
+    ["CUADRO", "EVENTO", "FECHA", "NECESITA", "INVENTARIO", "TRASIEGO", "RENTA/COMPRA", "REGENSA", "COBERTURA"],
+    ...data.events.map((e) => [
+      e.orderNumber,
+      shortName(e.eventName),
+      ddmmyy(e.eventDate),
+      e.need,
+      e.fromStock,
+      e.reuse,
+      e.short,
+      e.returnQty,
+      `${e.coverage}%`,
+    ]),
+  ];
+
+  const inventario: Row[] = [
+    ["ÍTEM", "CATEGORÍA", "BODEGA", "NECESITA", "INVENTARIO", "TRASIEGO", "RENTA/COMPRA", "REGENSA"],
+    ...data.items.map((i) => [
+      i.name,
+      i.category,
+      i.bodega,
+      i.totalNeed,
+      i.totalFromStock,
+      i.totalReuse,
+      i.totalShort,
+      i.totalReturn,
+    ]),
+  ];
+
+  const trasiego: Row[] = [
+    ["ÍTEM", "CANTIDAD", "DESDE", "HACIA", "COMENTARIO"],
+    ...data.items.flatMap((i) =>
+      i.transfers.map((t) => [i.name, t.qty, `Cuadro ${t.fromOrder}`, `Cuadro ${t.toOrder}`, ""])
+    ),
+  ];
+
+  const bodega: Row[] = [
+    ["CUADRO", "ÍTEM", "CANTIDAD", "COMENTARIO"],
+    ...data.items.flatMap((i) =>
+      i.perEvent
+        .filter((p) => p.fromStock > 0)
+        .map((p) => [eventName(p.id), i.name, p.fromStock, ""])
+    ),
+  ];
+
+  const renta: Row[] = [
+    ["CUADRO", "ÍTEM", "CANTIDAD", "COMENTARIO"],
+    ...data.items.flatMap((i) =>
+      i.perEvent
+        .filter((p) => p.short > 0)
+        .map((p) => [eventName(p.id), i.name, p.short, "Renta o compra"])
+    ),
+  ];
+
+  const regresa: Row[] = [
+    ["CUADRO", "ÍTEM", "CANTIDAD", "MOTIVO", "COMENTARIO"],
+    ...data.items.flatMap((i) =>
+      i.perEvent
+        .filter((p) => p.returnQty > 0)
+        .map((p) => [eventName(p.id), i.name, p.returnQty, "No se usa en cuadros posteriores", ""])
+    ),
+  ];
+
+  const detalle: Row[] = [
+    ["DETALLE POR CATEGORÍA", "CUADRO", "FECHA", "NECESITA", "INVENTARIO", "TRASIEGO", "RENTA/COMPRA", "REGENSA", "COBERTURA"],
+  ];
+  const detailSections: number[] = [];
+  const byCategory = new Map<string, CompareMultiData["items"]>();
+  for (const item of data.items) {
+    const cat = (item.category || "OTRO").toUpperCase();
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat)!.push(item);
+  }
+  for (const [cat, catItems] of byCategory) {
+    detailSections.push(detalle.length);
+    detalle.push([cat]);
+    for (const item of catItems) {
+      for (const p of item.perEvent) {
+        if (p.need <= 0) continue;
+        const e = data.events.find((x) => x.id === p.id);
+        detalle.push([
+          item.name,
+          e ? `#${e.orderNumber} ${shortName(e.eventName)}` : "",
+          e ? ddmmyy(e.eventDate) : "",
+          p.need,
+          p.fromStock,
+          p.reuse,
+          p.short,
+          p.returnQty,
+          e ? `${e.coverage}%` : "",
+        ]);
+      }
+    }
+  }
+
+  return [
+    { key: "multi-resumen", name: "Resumen", rows: resumen, widths: [42, 12, 12], headerRows: [0], sectionRows: [] },
+    { key: "multi-eventos", name: "Eventos", rows: eventos, widths: [10, 26, 10, 10, 12, 10, 14, 10, 12], headerRows: [0], sectionRows: [] },
+    { key: "multi-inventario", name: "Inventario", rows: inventario, widths: [46, 16, 10, 10, 12, 10, 14, 10], headerRows: [0], sectionRows: [] },
+    { key: "multi-trasiego", name: "Trasiego", rows: trasiego, widths: [46, 12, 14, 14, 30], headerRows: [0], sectionRows: [] },
+    { key: "multi-bodega", name: "Bodega", rows: bodega, widths: [28, 46, 12, 30], headerRows: [0], sectionRows: [] },
+    { key: "multi-renta", name: "Renta-Compra", rows: renta, widths: [28, 46, 12, 30], headerRows: [0], sectionRows: [] },
+    { key: "multi-regresa", name: "Regresa", rows: regresa, widths: [28, 46, 12, 30, 30], headerRows: [0], sectionRows: [] },
+    { key: "multi-detalle", name: "Detalle", rows: detalle, widths: [46, 24, 10, 10, 12, 10, 14, 10, 12], headerRows: [0], sectionRows: detailSections },
+  ];
 }
 
 export function buildComparisonTabs(data: CompareData): CompareTab[] {

@@ -1,7 +1,7 @@
 import { createSign } from "crypto";
 import { prisma } from "@/lib/prisma";
-import { buildComparisonTabs, type CompareTab } from "@/lib/compare-report";
-import type { CompareData } from "@/lib/order-compare";
+import { buildReportTabs, type CompareTab } from "@/lib/compare-report";
+import type { CompareResult } from "@/lib/order-compare";
 
 type ServiceAccount = { client_email: string; private_key: string; token_uri?: string };
 
@@ -130,14 +130,14 @@ async function formatTabs(token: string, spreadsheetId: string, tabs: CompareTab
 }
 
 export async function createComparisonSheetInFolder(
-  data: CompareData,
+  data: CompareResult,
   folderId: string
 ): Promise<{ url: string; spreadsheetId: string }> {
   const sa = await getServiceAccount();
   if (!sa) throw new Error("google-service-account-not-configured");
   const token = await getAccessToken(sa);
   const auth = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
-  const tabs = buildComparisonTabs(data);
+  const tabs = buildReportTabs(data);
   const title = `Comparativa ${data.source.eventName} → ${data.target.eventName} — ${data.source.eventDate || ""}`;
 
   const createRes = await fetch("https://www.googleapis.com/drive/v3/files?fields=id", {
@@ -218,7 +218,7 @@ export async function createComparisonSheetInFolder(
 }
 
 export async function writeComparisonToSheet(
-  data: CompareData,
+  data: CompareResult,
   spreadsheetId: string
 ): Promise<{ url: string; spreadsheetId: string }> {
   const sa = await getServiceAccount();
@@ -231,10 +231,12 @@ export async function writeComparisonToSheet(
   });
   const meta = await metaRes.json();
   if (!metaRes.ok) throw new Error(meta?.error?.message || "sheet-read-failed");
-  const existing: string[] = (meta.sheets || []).map((s: { properties: { title: string } }) => s.properties.title);
+  const existingProps: { sheetId: number; title: string }[] = (meta.sheets || []).map(
+    (s: { properties: { sheetId: number; title: string } }) => s.properties
+  );
+  const existing = existingProps.map((p) => p.title);
 
-  const tabs = buildComparisonTabs(data);
-  const targets = tabs.map((t, i) => existing[i] || t.name);
+  const tabs = buildReportTabs(data);
 
   if (existing.length < tabs.length) {
     const requests = tabs.slice(existing.length).map((t) => ({ addSheet: { properties: { title: t.name } } }));
@@ -248,6 +250,23 @@ export async function writeComparisonToSheet(
       throw new Error(err?.error?.message || "sheet-add-failed");
     }
   }
+
+  const renameRequests = tabs
+    .map((t, i) => {
+      const p = existingProps[i];
+      if (!p || p.title === t.name) return null;
+      return { updateSheetProperties: { properties: { sheetId: p.sheetId, title: t.name }, fields: "title" } };
+    })
+    .filter(Boolean);
+  if (renameRequests.length > 0) {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ requests: renameRequests }),
+    });
+  }
+
+  const targets = tabs.map((t) => t.name);
 
   for (const title of targets) {
     const range = `'${title.replace(/'/g, "''")}'!A1:Z5000`;
@@ -275,12 +294,12 @@ export async function writeComparisonToSheet(
   return { url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, spreadsheetId };
 }
 
-export async function createComparisonSheet(data: CompareData): Promise<{ url: string; spreadsheetId: string }> {
+export async function createComparisonSheet(data: CompareResult): Promise<{ url: string; spreadsheetId: string }> {
   const sa = await getServiceAccount();
   if (!sa) throw new Error("google-service-account-not-configured");
   const token = await getAccessToken(sa);
   const auth = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
-  const tabs = buildComparisonTabs(data);
+  const tabs = buildReportTabs(data);
   const title = `Comparativa ${data.source.eventName} → ${data.target.eventName} — ${data.source.eventDate || ""}`;
 
   const createRes = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {

@@ -217,7 +217,7 @@ export default function PedidosPage() {
   }
 
   async function openCompare() {
-    if (compareIds.length !== 2) return toast.error("Seleccioná exactamente 2 cuadros");
+    if (compareIds.length < 2) return toast.error("Seleccioná al menos 2 cuadros");
     setCompareLoading(true);
     try {
       const res = await fetch("/api/orders/compare", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ids: compareIds }) });
@@ -232,7 +232,7 @@ export default function PedidosPage() {
   }
 
   async function downloadCompare() {
-    if (compareIds.length !== 2) return;
+    if (compareIds.length < 2) return;
     try {
       const res = await fetch("/api/orders/compare/report", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ids: compareIds }) });
       if (!res.ok) { toast.error("Error al generar el Excel"); return; }
@@ -534,8 +534,8 @@ export default function PedidosPage() {
       {tab === "cuadros" && (<>
       {compareIds.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
-          <span className="text-sm text-blue-800 dark:text-blue-200">{compareIds.length} cuadro(s) seleccionado(s). Elegí 2 para comparar.</span>
-          <Button size="sm" onClick={openCompare} isLoading={compareLoading} disabled={compareIds.length !== 2}>Comparar / Trasiego</Button>
+          <span className="text-sm text-blue-800 dark:text-blue-200">{compareIds.length} cuadro(s) seleccionado(s). Elegí 2 o más para comparar.</span>
+          <Button size="sm" onClick={openCompare} isLoading={compareLoading} disabled={compareIds.length < 2}>Comparar / Trasiego</Button>
           <Button size="sm" variant="ghost" onClick={() => setCompareIds([])}>Limpiar</Button>
         </div>
       )}
@@ -561,7 +561,7 @@ export default function PedidosPage() {
                     onChange={(e) => {
                       e.stopPropagation();
                       if (e.target.checked) {
-                        if (compareIds.length >= 2) { toast.error("Solo podés comparar 2 cuadros a la vez"); return; }
+                        
                         setCompareIds((prev) => [...prev, o.id]);
                       } else {
                         setCompareIds((prev) => prev.filter((id) => id !== o.id));
@@ -901,20 +901,71 @@ export default function PedidosPage() {
       <Modal isOpen={showCompare} onClose={() => setShowCompare(false)} title="Comparativa / Trasiego entre cuadros" size="3xl">
         {compareData ? (
           <div className="space-y-4">
-            <div className="text-sm text-gray-700 dark:text-gray-200">
-              <b>#{compareData.source.orderNumber} {compareData.source.eventName}</b> ({compareData.source.eventDate})
-              <span className="mx-2">→</span>
-              <b>#{compareData.target.orderNumber} {compareData.target.eventName}</b> ({compareData.target.eventDate})
-              {compareData.target.montageDate && <span className="text-xs text-gray-500"> · traslado {compareData.target.montageDate}</span>}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
-              <div className="rounded-lg border p-2"><p className="text-gray-500">Origen</p><p className="text-lg font-bold">{compareData.totals.source} u</p></div>
-              <div className="rounded-lg border p-2"><p className="text-gray-500">Destino</p><p className="text-lg font-bold">{compareData.totals.target} u</p></div>
-              <div className="rounded-lg border p-2"><p className="text-gray-500">Trasiego</p><p className="text-lg font-bold">{compareData.totals.transfer} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctTransferSource}% origen / {compareData.totals.pctTransferTarget}% destino</p></div>
-              <div className="rounded-lg border p-2"><p className="text-gray-500">Bodega destino</p><p className="text-lg font-bold">{compareData.totals.targetFromStock} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctStockTarget}%</p></div>
-              <div className="rounded-lg border p-2"><p className="text-gray-500">Faltante destino</p><p className="text-lg font-bold">{compareData.totals.targetShort} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctShortTarget}%</p></div>
-              <div className="rounded-lg border p-2"><p className="text-gray-500">Regresa origen</p><p className="text-lg font-bold">{compareData.totals.returnQty} u</p></div>
-            </div>
+            {compareData.mode === "multi" ? (
+              <>
+                <div className="text-sm text-gray-700 dark:text-gray-200">
+                  <b>{compareData.events.length} cuadros seleccionados</b>
+                  <span className="text-xs text-gray-500"> · análisis de inventario, trasiego y renta/compra</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Necesita</p><p className="text-lg font-bold">{compareData.totals.need} u</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Inventario</p><p className="text-lg font-bold">{compareData.totals.fromStock} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctFromStock}%</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Trasiego</p><p className="text-lg font-bold">{compareData.totals.reuse} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctReuse}%</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Renta / compra</p><p className="text-lg font-bold">{compareData.totals.short} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctShort}%</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Regresa</p><p className="text-lg font-bold">{compareData.totals.returnQty} u</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Cobertura</p><p className="text-lg font-bold">{compareData.totals.coverage}%</p></div>
+                </div>
+                <div className="max-h-64 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
+                      <tr>
+                        <th className="text-left px-2 py-1.5">#</th>
+                        <th className="text-left px-2 py-1.5">Cuadro</th>
+                        <th className="text-left px-2 py-1.5">Fecha</th>
+                        <th className="text-right px-2 py-1.5">Necesita</th>
+                        <th className="text-right px-2 py-1.5">Inventario</th>
+                        <th className="text-right px-2 py-1.5">Trasiego</th>
+                        <th className="text-right px-2 py-1.5">Renta/Compra</th>
+                        <th className="text-right px-2 py-1.5">Regresa</th>
+                        <th className="text-right px-2 py-1.5">Cubre</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {compareData.events.map((e: any) => (
+                        <tr key={e.id}>
+                          <td className="px-2 py-1.5">#{e.orderNumber}</td>
+                          <td className="px-2 py-1.5 truncate max-w-[220px]">{e.eventName}</td>
+                          <td className="px-2 py-1.5 whitespace-nowrap">{e.eventDate || ""}</td>
+                          <td className="px-2 py-1.5 text-right">{e.need}</td>
+                          <td className="px-2 py-1.5 text-right">{e.fromStock}</td>
+                          <td className="px-2 py-1.5 text-right">{e.reuse}</td>
+                          <td className="px-2 py-1.5 text-right text-red-600">{e.short}</td>
+                          <td className="px-2 py-1.5 text-right">{e.returnQty}</td>
+                          <td className="px-2 py-1.5 text-right">{e.coverage}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-sm text-gray-700 dark:text-gray-200">
+                  <b>#{compareData.source.orderNumber} {compareData.source.eventName}</b> ({compareData.source.eventDate})
+                  <span className="mx-2">→</span>
+                  <b>#{compareData.target.orderNumber} {compareData.target.eventName}</b> ({compareData.target.eventDate})
+                  {compareData.target.montageDate && <span className="text-xs text-gray-500"> · traslado {compareData.target.montageDate}</span>}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Origen</p><p className="text-lg font-bold">{compareData.totals.source} u</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Destino</p><p className="text-lg font-bold">{compareData.totals.target} u</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Trasiego</p><p className="text-lg font-bold">{compareData.totals.transfer} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctTransferSource}% origen / {compareData.totals.pctTransferTarget}% destino</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Bodega destino</p><p className="text-lg font-bold">{compareData.totals.targetFromStock} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctStockTarget}%</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Faltante destino</p><p className="text-lg font-bold">{compareData.totals.targetShort} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctShortTarget}%</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-gray-500">Regresa origen</p><p className="text-lg font-bold">{compareData.totals.returnQty} u</p></div>
+                </div>
+              </>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setShowCompare(false)}>Cerrar</Button>
               <Button variant="outline" onClick={openSheets} isLoading={sheetLoading}>Abrir en Google Sheets</Button>
