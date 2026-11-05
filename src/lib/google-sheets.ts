@@ -77,6 +77,139 @@ export async function getFolderId(): Promise<string> {
   return process.env.GOOGLE_SHEETS_FOLDER_ID || (await configValue("google_sheets_folder_id"));
 }
 
+export async function getPurchasesSheetId(): Promise<string> {
+  return process.env.GOOGLE_SHEETS_PURCHASES_ID || (await configValue("google_sheets_purchases_id"));
+}
+
+function purchasesAction(section: string, inventory: number): string {
+  const s = String(section || "").toUpperCase();
+  if (inventory <= 0) return "Comprar";
+  if (/CABLE|CONSUM|LIMPI|TELA/.test(s)) return "Comprar";
+  return "Alquilar";
+}
+
+function dateTabName(dates: (string | null)[]): string {
+  const uniq = Array.from(new Set(dates.filter(Boolean) as string[])).sort();
+  if (uniq.length === 0) return "Compras";
+  const parts = uniq.map((iso) => {
+    const [, m, d] = iso.split("-");
+    return { d, m };
+  });
+  if (parts.length === 1) return `${parts[0].d}-${parts[0].m}`;
+  if (parts.every((p) => p.m === parts[0].m)) return parts.map((p) => p.d).join("/");
+  return parts.map((p) => `${p.d}/${p.m}`).join("-");
+}
+
+export async function writePurchasesToSheet(
+  data: CompareResult,
+  spreadsheetId: string
+): Promise<{ url: string; spreadsheetId: string; tabName: string }> {
+  const sa = await getServiceAccount();
+  if (!sa) throw new Error("google-service-account-not-configured");
+  const token = await getAccessToken(sa);
+  const auth = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+
+  type Line = { name: string; section: string; need: number; inventory: number; short: number; action: string; cuadros: string[] };
+  const lines: Line[] = [];
+
+  if (data.mode === "pair") {
+    for (const r of data.rows) {
+      const need = r.sourceQty + r.targetQty;
+      if (need <= 0) continue;
+      const inventory = r.bodega || 0;
+      const short = Math.max(0, need - inventory);
+      if (short <= 0) continue;
+      const cuadros: string[] = [];
+      if (r.sourceQty > 0) cuadros.push(`#${data.source.orderNumber}`);
+      if (r.targetQty > 0) cuadros.push(`#${data.target.orderNumber}`);
+      const section = r.section || r.category || "OTRO";
+      lines.push({
+        name: r.name,
+        section,
+        need,
+        inventory,
+        short,
+        action: purchasesAction(section, inventory),
+        cuadros: Array.from(new Set(cuadros)),
+      });
+    }
+  } else {
+    for (const i of data.items) {
+      const need = i.totalNeed;
+      if (need <= 0) continue;
+      const inventory = i.bodega || 0;
+      const short = Math.max(0, need - inventory);
+      if (short <= 0) continue;
+      const section = i.section || i.category || "OTRO";
+      const cuadros = Array.from(new Set(i.perEvent.filter((p) => p.need > 0).map((p) => `#${p.orderNumber}`)));
+      lines.push({
+        name: i.name,
+        section,
+        need,
+        inventory,
+        short,
+        action: purchasesAction(section, inventory),
+        cuadros,
+      });
+    }
+  }
+
+  lines.sort((a, b) => b.short - a.short || a.name.localeCompare(b.name));
+  const rows: (string | number)[][] = [
+    ["Equipo", "Sección", "Necesito", "Inventario", "Reparación", "Faltante", "Acción", "Cuadros"],
+    ...lines.map((l) => [l.name, l.section, l.need, l.inventory, 0, l.short, l.action, l.cuadros.join(", ")]),
+  ];
+
+  const dates = data.mode === "pair" ? [data.source.eventDate, data.target.eventDate] : data.events.map((e) => e.eventDate);
+  const tabName = dateTabName(dates);
+
+  const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`, {
+    headers: auth,
+  });
+  const meta = await metaRes.json();
+  if (!metaRes.ok) throw new Error(meta?.error?.message || "sheet-read-failed");
+  const found = (meta.sheets || []).find(
+    (s: { properties: { title: string } }) => s.properties.title === tabName
+  );
+  let sheetId: number | undefined = found?.properties?.sheetId;
+
+  if (sheetId === undefined) {
+    const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }),
+    });
+    const addJson = await addRes.json();
+    if (!addRes.ok) throw new Error(addJson?.error?.message || "sheet-add-failed");
+    sheetId = addJson?.replies?.[0]?.addSheet?.properties?.sheetId;
+  }
+
+  const quoted = tabName.replace(/'/g, "''");
+  const clearRange = `'${quoted}'!A1:Z5000`;
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(clearRange)}:clear`, {
+    method: "POST",
+    headers: auth,
+    body: "{}",
+  });
+
+  const valRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ valueInputOption: "RAW", data: [{ range: `'${quoted}'!A1`, values: rows }] }),
+  });
+  if (!valRes.ok) {
+    const err = await valRes.json().catch(() => ({}));
+    throw new Error(err?.error?.message || "sheet-values-failed");
+  }
+
+  const gid = sheetId !== undefined ? `#gid=${sheetId}` : "";
+  return {
+    url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit${gid}`,
+    spreadsheetId,
+    tabName,
+  };
+}
+
 async function formatTabs(token: string, spreadsheetId: string, tabs: CompareTab[], sheetIds: number[]) {
   const requests: unknown[] = [];
   tabs.forEach((tab, i) => {

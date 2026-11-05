@@ -29,6 +29,7 @@ const fixWords = (s: unknown) =>
 export type CompareRow = {
   name: string;
   category: string;
+  section: string | null;
   sourceQty: number;
   targetQty: number;
   bodega: number;
@@ -85,6 +86,7 @@ export type CompareMultiEvent = CompareEvent & {
 export type CompareMultiItem = {
   name: string;
   category: string;
+  section: string | null;
   bodega: number;
   totalNeed: number;
   totalReuse: number;
@@ -143,7 +145,7 @@ type LoadedOrder = {
   items: { inventoryItemId: string | null; name: string; category: string; quantity: number }[];
 };
 
-type Inv = { id: string; name: string; quantity: number };
+type Inv = { id: string; name: string; quantity: number; section?: string | null };
 
 export async function compareOrders(ids: string[]): Promise<CompareResult> {
   const unique = Array.from(new Set(ids.filter(Boolean)));
@@ -163,7 +165,7 @@ export async function compareOrders(ids: string[]): Promise<CompareResult> {
 
   const inventory = await prisma.inventoryItem.findMany({
     where: { status: "DISPONIBLE" },
-    select: { id: true, name: true, quantity: true },
+    select: { id: true, name: true, quantity: true, section: true },
   });
   const byId = new Map(inventory.map((i) => [i.id, i]));
   const byName = new Map(inventory.map((i) => [norm(fixWords(i.name)), i]));
@@ -204,6 +206,7 @@ export async function compareOrders(ids: string[]): Promise<CompareResult> {
     rows.push({
       name: g.name,
       category: g.category,
+      section: inv?.section || null,
       sourceQty: g.source,
       targetQty: g.target,
       bodega,
@@ -359,6 +362,7 @@ function compareMulti(
     items.push({
       name: g.name,
       category: g.category,
+      section: inv?.section || null,
       bodega,
       totalNeed,
       totalReuse,

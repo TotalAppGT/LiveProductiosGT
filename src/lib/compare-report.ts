@@ -90,6 +90,11 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     const e = data.events.find((x) => x.id === id);
     return e ? `${e.orderNumber} · ${shortName(e.eventName)} (${ddmmyy(e.eventDate)})` : "";
   };
+  const eventByOrder = new Map(data.events.map((e) => [e.orderNumber, e]));
+  const orderLabel = (orderNumber: number) => {
+    const e = eventByOrder.get(orderNumber);
+    return e ? `#${orderNumber} ${shortName(e.eventName)}` : `#${orderNumber}`;
+  };
 
   const resumen: Row[] = [
     [`RESUMEN — ${data.events.length} CUADROS`, "Unidades", "%"],
@@ -134,7 +139,7 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
   const trasiego: Row[] = [
     ["ÍTEM", "CANTIDAD", "DESDE", "HACIA", "COMENTARIO"],
     ...data.items.flatMap((i) =>
-      i.transfers.map((t) => [i.name, t.qty, `Cuadro ${t.fromOrder}`, `Cuadro ${t.toOrder}`, ""])
+      i.transfers.map((t) => [i.name, t.qty, orderLabel(t.fromOrder), orderLabel(t.toOrder), ""])
     ),
   ];
 

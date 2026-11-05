@@ -98,6 +98,7 @@ export default function PedidosPage() {
   const [showCompare, setShowCompare] = useState(false);
   const [compareLoading, setCompareLoading] = useState(false);
   const [sheetLoading, setSheetLoading] = useState(false);
+  const [purchasesLoading, setPurchasesLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -266,6 +267,29 @@ export default function PedidosPage() {
       toast.error("Error al crear el Sheet");
     } finally {
       setSheetLoading(false);
+    }
+  }
+
+  async function openPurchasesSheets() {
+    if (compareIds.length < 2) return;
+    setPurchasesLoading(true);
+    try {
+      const res = await fetch("/api/orders/compare/purchases-sheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: compareIds }),
+      });
+      const json = await res.json();
+      if (json.success && json.data?.url) {
+        toast.success(`Compras / renta actualizado (${json.data.tabName || "hoja"})`);
+        window.open(json.data.url, "_blank");
+      } else {
+        toast.error(json.error || "Error al crear compras");
+      }
+    } catch {
+      toast.error("Error al crear compras");
+    } finally {
+      setPurchasesLoading(false);
     }
   }
 
@@ -969,6 +993,7 @@ export default function PedidosPage() {
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setShowCompare(false)}>Cerrar</Button>
               <Button variant="outline" onClick={openSheets} isLoading={sheetLoading}>Abrir en Google Sheets</Button>
+              <Button variant="outline" onClick={openPurchasesSheets} isLoading={purchasesLoading}>Compras / Renta</Button>
               <Button onClick={downloadCompare}>Descargar Excel</Button>
             </div>
           </div>
