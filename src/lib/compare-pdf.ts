@@ -58,7 +58,7 @@ export async function buildComparisonPdf(data: CompareResult): Promise<Buffer> {
     ]);
   }
 
-  const tabs = buildReportTabs(data);
+  const tabs = buildReportTabs(data).filter((t) => t.key !== "detalle" && t.key !== "multi-detalle");
   for (const tab of tabs) {
     if (doc.y > doc.page.height - doc.page.margins.bottom - 80) doc.addPage();
     blockTitle(doc, tab.name);
@@ -90,6 +90,7 @@ export async function buildComparisonPdf(data: CompareResult): Promise<Buffer> {
     doc.moveDown(0.4);
   }
 
+  doc.font("Helvetica").fontSize(7.5).fillColor("#6b7280").text("El detalle completo por ítem/evento está en la hoja de Google y en el Excel.", { lineBreak: false });
   stampFooters(doc, "Live Productions GT · Trasiego / Comparativa");
   doc.end();
   return done;
