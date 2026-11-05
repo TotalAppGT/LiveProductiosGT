@@ -341,7 +341,9 @@ function compareMulti(
       }
     }
 
+    const lastEventId = orders[orders.length - 1].id;
     for (const layer of layers) {
+      if (layer.orderId === lastEventId) continue;
       const rec = perEvent.find((p) => p.id === layer.orderId);
       if (rec) rec.returnQty += layer.qty;
       const ev = eventById.get(layer.orderId);
