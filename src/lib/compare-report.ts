@@ -122,9 +122,12 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     ]),
   ];
 
+  const inventarioItems = [...data.items].sort(
+    (a, b) => b.totalShort - a.totalShort || b.totalNeed - a.totalNeed || a.name.localeCompare(b.name)
+  );
   const inventario: Row[] = [
     ["ÍTEM", "CATEGORÍA", "BODEGA", "NECESITA", "INVENTARIO", "TRASIEGO", "RENTA/COMPRA", "REGENSA"],
-    ...data.items.map((i) => [
+    ...inventarioItems.map((i) => [
       i.name,
       i.category,
       i.bodega,
@@ -136,39 +139,35 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     ]),
   ];
 
-  const trasiego: Row[] = [
-    ["ÍTEM", "CANTIDAD", "DESDE", "HACIA", "COMENTARIO"],
-    ...data.items.flatMap((i) =>
-      i.transfers.map((t) => [i.name, t.qty, orderLabel(t.fromOrder), orderLabel(t.toOrder), ""])
-    ),
-  ];
+  const trasiegoRows: Row[] = data.items.flatMap((i) =>
+    i.transfers.map((t) => [i.name, t.qty, orderLabel(t.fromOrder), orderLabel(t.toOrder), ""])
+  );
+  trasiegoRows.sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0));
+  const trasiego: Row[] = [["ÍTEM", "CANTIDAD", "DESDE", "HACIA", "COMENTARIO"], ...trasiegoRows];
 
-  const bodega: Row[] = [
-    ["CUADRO", "ÍTEM", "CANTIDAD", "COMENTARIO"],
-    ...data.items.flatMap((i) =>
-      i.perEvent
-        .filter((p) => p.fromStock > 0)
-        .map((p) => [eventName(p.id), i.name, p.fromStock, ""])
-    ),
-  ];
+  const bodegaRows: Row[] = data.items.flatMap((i) =>
+    i.perEvent
+      .filter((p) => p.fromStock > 0)
+      .map((p) => [eventName(p.id), i.name, p.fromStock, ""])
+  );
+  bodegaRows.sort((a, b) => (Number(b[2]) || 0) - (Number(a[2]) || 0));
+  const bodega: Row[] = [["CUADRO", "ÍTEM", "CANTIDAD", "COMENTARIO"], ...bodegaRows];
 
-  const renta: Row[] = [
-    ["CUADRO", "ÍTEM", "CANTIDAD", "COMENTARIO"],
-    ...data.items.flatMap((i) =>
-      i.perEvent
-        .filter((p) => p.short > 0)
-        .map((p) => [eventName(p.id), i.name, p.short, "Renta o compra"])
-    ),
-  ];
+  const rentaRows: Row[] = data.items.flatMap((i) =>
+    i.perEvent
+      .filter((p) => p.short > 0)
+      .map((p) => [eventName(p.id), i.name, p.short, "Renta o compra"])
+  );
+  rentaRows.sort((a, b) => (Number(b[2]) || 0) - (Number(a[2]) || 0));
+  const renta: Row[] = [["CUADRO", "ÍTEM", "CANTIDAD", "COMENTARIO"], ...rentaRows];
 
-  const regresa: Row[] = [
-    ["CUADRO", "ÍTEM", "CANTIDAD", "MOTIVO", "COMENTARIO"],
-    ...data.items.flatMap((i) =>
-      i.perEvent
-        .filter((p) => p.returnQty > 0)
-        .map((p) => [eventName(p.id), i.name, p.returnQty, "No se usa en cuadros posteriores", ""])
-    ),
-  ];
+  const regresaRows: Row[] = data.items.flatMap((i) =>
+    i.perEvent
+      .filter((p) => p.returnQty > 0)
+      .map((p) => [eventName(p.id), i.name, p.returnQty, "No se usa en cuadros posteriores", ""])
+  );
+  regresaRows.sort((a, b) => (Number(b[2]) || 0) - (Number(a[2]) || 0));
+  const regresa: Row[] = [["CUADRO", "ÍTEM", "CANTIDAD", "MOTIVO", "COMENTARIO"], ...regresaRows];
 
   const detalle: Row[] = [
     ["DETALLE POR CATEGORÍA", "CUADRO", "FECHA", "NECESITA", "INVENTARIO", "TRASIEGO", "RENTA/COMPRA", "REGENSA", "COBERTURA"],
@@ -288,7 +287,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       name: unique(sName),
       rows: [
         [`LISTA PARA ${sName} — ${sd}`, "Cantidad", "Sale de bodega", "Faltante", `Se traslada a ${tName}`, "Regresa a bodega", "Comentario"],
-        ...data.rows.filter((r) => r.sourceQty > 0).map((r) => [r.name, r.sourceQty, r.stockSource, r.sourceShort, r.transfer, r.returnQty, ""]),
+        ...data.rows.filter((r) => r.sourceQty > 0).sort((a, b) => b.sourceQty - a.sourceQty).map((r) => [r.name, r.sourceQty, r.stockSource, r.sourceShort, r.transfer, r.returnQty, ""]),
       ],
       widths: [46, 12, 14, 10, 18, 16, 32],
       headerRows: [0],
@@ -299,7 +298,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       name: unique(tName),
       rows: [
         [`LISTA PARA ${tName} — ${targetWindow}`, "Cantidad", `Viene de ${sName}`, "Falta cargar de bodega", "Faltante", "Comentario"],
-        ...data.rows.filter((r) => r.targetQty > 0).map((r) => [r.name, r.targetQty, r.transfer, r.targetFromStock, r.targetShort, ""]),
+        ...data.rows.filter((r) => r.targetQty > 0).sort((a, b) => b.targetQty - a.targetQty).map((r) => [r.name, r.targetQty, r.transfer, r.targetFromStock, r.targetShort, ""]),
       ],
       widths: [46, 12, 14, 20, 10, 32],
       headerRows: [0],
@@ -312,6 +311,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
         [`TRASIEGO ${sName} → ${tName} — ${tm}`, "Cantidad", "Desde", "Hacia", "Comentario"],
         ...data.rows
           .filter((r) => r.transfer > 0)
+          .sort((a, b) => b.transfer - a.transfer)
           .map((r) => [r.name, r.transfer, `Camion ${sName} (${sd})`, `${tName} (${tm})`, ""]),
       ],
       widths: [46, 12, 20, 16, 32],
@@ -323,7 +323,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       name: unique(`Camion ${tName}`),
       rows: [
         [`CAMION ${tName} — SOLO LO QUE FALTA DE BODEGA`, "Cantidad", "¿Sale de bodega?", "Comentario"],
-        ...data.rows.filter((r) => r.targetFromStock > 0).map((r) => [r.name, r.targetFromStock, "Sí", ""]),
+        ...data.rows.filter((r) => r.targetFromStock > 0).sort((a, b) => b.targetFromStock - a.targetFromStock).map((r) => [r.name, r.targetFromStock, "Sí", ""]),
       ],
       widths: [46, 12, 14, 32],
       headerRows: [0],
@@ -334,7 +334,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       name: unique(`${tName} No cubierto`),
       rows: [
         [`${tName} FALTANTE — NO CUBIERTO`, "Cantidad", "Comentario"],
-        ...data.rows.filter((r) => r.targetShort > 0).map((r) => [r.name, r.targetShort, ""]),
+        ...data.rows.filter((r) => r.targetShort > 0).sort((a, b) => b.targetShort - a.targetShort).map((r) => [r.name, r.targetShort, ""]),
       ],
       widths: [46, 12, 32],
       headerRows: [0],
@@ -347,6 +347,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
         [`${sName} QUE REGRESA A BODEGA — NO SE USA EN ${tName}`, "Cantidad", "Motivo", "Comentario"],
         ...data.rows
           .filter((r) => r.returnQty > 0)
+          .sort((a, b) => b.returnQty - a.returnQty)
           .map((r) => [r.name, r.returnQty, r.targetQty === 0 ? `No lo pide ${tName}` : `Solo se usa una parte en ${tName}`, ""]),
       ],
       widths: [46, 12, 28, 32],

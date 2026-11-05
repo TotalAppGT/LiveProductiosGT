@@ -99,6 +99,7 @@ export default function PedidosPage() {
   const [compareLoading, setCompareLoading] = useState(false);
   const [sheetLoading, setSheetLoading] = useState(false);
   const [purchasesLoading, setPurchasesLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -290,6 +291,32 @@ export default function PedidosPage() {
       toast.error("Error al crear compras");
     } finally {
       setPurchasesLoading(false);
+    }
+  }
+
+  async function downloadComparePdf() {
+    if (compareIds.length < 2) return;
+    setPdfLoading(true);
+    try {
+      const res = await fetch("/api/orders/compare/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: compareIds }),
+      });
+      if (!res.ok) { toast.error("Error al generar el PDF"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = compareData?.mode === "multi" ? `trasiego-${compareIds.length}-cuadros.pdf` : `trasiego-${compareData?.source?.orderNumber || ""}-${compareData?.target?.orderNumber || ""}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Error al generar el PDF");
+    } finally {
+      setPdfLoading(false);
     }
   }
 
@@ -995,6 +1022,7 @@ export default function PedidosPage() {
               <Button variant="outline" onClick={openSheets} isLoading={sheetLoading}>Abrir en Google Sheets</Button>
               <Button variant="outline" onClick={openPurchasesSheets} isLoading={purchasesLoading}>Compras / Renta</Button>
               <Button onClick={downloadCompare}>Descargar Excel</Button>
+              <Button variant="outline" onClick={downloadComparePdf} isLoading={pdfLoading}>Descargar PDF</Button>
             </div>
           </div>
         ) : (
