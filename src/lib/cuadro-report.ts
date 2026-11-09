@@ -672,50 +672,57 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   nf.columns = [12, 38, 17, 10, 11, 11, 10, 12, 22].map((w) => ({ width: w }));
   title(nf, 1, "NECESIDAD POR FECHA — SUMA DE TODOS LOS CUADROS DEL DÍA", 9);
   nf.mergeCells("A2:I2");
-  nf.getCell("A2").value = "Cada ítem aparece una sola vez por fecha. Agrupado por fecha y, dentro, por categoría. Para eliminar una fecha, seleccioná desde su encabezado hasta el siguiente y borrá el bloque completo. Faltante = Necesito − Disponible.";
+  nf.getCell("A2").value = "Cada ítem aparece una sola vez por fecha. La fecha es el encabezado y las categorías van dentro de cada fecha en la columna Sección, sin filas extra. Para eliminar una fecha, seleccioná su encabezado y las filas siguientes; no quedan títulos de categoría sueltos. Faltante = Necesito − Disponible.";
   nf.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
   headerRow(nf, 3, ["Fecha", "Equipo", "Sección", "Necesito", "Disponible", "Reparación", "Faltante", "Acción", "Cuadros"]);
   let rn = 4;
-  let lastDate = "";
-  let lastDetailSec = "";
-  for (const d of report.dateDetail) {
-    if (d.date !== lastDate) {
-      nf.mergeCells(rn, 1, rn, 9);
-      const dc = nf.getCell(rn, 1);
-      dc.value = fmtDateOnly(d.date);
-      dc.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
-      dc.fill = headFill(BRAND);
-      dc.border = border;
-      dc.alignment = { indent: 1, vertical: "middle" };
-      nf.getRow(rn).height = 20;
-      rn++;
-      lastDate = d.date;
-      lastDetailSec = "";
-    }
-    const sec = (d.section || "OTRO").toUpperCase();
-    if (sec !== lastDetailSec) {
-      nf.mergeCells(rn, 1, rn, 9);
-      const sc = nf.getCell(rn, 1);
+  const detail = report.dateDetail;
+  let di = 0;
+  while (di < detail.length) {
+    const date = detail[di].date;
+    const dateStart = di;
+    while (di < detail.length && detail[di].date === date) di++;
+    const dateRows = detail.slice(dateStart, di);
+
+    nf.mergeCells(rn, 1, rn, 9);
+    const dc = nf.getCell(rn, 1);
+    dc.value = fmtDateOnly(date);
+    dc.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
+    dc.fill = headFill(BRAND);
+    dc.border = border;
+    dc.alignment = { indent: 1, vertical: "middle" };
+    nf.getRow(rn).height = 20;
+    rn++;
+
+    let si = 0;
+    while (si < dateRows.length) {
+      const sec = (dateRows[si].section || "OTRO").toUpperCase();
+      const secStart = si;
+      while (si < dateRows.length && (dateRows[si].section || "OTRO").toUpperCase() === sec) si++;
+      const group = dateRows.slice(secStart, si);
+      const firstRow = rn;
+      for (const d of group) {
+        const vals: any[] = [fmtDateOnly(d.date), d.name, "", d.need, d.supply, d.repair, d.shortfall, d.action, d.orders];
+        vals.forEach((v, ci) => {
+          const c = nf.getCell(rn, ci + 1); c.value = v; c.border = border; c.font = { size: 9 };
+          c.alignment = ci >= 3 && ci <= 6 ? center : { vertical: "middle", wrapText: true };
+        });
+        nf.getCell(rn, 5).fill = greenFill;
+        nf.getCell(rn, 6).fill = orangeFill;
+        if (d.shortfall > 0) nf.getCell(rn, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+        if (d.action === "Comprar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
+        if (d.action === "Alquilar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
+        rn++;
+      }
+      const lastRow = rn - 1;
+      if (lastRow > firstRow) nf.mergeCells(firstRow, 3, lastRow, 3);
+      const sc = nf.getCell(firstRow, 3);
       sc.value = sec;
       sc.font = { bold: true, size: 9, color: { argb: "FF" + BRAND } };
       sc.fill = headFill("EEF2FF");
       sc.border = border;
-      sc.alignment = { indent: 2, vertical: "middle" };
-      nf.getRow(rn).height = 18;
-      rn++;
-      lastDetailSec = sec;
+      sc.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
     }
-    const vals: any[] = [fmtDateOnly(d.date), d.name, sec, d.need, d.supply, d.repair, d.shortfall, d.action, d.orders];
-    vals.forEach((v, i) => {
-      const c = nf.getCell(rn, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
-      c.alignment = i >= 3 && i <= 6 ? center : { vertical: "middle", wrapText: true };
-    });
-    nf.getCell(rn, 5).fill = greenFill;
-    nf.getCell(rn, 6).fill = orangeFill;
-    if (d.shortfall > 0) nf.getCell(rn, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-    if (d.action === "Comprar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
-    if (d.action === "Alquilar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
-    rn++;
   }
   nf.views = [{ state: "frozen", ySplit: 3 }];
   tableBorder(nf, 3, Math.max(3, rn - 1), 1, 9);
