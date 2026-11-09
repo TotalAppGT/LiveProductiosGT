@@ -672,25 +672,31 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   nf.columns = [12, 38, 17, 10, 11, 11, 10, 12, 22].map((w) => ({ width: w }));
   title(nf, 1, "NECESIDAD POR FECHA — SUMA DE TODOS LOS CUADROS DEL DÍA", 9);
   nf.mergeCells("A2:I2");
-  nf.getCell("A2").value = "Cada ítem aparece una sola vez por fecha, sumando todos los cuadros de ese día. Faltante = Necesito − Disponible. Para compra/alquiler consolidada ver Renta-Compra.";
+  nf.getCell("A2").value = "Cada ítem aparece una sola vez por fecha, sumando todos los cuadros del día. Agrupado por categoría (independiente de la fecha): así podés filtrar/eliminar por fecha sin borrar categorías. Faltante = Necesito − Disponible.";
   nf.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
   headerRow(nf, 3, ["Fecha", "Equipo", "Sección", "Necesito", "Disponible", "Reparación", "Faltante", "Acción", "Cuadros"]);
+  const orderedDateDetail = [...report.dateDetail].sort(
+    (a, b) =>
+      sectionRank(a.section) - sectionRank(b.section) ||
+      (a.section || "").localeCompare(b.section || "") ||
+      a.date.localeCompare(b.date) ||
+      a.name.localeCompare(b.name)
+  );
   let rn = 4;
-  let lastGroup = "";
-  for (const d of report.dateDetail) {
+  let lastSec = "";
+  for (const d of orderedDateDetail) {
     const sec = (d.section || "OTRO").toUpperCase();
-    const group = `${d.date}|${sec}`;
-    if (group !== lastGroup) {
+    if (sec !== lastSec) {
       nf.mergeCells(rn, 1, rn, 9);
       const sc = nf.getCell(rn, 1);
-      sc.value = `${fmtDateOnly(d.date)} · ${sec}`;
+      sc.value = sec;
       sc.font = { bold: true, size: 9, color: { argb: "FF" + BRAND } };
       sc.fill = headFill("EEF2FF");
       sc.border = border;
       sc.alignment = { indent: 1, vertical: "middle" };
       nf.getRow(rn).height = 18;
       rn++;
-      lastGroup = group;
+      lastSec = sec;
     }
     const vals: any[] = [fmtDateOnly(d.date), d.name, sec, d.need, d.supply, d.repair, d.shortfall, d.action, d.orders];
     vals.forEach((v, i) => {
