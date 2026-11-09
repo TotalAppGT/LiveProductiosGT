@@ -672,7 +672,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   nf.columns = [12, 38, 17, 10, 11, 11, 10, 12, 22].map((w) => ({ width: w }));
   title(nf, 1, "NECESIDAD POR FECHA — SUMA DE TODOS LOS CUADROS DEL DÍA", 9);
   nf.mergeCells("A2:I2");
-  nf.getCell("A2").value = "Cada ítem aparece una sola vez por fecha. La fecha es el encabezado y las categorías van dentro de cada fecha en la columna Sección, sin filas extra. Para eliminar una fecha, seleccioná su encabezado y las filas siguientes; no quedan títulos de categoría sueltos. Faltante = Necesito − Disponible.";
+  nf.getCell("A2").value = "Cada ítem aparece una sola vez por fecha. La fecha es el encabezado; la categoría se repite en cada ítem en la columna Sección (sin celdas fusionadas), así no queda en blanco al borrar filas. Para eliminar una fecha, seleccioná su encabezado y las filas siguientes. Faltante = Necesito − Disponible.";
   nf.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
   headerRow(nf, 3, ["Fecha", "Equipo", "Sección", "Necesito", "Disponible", "Reparación", "Faltante", "Acción", "Cuadros"]);
   let rn = 4;
@@ -695,18 +695,22 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     rn++;
 
     let si = 0;
+    let groupNo = 0;
     while (si < dateRows.length) {
       const sec = (dateRows[si].section || "OTRO").toUpperCase();
       const secStart = si;
       while (si < dateRows.length && (dateRows[si].section || "OTRO").toUpperCase() === sec) si++;
       const group = dateRows.slice(secStart, si);
-      const firstRow = rn;
       for (const d of group) {
-        const vals: any[] = [fmtDateOnly(d.date), d.name, "", d.need, d.supply, d.repair, d.shortfall, d.action, d.orders];
+        const vals: any[] = [fmtDateOnly(d.date), d.name, sec, d.need, d.supply, d.repair, d.shortfall, d.action, d.orders];
         vals.forEach((v, ci) => {
           const c = nf.getCell(rn, ci + 1); c.value = v; c.border = border; c.font = { size: 9 };
           c.alignment = ci >= 3 && ci <= 6 ? center : { vertical: "middle", wrapText: true };
         });
+        const cc = nf.getCell(rn, 3);
+        cc.font = { bold: true, size: 9, color: { argb: "FF" + BRAND } };
+        cc.fill = headFill(groupNo % 2 === 0 ? "EEF2FF" : "F8FAFC");
+        cc.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
         nf.getCell(rn, 5).fill = greenFill;
         nf.getCell(rn, 6).fill = orangeFill;
         if (d.shortfall > 0) nf.getCell(rn, 7).font = { bold: true, color: { argb: "FFB91C1C" }, size: 9 };
@@ -714,14 +718,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
         if (d.action === "Alquilar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
         rn++;
       }
-      const lastRow = rn - 1;
-      if (lastRow > firstRow) nf.mergeCells(firstRow, 3, lastRow, 3);
-      const sc = nf.getCell(firstRow, 3);
-      sc.value = sec;
-      sc.font = { bold: true, size: 9, color: { argb: "FF" + BRAND } };
-      sc.fill = headFill("EEF2FF");
-      sc.border = border;
-      sc.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      groupNo++;
     }
   }
   nf.views = [{ state: "frozen", ySplit: 3 }];
