@@ -683,10 +683,10 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       a.name.localeCompare(b.name)
   );
   let rn = 4;
-  let lastSec = "";
+  let lastDetailSec = "";
   for (const d of orderedDateDetail) {
     const sec = (d.section || "OTRO").toUpperCase();
-    if (sec !== lastSec) {
+    if (sec !== lastDetailSec) {
       nf.mergeCells(rn, 1, rn, 9);
       const sc = nf.getCell(rn, 1);
       sc.value = sec;
@@ -696,7 +696,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       sc.alignment = { indent: 1, vertical: "middle" };
       nf.getRow(rn).height = 18;
       rn++;
-      lastSec = sec;
+      lastDetailSec = sec;
     }
     const vals: any[] = [fmtDateOnly(d.date), d.name, sec, d.need, d.supply, d.repair, d.shortfall, d.action, d.orders];
     vals.forEach((v, i) => {
