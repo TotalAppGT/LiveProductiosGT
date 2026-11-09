@@ -672,19 +672,26 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   nf.columns = [12, 38, 17, 10, 11, 11, 10, 12, 22].map((w) => ({ width: w }));
   title(nf, 1, "NECESIDAD POR FECHA — SUMA DE TODOS LOS CUADROS DEL DÍA", 9);
   nf.mergeCells("A2:I2");
-  nf.getCell("A2").value = "Cada ítem aparece una sola vez por fecha, sumando todos los cuadros del día. Agrupado por categoría (independiente de la fecha): así podés filtrar/eliminar por fecha sin borrar categorías. Faltante = Necesito − Disponible.";
+  nf.getCell("A2").value = "Cada ítem aparece una sola vez por fecha. Agrupado por fecha y, dentro, por categoría. Para eliminar una fecha, seleccioná desde su encabezado hasta el siguiente y borrá el bloque completo. Faltante = Necesito − Disponible.";
   nf.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
   headerRow(nf, 3, ["Fecha", "Equipo", "Sección", "Necesito", "Disponible", "Reparación", "Faltante", "Acción", "Cuadros"]);
-  const orderedDateDetail = [...report.dateDetail].sort(
-    (a, b) =>
-      sectionRank(a.section) - sectionRank(b.section) ||
-      (a.section || "").localeCompare(b.section || "") ||
-      a.date.localeCompare(b.date) ||
-      a.name.localeCompare(b.name)
-  );
   let rn = 4;
+  let lastDate = "";
   let lastDetailSec = "";
-  for (const d of orderedDateDetail) {
+  for (const d of report.dateDetail) {
+    if (d.date !== lastDate) {
+      nf.mergeCells(rn, 1, rn, 9);
+      const dc = nf.getCell(rn, 1);
+      dc.value = fmtDateOnly(d.date);
+      dc.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
+      dc.fill = headFill(BRAND);
+      dc.border = border;
+      dc.alignment = { indent: 1, vertical: "middle" };
+      nf.getRow(rn).height = 20;
+      rn++;
+      lastDate = d.date;
+      lastDetailSec = "";
+    }
     const sec = (d.section || "OTRO").toUpperCase();
     if (sec !== lastDetailSec) {
       nf.mergeCells(rn, 1, rn, 9);
@@ -693,7 +700,7 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
       sc.font = { bold: true, size: 9, color: { argb: "FF" + BRAND } };
       sc.fill = headFill("EEF2FF");
       sc.border = border;
-      sc.alignment = { indent: 1, vertical: "middle" };
+      sc.alignment = { indent: 2, vertical: "middle" };
       nf.getRow(rn).height = 18;
       rn++;
       lastDetailSec = sec;
@@ -710,7 +717,6 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
     if (d.action === "Alquilar") nf.getCell(rn, 8).font = { bold: true, color: { argb: "FFC2410C" }, size: 9 };
     rn++;
   }
-  nf.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rn - 1), column: 9 } };
   nf.views = [{ state: "frozen", ySplit: 3 }];
   tableBorder(nf, 3, Math.max(3, rn - 1), 1, 9);
 
