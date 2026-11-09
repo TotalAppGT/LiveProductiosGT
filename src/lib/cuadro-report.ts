@@ -676,8 +676,23 @@ export async function reportXlsx(report: CuadroReport | GeneralReport): Promise<
   nf.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
   headerRow(nf, 3, ["Fecha", "Equipo", "Sección", "Necesito", "Disponible", "Reparación", "Faltante", "Acción", "Cuadros"]);
   let rn = 4;
+  let lastGroup = "";
   for (const d of report.dateDetail) {
-    const vals: any[] = [fmtDateOnly(d.date), d.name, d.section || "", d.need, d.supply, d.repair, d.shortfall, d.action, d.orders];
+    const sec = (d.section || "OTRO").toUpperCase();
+    const group = `${d.date}|${sec}`;
+    if (group !== lastGroup) {
+      nf.mergeCells(rn, 1, rn, 9);
+      const sc = nf.getCell(rn, 1);
+      sc.value = `${fmtDateOnly(d.date)} · ${sec}`;
+      sc.font = { bold: true, size: 9, color: { argb: "FF" + BRAND } };
+      sc.fill = headFill("EEF2FF");
+      sc.border = border;
+      sc.alignment = { indent: 1, vertical: "middle" };
+      nf.getRow(rn).height = 18;
+      rn++;
+      lastGroup = group;
+    }
+    const vals: any[] = [fmtDateOnly(d.date), d.name, sec, d.need, d.supply, d.repair, d.shortfall, d.action, d.orders];
     vals.forEach((v, i) => {
       const c = nf.getCell(rn, i + 1); c.value = v; c.border = border; c.font = { size: 9 };
       c.alignment = i >= 3 && i <= 6 ? center : { vertical: "middle", wrapText: true };
