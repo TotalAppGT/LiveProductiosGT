@@ -253,18 +253,23 @@ export default function PedidosPage() {
   }
 
   async function openSheets() {
-    if (compareIds.length !== 2) return;
+    if (compareIds.length < 2) return;
+    // Abrir la pestaña en el clic (antes del await) evita el bloqueo de pop-ups.
+    const win = window.open("", "_blank");
     setSheetLoading(true);
     try {
       const res = await fetch("/api/orders/compare/sheet", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ids: compareIds }) });
       const json = await res.json();
       if (json.success && json.data?.url) {
         toast.success("Reporte creado en Google Sheets");
-        window.open(json.data.url, "_blank");
+        if (win) win.location.href = json.data.url;
+        else toast.error("La hoja se actualizó, pero el navegador bloqueó la ventana. Permití ventanas emergentes.");
       } else {
+        win?.close();
         toast.error(json.error || "Error al crear el Sheet");
       }
     } catch {
+      win?.close();
       toast.error("Error al crear el Sheet");
     } finally {
       setSheetLoading(false);
@@ -273,6 +278,7 @@ export default function PedidosPage() {
 
   async function openPurchasesSheets() {
     if (compareIds.length < 2) return;
+    const win = window.open("", "_blank");
     setPurchasesLoading(true);
     try {
       const res = await fetch("/api/orders/compare/purchases-sheet", {
@@ -283,11 +289,14 @@ export default function PedidosPage() {
       const json = await res.json();
       if (json.success && json.data?.url) {
         toast.success(`Compras / renta actualizado (${json.data.tabName || "hoja"})`);
-        window.open(json.data.url, "_blank");
+        if (win) win.location.href = json.data.url;
+        else toast.error("La hoja se actualizó, pero el navegador bloqueó la ventana. Permití ventanas emergentes.");
       } else {
+        win?.close();
         toast.error(json.error || "Error al crear compras");
       }
     } catch {
+      win?.close();
       toast.error("Error al crear compras");
     } finally {
       setPurchasesLoading(false);
