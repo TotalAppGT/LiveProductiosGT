@@ -160,9 +160,27 @@ export function parseWorkbookEvents(
         inTable = true;
         continue;
       }
-      if (!inTable) continue;
+
+      const aNorm = norm(a);
+      // Algunos cuadros no traen "CUADRO DE MONTAJE" e inician directo con
+      // "Cantidad | Pista de baile..." (o similar). Ese encabezado activa la
+      // tabla y el texto de la columna B es la sección.
+      if (!inTable && aNorm === "cantidad" && nb) {
+        inTable = true;
+        section = nb;
+        continue;
+      }
 
       const rawQty = typeof a === "number" ? a : Number(String(a ?? "").replace(/[^\d.,]/g, "").replace(/,/g, ""));
+      if (!inTable) {
+        // Fallback: si después de los metadatos aparece una cantidad con
+        // descripción, asumimos que ya empezó el cuadro.
+        if (rawQty > 0 && nb) {
+          inTable = true;
+        } else {
+          continue;
+        }
+      }
       if (rawQty > 0 && nb) {
         current.items.push({ name: nb, quantity: rawQty, section });
       } else if (!a && nb) {
