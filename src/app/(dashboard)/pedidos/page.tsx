@@ -516,6 +516,37 @@ export default function PedidosPage() {
     !search || String(o.orderNumber).includes(search) || o.eventName.toLowerCase().includes(search.toLowerCase())
   );
 
+  const sortedOrders = [...filteredOrders].sort((a, b) => {
+    const da = a.eventDate ? new Date(a.eventDate).getTime() : Number.POSITIVE_INFINITY;
+    const db = b.eventDate ? new Date(b.eventDate).getTime() : Number.POSITIVE_INFINITY;
+    return da - db || (a.orderNumber || 0) - (b.orderNumber || 0);
+  });
+  const dayGroups: { key: string; label: string; orders: typeof sortedOrders }[] = [];
+  const groupIndex = new Map<string, number>();
+  for (const o of sortedOrders) {
+    const key = o.eventDate ? new Date(o.eventDate).toISOString().slice(0, 10) : "sin-fecha";
+    let idx = groupIndex.get(key);
+    if (idx === undefined) {
+      const raw = o.eventDate
+        ? new Date(o.eventDate).toLocaleDateString("es-GT", {
+            timeZone: "America/Guatemala",
+            weekday: "long",
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })
+        : "Sin fecha";
+      idx = dayGroups.length;
+      dayGroups.push({
+        key,
+        label: raw.charAt(0).toUpperCase() + raw.slice(1),
+        orders: [],
+      });
+      groupIndex.set(key, idx);
+    }
+    dayGroups[idx].orders.push(o);
+  }
+
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
   return (
@@ -599,8 +630,17 @@ export default function PedidosPage() {
         />
       </div>
 
-      <div className="grid gap-3">
-        {filteredOrders.map((o) => (
+      <div className="space-y-6">
+        {dayGroups.map((group) => (
+          <section key={group.key}>
+            <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-600 px-3 py-2 text-white shadow-sm">
+              <h2 className="text-sm font-semibold">{group.label}</h2>
+              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-medium">
+                {group.orders.length} cuadro{group.orders.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="grid gap-3">
+        {group.orders.map((o) => (
           <Card key={o.id} className="p-4 cursor-pointer hover:border-blue-400" onClick={() => setSelectedOrder(o)}>
             <div className="flex items-center justify-between">
               <div>
@@ -650,6 +690,9 @@ export default function PedidosPage() {
               </div>
             </div>
           </Card>
+        ))}
+            </div>
+          </section>
         ))}
         {filteredOrders.length === 0 && (
           <p className="text-center text-gray-400 py-8">No hay cuadros. Creá el primero con "Nuevo Cuadro".</p>
