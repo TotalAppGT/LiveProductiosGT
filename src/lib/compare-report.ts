@@ -86,14 +86,16 @@ export function buildReportTabs(data: CompareResult): CompareTab[] {
 }
 
 export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
+  const detailName = (e: { orderNumber: number; eventName: string; eventLocation?: string | null }) =>
+    `#${e.orderNumber} ${e.eventName}${e.eventLocation ? ` · ${e.eventLocation}` : ""}`;
   const eventName = (id: string) => {
     const e = data.events.find((x) => x.id === id);
-    return e ? `${e.orderNumber} · ${shortName(e.eventName)} (${ddmmyy(e.eventDate)})` : "";
+    return e ? `${detailName(e)} (${ddmmyy(e.eventDate)})` : "";
   };
   const eventByOrder = new Map(data.events.map((e) => [e.orderNumber, e]));
   const orderLabel = (orderNumber: number) => {
     const e = eventByOrder.get(orderNumber);
-    return e ? `#${orderNumber} ${shortName(e.eventName)}` : `#${orderNumber}`;
+    return e ? detailName(e) : `#${orderNumber}`;
   };
 
   const resumen: Row[] = [
@@ -111,7 +113,7 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     ["CUADRO", "EVENTO", "FECHA", "NECESITA", "INVENTARIO", "TRASIEGO", "RENTA/COMPRA", "REGENSA", "COBERTURA"],
     ...data.events.map((e) => [
       e.orderNumber,
-      shortName(e.eventName),
+      e.eventName,
       ddmmyy(e.eventDate),
       e.need,
       e.fromStock,
@@ -250,7 +252,7 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
         const e = data.events.find((x) => x.id === p.id);
         detalle.push([
           item.name,
-          e ? `#${e.orderNumber} ${shortName(e.eventName)}` : "",
+          e ? `#${e.orderNumber} ${e.eventName}${e.eventLocation ? ` · ${e.eventLocation}` : ""}` : "",
           e ? ddmmyy(e.eventDate) : "",
           p.need,
           p.fromStock,
@@ -281,6 +283,8 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
   const tt = data.totals;
   const sName = shortName(s.eventName);
   const tName = shortName(t.eventName);
+  const sourceLabel = `#${s.orderNumber} ${s.eventName}${s.eventLocation ? ` · ${s.eventLocation}` : ""}`;
+  const targetLabel = `#${t.orderNumber} ${t.eventName}${t.eventLocation ? ` · ${t.eventLocation}` : ""}`;
   const sd = ddmmyy(s.eventDate);
   const td = ddmmyy(t.eventDate);
   const tm = ddmmyy(t.montageDate);
@@ -349,7 +353,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
     pairTrasiegoBody.push([cat]);
     entries.sort((a, b) => b.transfer - a.transfer || a.name.localeCompare(b.name));
     for (const r of entries) {
-      pairTrasiegoBody.push([r.name, cat, r.transfer, `Camion ${sName} (${sd})`, `${tName} (${tm})`, ""]);
+      pairTrasiegoBody.push([r.name, cat, r.transfer, sourceLabel, targetLabel, ""]);
     }
   }
 
@@ -469,4 +473,33 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       sectionRows: detailSections,
     },
   ];
+}
+
+export function comparisonTabName(data: CompareResult): string {
+  const events = data.mode === "pair" ? [data.source, data.target] : data.events;
+  const dates = [...new Set(events.map((e) => ddmmyy(e.eventDate)).filter(Boolean))];
+  const base = dates.length ? `Trasiego ${dates.join("-")}` : "Trasiego";
+  return `${base} (${events.length} cuadros)`.slice(0, 100);
+}
+
+export function buildCombinedReportRows(data: CompareResult): Row[] {
+  const events = data.mode === "pair" ? [data.source, data.target] : data.events;
+  const detail = (e: { orderNumber: number; eventName: string; eventLocation?: string | null }) =>
+    `#${e.orderNumber} ${e.eventName}${e.eventLocation ? ` · ${e.eventLocation}` : ""}`;
+  const rows: Row[] = [];
+  rows.push([`TRASIEGO — ${data.mode === "pair" ? "2 CUADROS" : `${events.length} CUADROS`}`]);
+  rows.push([`Generado ${new Date().toLocaleString("es-GT", { timeZone: "America/Guatemala" })}`]);
+  rows.push([]);
+  rows.push(["EVENTOS SELECCIONADOS"]);
+  rows.push(["#", "Evento", "Cliente", "Lugar", "Fecha"]);
+  for (const e of events) {
+    rows.push([`#${e.orderNumber}`, e.eventName, e.clientName || "", e.eventLocation || "", e.eventDate || ""]);
+  }
+  rows.push([]);
+  for (const tab of buildReportTabs(data)) {
+    rows.push([tab.name.toUpperCase()]);
+    for (const row of tab.rows) rows.push([...row]);
+    rows.push([]);
+  }
+  return rows;
 }

@@ -1,6 +1,6 @@
 import { createSign } from "crypto";
 import { prisma } from "@/lib/prisma";
-import { buildReportTabs, type CompareTab } from "@/lib/compare-report";
+import { buildReportTabs, buildCombinedReportRows, comparisonTabName, type CompareTab } from "@/lib/compare-report";
 import type { CompareResult } from "@/lib/order-compare";
 
 type ServiceAccount = { client_email: string; private_key: string; token_uri?: string };
@@ -463,6 +463,81 @@ export async function writeComparisonToSheet(
   }
 
   return { url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, spreadsheetId };
+}
+
+export async function writeComparisonNewTab(
+  data: CompareResult,
+  spreadsheetId: string
+): Promise<{ url: string; spreadsheetId: string; tabName: string }> {
+  const sa = await getServiceAccount();
+  if (!sa) throw new Error("google-service-account-not-configured");
+  const token = await getAccessToken(sa);
+  const auth = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+  const tabName = comparisonTabName(data);
+  const rows = buildCombinedReportRows(data);
+
+  const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`, {
+    headers: auth,
+  });
+  const meta = await metaRes.json();
+  if (!metaRes.ok) throw new Error(meta?.error?.message || "sheet-read-failed");
+  const found = (meta.sheets || []).find(
+    (s: { properties: { title: string } }) => s.properties.title === tabName
+  );
+  let sheetId: number | undefined = found?.properties?.sheetId;
+
+  if (sheetId === undefined) {
+    const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }),
+    });
+    const addJson = await addRes.json();
+    if (!addRes.ok) throw new Error(addJson?.error?.message || "sheet-add-failed");
+    sheetId = addJson?.replies?.[0]?.addSheet?.properties?.sheetId;
+  }
+
+  const quoted = tabName.replace(/'/g, "''");
+  await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${quoted}'!A1:Z5000`)}:clear`,
+    { method: "POST", headers: auth, body: "{}" }
+  );
+  const valRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ valueInputOption: "RAW", data: [{ range: `'${quoted}'!A1`, values: rows }] }),
+  });
+  if (!valRes.ok) {
+    const err = await valRes.json().catch(() => ({}));
+    throw new Error(err?.error?.message || "sheet-values-failed");
+  }
+
+  if (sheetId !== undefined) {
+    try {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({
+          requests: [
+            {
+              repeatCell: {
+                range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+                cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 14, foregroundColor: { red: 0.12, green: 0.23, blue: 0.54 } } } },
+                fields: "userEnteredFormat.textFormat",
+              },
+            },
+          ],
+        }),
+      });
+    } catch {}
+  }
+
+  const gid = sheetId !== undefined ? `#gid=${sheetId}` : "";
+  return {
+    url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit${gid}`,
+    spreadsheetId,
+    tabName,
+  };
 }
 
 export async function createComparisonSheet(data: CompareResult): Promise<{ url: string; spreadsheetId: string }> {

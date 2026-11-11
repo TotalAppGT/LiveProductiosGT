@@ -47,6 +47,8 @@ export type CompareEvent = {
   id: string;
   orderNumber: number;
   eventName: string;
+  clientName?: string | null;
+  eventLocation?: string | null;
   eventDate: string | null;
   montageDate: string | null;
 };
@@ -149,6 +151,8 @@ type LoadedOrder = {
   id: string;
   orderNumber: number;
   eventName: string;
+  clientName: string | null;
+  eventLocation: string | null;
   eventDate: Date | null;
   items: { inventoryItemId: string | null; name: string; category: string; quantity: number }[];
 };
@@ -298,6 +302,8 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
       id: source.id,
       orderNumber: source.orderNumber,
       eventName: source.eventName,
+      clientName: source.clientName,
+      eventLocation: source.eventLocation,
       eventDate: dateOnly(source.eventDate),
       montageDate: montageOf(source.eventDate),
     },
@@ -305,6 +311,8 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
       id: target.id,
       orderNumber: target.orderNumber,
       eventName: target.eventName,
+      clientName: target.clientName,
+      eventLocation: target.eventLocation,
       eventDate: dateOnly(target.eventDate),
       montageDate: montageOf(target.eventDate),
     },
@@ -323,6 +331,8 @@ function compareMulti(
     id: o.id,
     orderNumber: o.orderNumber,
     eventName: o.eventName,
+    clientName: o.clientName || null,
+    eventLocation: o.eventLocation || null,
     eventDate: dateOnly(o.eventDate),
     montageDate: montageOf(o.eventDate),
     need: 0,

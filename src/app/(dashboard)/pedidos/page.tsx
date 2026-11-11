@@ -100,6 +100,7 @@ export default function PedidosPage() {
   const [showCompare, setShowCompare] = useState(false);
   const [compareLoading, setCompareLoading] = useState(false);
   const [sheetLoading, setSheetLoading] = useState(false);
+  const [newSheetLoading, setNewSheetLoading] = useState(false);
   const [purchasesLoading, setPurchasesLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
@@ -285,6 +286,33 @@ export default function PedidosPage() {
       toast.error("Error al crear el Sheet");
     } finally {
       setSheetLoading(false);
+    }
+  }
+
+  async function openNewSheet() {
+    if (compareIds.length < 2) return;
+    const win = window.open("", "_blank");
+    setNewSheetLoading(true);
+    try {
+      const res = await fetch("/api/orders/compare/sheet/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(comparePayload()),
+      });
+      const json = await res.json();
+      if (json.success && json.data?.url) {
+        toast.success(`Hoja creada: ${json.data.tabName || "Trasiego"}`);
+        if (win) win.location.href = json.data.url;
+        else toast.error("La hoja se creó, pero el navegador bloqueó la ventana. Permití ventanas emergentes.");
+      } else {
+        win?.close();
+        toast.error(json.error || "Error al crear la hoja");
+      }
+    } catch {
+      win?.close();
+      toast.error("Error al crear la hoja");
+    } finally {
+      setNewSheetLoading(false);
     }
   }
 
@@ -1177,6 +1205,7 @@ export default function PedidosPage() {
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setShowCompare(false)}>Cerrar</Button>
               <Button variant="outline" onClick={openSheets} isLoading={sheetLoading}>Abrir en Google Sheets</Button>
+              <Button variant="outline" onClick={openNewSheet} isLoading={newSheetLoading}>Nueva hoja (fecha)</Button>
               <Button variant="outline" onClick={openPurchasesSheets} isLoading={purchasesLoading}>Compras / Renta</Button>
               <Button onClick={downloadCompare}>Descargar Excel</Button>
               <Button variant="outline" onClick={downloadComparePdf} isLoading={pdfLoading}>Descargar PDF</Button>
