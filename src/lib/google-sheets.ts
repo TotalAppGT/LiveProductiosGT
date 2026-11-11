@@ -95,7 +95,7 @@ function dateTabName(dates: (string | null)[]): string {
     const [, m, d] = iso.split("-");
     return { d, m };
   });
-  if (parts.length === 1) return `${parts[0].d}-${parts[0].m}`;
+  if (parts.length === 1) return `${parts[0].d}/${parts[0].m}`;
   if (parts.every((p) => p.m === parts[0].m)) return parts.map((p) => p.d).join("/");
   return parts.map((p) => `${p.d}/${p.m}`).join("-");
 }
