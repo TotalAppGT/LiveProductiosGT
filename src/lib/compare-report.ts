@@ -139,27 +139,89 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     ]),
   ];
 
-  const trasiegoRows: Row[] = data.items.flatMap((i) =>
-    i.transfers.map((t) => [i.name, t.qty, orderLabel(t.fromOrder), orderLabel(t.toOrder), ""])
-  );
-  trasiegoRows.sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0));
-  const trasiego: Row[] = [["ÍTEM", "CANTIDAD", "DESDE", "HACIA", "COMENTARIO"], ...trasiegoRows];
+  const itemsByCategory = new Map<string, CompareMultiData["items"]>();
+  for (const item of data.items) {
+    const cat = (item.category || "OTRO").toUpperCase();
+    if (!itemsByCategory.has(cat)) itemsByCategory.set(cat, []);
+    itemsByCategory.get(cat)!.push(item);
+  }
+  const categories = [...itemsByCategory.keys()].sort((a, b) => a.localeCompare(b));
 
-  const bodegaRows: Row[] = data.items.flatMap((i) =>
-    i.perEvent
-      .filter((p) => p.fromStock > 0)
-      .map((p) => [eventName(p.id), i.name, p.fromStock, ""])
-  );
-  bodegaRows.sort((a, b) => (Number(b[2]) || 0) - (Number(a[2]) || 0));
-  const bodega: Row[] = [["CUADRO", "ÍTEM", "CANTIDAD", "COMENTARIO"], ...bodegaRows];
+  const trasiegoBody: Row[] = [];
+  const trasiegoSections: number[] = [];
+  for (const cat of categories) {
+    const entries: {
+      item: CompareMultiData["items"][number];
+      t: CompareMultiData["items"][number]["transfers"][number];
+    }[] = [];
+    for (const item of itemsByCategory.get(cat) || []) {
+      for (const t of item.transfers) entries.push({ item, t });
+    }
+    if (!entries.length) continue;
+    trasiegoSections.push(trasiegoBody.length + 1);
+    trasiegoBody.push([cat]);
+    entries.sort(
+      (a, b) =>
+        b.t.qty - a.t.qty ||
+        b.item.totalReuse - a.item.totalReuse ||
+        a.item.name.localeCompare(b.item.name)
+    );
+    for (const { item, t } of entries) {
+      trasiegoBody.push([item.name, cat, t.qty, orderLabel(t.fromOrder), orderLabel(t.toOrder), ""]);
+    }
+  }
+  const trasiego: Row[] = [
+    ["ÍTEM", "CATEGORÍA", "CANTIDAD", "DESDE", "HACIA", "COMENTARIO"],
+    ...trasiegoBody,
+  ];
 
-  const rentaRows: Row[] = data.items.flatMap((i) =>
-    i.perEvent
-      .filter((p) => p.short > 0)
-      .map((p) => [eventName(p.id), i.name, p.short, "Renta o compra"])
-  );
-  rentaRows.sort((a, b) => (Number(b[2]) || 0) - (Number(a[2]) || 0));
-  const renta: Row[] = [["CUADRO", "ÍTEM", "CANTIDAD", "COMENTARIO"], ...rentaRows];
+  const bodegaBody: Row[] = [];
+  const bodegaSections: number[] = [];
+  for (const cat of categories) {
+    const entries: { item: CompareMultiData["items"][number]; p: CompareMultiData["items"][number]["perEvent"][number] }[] = [];
+    for (const item of itemsByCategory.get(cat) || []) {
+      for (const p of item.perEvent) if (p.fromStock > 0) entries.push({ item, p });
+    }
+    if (!entries.length) continue;
+    bodegaSections.push(bodegaBody.length + 1);
+    bodegaBody.push([cat]);
+    entries.sort(
+      (a, b) =>
+        b.p.fromStock - a.p.fromStock ||
+        a.item.name.localeCompare(b.item.name)
+    );
+    for (const { item, p } of entries) {
+      bodegaBody.push([eventName(p.id), item.name, cat, p.fromStock, ""]);
+    }
+  }
+  const bodega: Row[] = [
+    ["CUADRO", "ÍTEM", "CATEGORÍA", "CANTIDAD", "COMENTARIO"],
+    ...bodegaBody,
+  ];
+
+  const rentaBody: Row[] = [];
+  const rentaSections: number[] = [];
+  for (const cat of categories) {
+    const entries: { item: CompareMultiData["items"][number]; p: CompareMultiData["items"][number]["perEvent"][number] }[] = [];
+    for (const item of itemsByCategory.get(cat) || []) {
+      for (const p of item.perEvent) if (p.short > 0) entries.push({ item, p });
+    }
+    if (!entries.length) continue;
+    rentaSections.push(rentaBody.length + 1);
+    rentaBody.push([cat]);
+    entries.sort(
+      (a, b) =>
+        b.p.short - a.p.short ||
+        a.item.name.localeCompare(b.item.name)
+    );
+    for (const { item, p } of entries) {
+      rentaBody.push([eventName(p.id), item.name, cat, p.short, "Renta o compra"]);
+    }
+  }
+  const renta: Row[] = [
+    ["CUADRO", "ÍTEM", "CATEGORÍA", "CANTIDAD", "COMENTARIO"],
+    ...rentaBody,
+  ];
 
   const regresaRows: Row[] = data.items.flatMap((i) =>
     i.perEvent
@@ -205,9 +267,9 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     { key: "multi-resumen", name: "Resumen", rows: resumen, widths: [42, 12, 12], headerRows: [0], sectionRows: [] },
     { key: "multi-eventos", name: "Eventos", rows: eventos, widths: [10, 26, 10, 10, 12, 10, 14, 10, 12], headerRows: [0], sectionRows: [] },
     { key: "multi-inventario", name: "Inventario", rows: inventario, widths: [46, 16, 10, 10, 12, 10, 14, 10], headerRows: [0], sectionRows: [] },
-    { key: "multi-trasiego", name: "Trasiego", rows: trasiego, widths: [46, 12, 14, 14, 30], headerRows: [0], sectionRows: [] },
-    { key: "multi-bodega", name: "Bodega", rows: bodega, widths: [28, 46, 12, 30], headerRows: [0], sectionRows: [] },
-    { key: "multi-renta", name: "Renta-Compra", rows: renta, widths: [28, 46, 12, 30], headerRows: [0], sectionRows: [] },
+    { key: "multi-trasiego", name: "Trasiego", rows: trasiego, widths: [46, 16, 12, 20, 16, 32], headerRows: [0], sectionRows: trasiegoSections },
+    { key: "multi-bodega", name: "Bodega", rows: bodega, widths: [28, 46, 16, 12, 30], headerRows: [0], sectionRows: bodegaSections },
+    { key: "multi-renta", name: "Renta-Compra", rows: renta, widths: [28, 46, 16, 12, 30], headerRows: [0], sectionRows: rentaSections },
     { key: "multi-regresa", name: "Regresa", rows: regresa, widths: [28, 46, 12, 30, 30], headerRows: [0], sectionRows: [] },
     { key: "multi-detalle", name: "Detalle", rows: detalle, widths: [46, 24, 10, 10, 12, 10, 14, 10, 12], headerRows: [0], sectionRows: detailSections },
   ];
@@ -270,6 +332,53 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
     }
   }
 
+  const pairByCategory = new Map<string, CompareData["rows"]>();
+  for (const r of data.rows) {
+    const cat = (r.category || "OTRO").toUpperCase();
+    if (!pairByCategory.has(cat)) pairByCategory.set(cat, []);
+    pairByCategory.get(cat)!.push(r);
+  }
+  const pairCategories = [...pairByCategory.keys()].sort((a, b) => a.localeCompare(b));
+
+  const pairTrasiegoBody: Row[] = [];
+  const pairTrasiegoSections: number[] = [];
+  for (const cat of pairCategories) {
+    const entries = (pairByCategory.get(cat) || []).filter((r) => r.transfer > 0);
+    if (!entries.length) continue;
+    pairTrasiegoSections.push(pairTrasiegoBody.length + 1);
+    pairTrasiegoBody.push([cat]);
+    entries.sort((a, b) => b.transfer - a.transfer || a.name.localeCompare(b.name));
+    for (const r of entries) {
+      pairTrasiegoBody.push([r.name, cat, r.transfer, `Camion ${sName} (${sd})`, `${tName} (${tm})`, ""]);
+    }
+  }
+
+  const pairCamionBody: Row[] = [];
+  const pairCamionSections: number[] = [];
+  for (const cat of pairCategories) {
+    const entries = (pairByCategory.get(cat) || []).filter((r) => r.targetFromStock > 0);
+    if (!entries.length) continue;
+    pairCamionSections.push(pairCamionBody.length + 1);
+    pairCamionBody.push([cat]);
+    entries.sort((a, b) => b.targetFromStock - a.targetFromStock || a.name.localeCompare(b.name));
+    for (const r of entries) {
+      pairCamionBody.push([r.name, cat, r.targetFromStock, "Sí", ""]);
+    }
+  }
+
+  const pairFaltanteBody: Row[] = [];
+  const pairFaltanteSections: number[] = [];
+  for (const cat of pairCategories) {
+    const entries = (pairByCategory.get(cat) || []).filter((r) => r.targetShort > 0);
+    if (!entries.length) continue;
+    pairFaltanteSections.push(pairFaltanteBody.length + 1);
+    pairFaltanteBody.push([cat]);
+    entries.sort((a, b) => b.targetShort - a.targetShort || a.name.localeCompare(b.name));
+    for (const r of entries) {
+      pairFaltanteBody.push([r.name, cat, r.targetShort, ""]);
+    }
+  }
+
   const resumen: Row[] = [
     ["COBERTURA", "Unidades", "%"],
     [`${sName} reutilizado en ${tName} (trasiego)`, tt.transfer, `${tt.pctTransferSource}% de ${sName}`],
@@ -308,37 +417,34 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       key: "trasiego",
       name: unique("Trasiego"),
       rows: [
-        [`TRASIEGO ${sName} → ${tName} — ${tm}`, "Cantidad", "Desde", "Hacia", "Comentario"],
-        ...data.rows
-          .filter((r) => r.transfer > 0)
-          .sort((a, b) => b.transfer - a.transfer)
-          .map((r) => [r.name, r.transfer, `Camion ${sName} (${sd})`, `${tName} (${tm})`, ""]),
+        [`TRASIEGO ${sName} → ${tName} — ${tm}`, "Categoría", "Cantidad", "Desde", "Hacia", "Comentario"],
+        ...pairTrasiegoBody,
       ],
-      widths: [46, 12, 20, 16, 32],
+      widths: [46, 16, 12, 20, 16, 32],
       headerRows: [0],
-      sectionRows: [],
+      sectionRows: pairTrasiegoSections,
     },
     {
       key: "camion",
       name: unique(`Camion ${tName}`),
       rows: [
-        [`CAMION ${tName} — SOLO LO QUE FALTA DE BODEGA`, "Cantidad", "¿Sale de bodega?", "Comentario"],
-        ...data.rows.filter((r) => r.targetFromStock > 0).sort((a, b) => b.targetFromStock - a.targetFromStock).map((r) => [r.name, r.targetFromStock, "Sí", ""]),
+        [`CAMION ${tName} — SOLO LO QUE FALTA DE BODEGA`, "Categoría", "Cantidad", "¿Sale de bodega?", "Comentario"],
+        ...pairCamionBody,
       ],
-      widths: [46, 12, 14, 32],
+      widths: [46, 16, 12, 14, 32],
       headerRows: [0],
-      sectionRows: [],
+      sectionRows: pairCamionSections,
     },
     {
       key: "faltante",
       name: unique(`${tName} No cubierto`),
       rows: [
-        [`${tName} FALTANTE — NO CUBIERTO`, "Cantidad", "Comentario"],
-        ...data.rows.filter((r) => r.targetShort > 0).sort((a, b) => b.targetShort - a.targetShort).map((r) => [r.name, r.targetShort, ""]),
+        [`${tName} FALTANTE — NO CUBIERTO`, "Categoría", "Cantidad", "Comentario"],
+        ...pairFaltanteBody,
       ],
-      widths: [46, 12, 32],
+      widths: [46, 16, 12, 32],
       headerRows: [0],
-      sectionRows: [],
+      sectionRows: pairFaltanteSections,
     },
     {
       key: "regresa",

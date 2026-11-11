@@ -24,6 +24,13 @@ export async function POST(request: NextRequest) {
     for (const tab of buildReportTabs(data)) {
       const ws = XLSX.utils.aoa_to_sheet(tab.rows);
       ws["!cols"] = tab.widths.map((wch) => ({ wch }));
+      if (tab.sectionRows.length > 0) {
+        const lastCol = Math.max(0, (tab.rows[0] || []).length - 1);
+        ws["!merges"] = tab.sectionRows.map((row) => ({
+          s: { r: row, c: 0 },
+          e: { r: row, c: lastCol },
+        }));
+      }
       XLSX.utils.book_append_sheet(wb, ws, tab.name);
     }
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;

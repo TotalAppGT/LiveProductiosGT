@@ -424,6 +424,44 @@ export async function writeComparisonToSheet(
     throw new Error(err?.error?.message || "sheet-values-failed");
   }
 
+  try {
+    const formatRequests: unknown[] = [];
+    tabs.forEach((tab, i) => {
+      const sheetId = existingProps[i]?.sheetId;
+      if (sheetId === undefined) return;
+      const lastCol = Math.max(1, (tab.rows[0] || []).length);
+      for (const row of tab.sectionRows) {
+        formatRequests.push({
+          repeatCell: {
+            range: {
+              sheetId,
+              startRowIndex: row,
+              endRowIndex: row + 1,
+              startColumnIndex: 0,
+              endColumnIndex: lastCol,
+            },
+            cell: {
+              userEnteredFormat: {
+                textFormat: { bold: true, foregroundColor: { red: 0.12, green: 0.23, blue: 0.54 } },
+                backgroundColor: { red: 0.93, green: 0.95, blue: 1 },
+              },
+            },
+            fields: "userEnteredFormat.textFormat,userEnteredFormat.backgroundColor",
+          },
+        });
+      }
+    });
+    if (formatRequests.length > 0) {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({ requests: formatRequests }),
+      });
+    }
+  } catch {
+    // La categoría ya quedó como dato; el formato es visual.
+  }
+
   return { url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, spreadsheetId };
 }
 
