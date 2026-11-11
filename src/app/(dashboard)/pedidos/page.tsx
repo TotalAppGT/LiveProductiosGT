@@ -579,6 +579,18 @@ export default function PedidosPage() {
     compareTargetValue !== "auto" &&
     compareTargetValue !== "largest" &&
     compareSourceValue === compareTargetValue;
+  const selectedDaysLabel = Array.from(
+    new Set(
+      compareIds.flatMap((id) => {
+        const o = orders.find((x) => x.id === id);
+        if (!o?.eventDate) return ["sin fecha"];
+        const d = new Date(o.eventDate);
+        return isNaN(d.getTime())
+          ? ["sin fecha"]
+          : [d.toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "2-digit" })];
+      })
+    )
+  ).join(", ");
 
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
