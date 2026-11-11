@@ -200,9 +200,18 @@ export function parseWorkbookEvents(
     flush();
   }
 
+  // El mismo evento puede aparecer repetido en dos hojas del libro. Nos
+  // quedamos con una sola copia (la que tenga más ítems) para no duplicar cuadros.
+  const uniqueEvents = new Map<string, SheetEvent>();
+  for (const e of events) {
+    const key = `${dateKey(e.date)}|${norm(e.client)}|${norm(e.location)}`;
+    const previous = uniqueEvents.get(key);
+    if (!previous || e.items.length > previous.items.length) uniqueEvents.set(key, e);
+  }
+
   const from = opts?.from || "";
   const to = opts?.to || "";
-  return events.filter((e) => {
+  return [...uniqueEvents.values()].filter((e) => {
     const d = dateKey(e.date);
     if (from && d < from) return false;
     if (to && d > to) return false;
