@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
-import { categoryForSection, parseInventoryRows, type ParsedInventoryItem } from "@/lib/inventory";
+import { categoryForSection, parseInventoryRows, parseAvailableInventoryRows, type ParsedInventoryItem } from "@/lib/inventory";
 import type { InventoryCategory } from "@prisma/client";
 import * as XLSX from "xlsx";
 
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         const wb = XLSX.read(csv, { type: "string" });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false }) as unknown[][];
-        items = parseInventoryRows(rows);
+        items = parseAvailableInventoryRows(rows);
       } else {
         items = (body.items || [])
           .map((it: Record<string, unknown>) => ({

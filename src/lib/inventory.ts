@@ -97,6 +97,34 @@ export interface ParsedInventoryItem {
 // Parsea filas (array de arrays) del Excel maestro.
 //  - Fila de sección: una celda con texto, sin cantidad numérica.
 //  - Fila de ítem: una celda con cantidad (número) y otra con el nombre.
+// Hoja fija "INVENTARIO DISPONIBLE":
+// B = cantidad base, C = ítem, M = DISPONIBLE (base menos asignados, baja,
+// pendiente, perdido y ensayadero). Para el sistema la cantidad real es M.
+export function parseAvailableInventoryRows(rows: unknown[][]): ParsedInventoryItem[] {
+  const items: ParsedInventoryItem[] = [];
+  let section: string | null = null;
+  for (const raw of rows) {
+    const cells = (raw || []).map((c) => String(c ?? "").trim());
+    const b = cells[1] || "";
+    const c = cells[2] || "";
+    const m = cells[12] || "";
+    const baseQty = /^\d+$/.test(b) ? parseInt(b, 10) : null;
+    if (c && baseQty !== null) {
+      const available = /^\d+$/.test(m) ? parseInt(m, 10) : 0;
+      items.push({
+        name: c,
+        section,
+        category: categoryForSection(section),
+        quantity: Math.max(0, available),
+      });
+    } else if (b && !c) {
+      const text = b.toUpperCase();
+      if (text !== "INVENTARIO DISPONIBLE" && text !== "DISPONIBLE") section = text;
+    }
+  }
+  return items;
+}
+
 export function parseInventoryRows(rows: unknown[][]): ParsedInventoryItem[] {
   const items: ParsedInventoryItem[] = [];
   let section: string | null = null;
