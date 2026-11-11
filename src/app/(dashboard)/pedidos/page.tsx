@@ -649,7 +649,7 @@ export default function PedidosPage() {
       {tab === "cuadros" && (<>
       {compareIds.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
-          <span className="text-sm text-blue-800 dark:text-blue-200">{compareIds.length} cuadro(s) seleccionado(s). Elegí 2 o más; podés fijar Desde y Hacia.</span>
+          <span className="text-sm text-blue-800 dark:text-blue-200">{compareIds.length} cuadro(s) seleccionado(s){selectedDaysLabel ? ` · Días: ${selectedDaysLabel}` : ""}. Elegí 2 o más; podés fijar Desde y Hacia.</span>
           {compareIds.length >= 2 && (
             <select
               value={compareSourceValue}
@@ -705,9 +705,26 @@ export default function PedidosPage() {
           <section key={group.key}>
             <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-600 px-3 py-2 text-white shadow-sm">
               <h2 className="text-sm font-semibold">{group.label}</h2>
-              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-medium">
-                {group.orders.length} cuadro{group.orders.length === 1 ? "" : "s"}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-medium">
+                  {group.orders.length} cuadro{group.orders.length === 1 ? "" : "s"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ids = group.orders.map((o) => o.id);
+                    const all = ids.length === compareIds.length && ids.every((id) => compareIds.includes(id));
+                    setCompareIds(all ? [] : ids);
+                    setCompareSource("auto");
+                    setCompareTarget("auto");
+                    setCompareData(null);
+                  }}
+                  className="rounded-md bg-white/20 px-2 py-1 text-[11px] font-medium hover:bg-white/30"
+                  title="Analizar solo los cuadros de este día"
+                >
+                  Solo este día
+                </button>
+              </div>
             </div>
             <div className="grid gap-3">
         {group.orders.map((o) => (
