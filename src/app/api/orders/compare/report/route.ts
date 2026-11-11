@@ -14,7 +14,11 @@ export async function POST(request: NextRequest) {
     const ids = Array.isArray(body?.ids) ? body.ids.map(String) : [];
     if (ids.length < 2) return NextResponse.json({ success: false, error: "Seleccioná al menos 2 cuadros" }, { status: 400 });
 
-    const data = await compareOrders(ids);
+    const options = {
+      targetId: body?.targetId ? String(body.targetId) : undefined,
+      targetMode: body?.targetMode === "largest" ? ("largest" as const) : undefined,
+    };
+    const data = await compareOrders(ids, options);
     const wb = XLSX.utils.book_new();
     for (const tab of buildReportTabs(data)) {
       const ws = XLSX.utils.aoa_to_sheet(tab.rows);

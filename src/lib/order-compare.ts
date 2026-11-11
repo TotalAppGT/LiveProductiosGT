@@ -51,10 +51,16 @@ export type CompareEvent = {
   montageDate: string | null;
 };
 
+export type CompareOptions = {
+  targetId?: string;
+  targetMode?: "auto" | "largest";
+};
+
 export type CompareData = {
   mode: "pair";
   source: CompareEvent;
   target: CompareEvent;
+  directionWarning?: string;
   rows: CompareRow[];
   totals: {
     source: number;
@@ -109,6 +115,7 @@ export type CompareMultiData = {
   mode: "multi";
   source: CompareEvent;
   target: CompareEvent;
+  directionWarning?: string;
   events: CompareMultiEvent[];
   items: CompareMultiItem[];
   totals: {
@@ -147,7 +154,7 @@ type LoadedOrder = {
 
 type Inv = { id: string; name: string; quantity: number; section?: string | null };
 
-export async function compareOrders(ids: string[]): Promise<CompareResult> {
+export async function compareOrders(ids: string[], options?: CompareOptions): Promise<CompareResult> {
   const unique = Array.from(new Set(ids.filter(Boolean)));
   if (unique.length < 2) throw new Error("Seleccioná al menos 2 cuadros");
 
@@ -170,10 +177,35 @@ export async function compareOrders(ids: string[]): Promise<CompareResult> {
   const byId = new Map(inventory.map((i) => [i.id, i]));
   const byName = new Map(inventory.map((i) => [norm(fixWords(i.name)), i]));
 
-  if (sorted.length > 2) return compareMulti(sorted, byId, byName);
+  let ordered = sorted;
+  let directionWarning: string | undefined;
+  if (options?.targetId || options?.targetMode === "largest") {
+    const totalQty = (o: LoadedOrder) => o.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    const selected = options.targetId
+      ? sorted.find((o) => o.id === options.targetId)
+      : sorted.reduce((best, o) => (totalQty(o) > totalQty(best) ? o : best), sorted[0]);
 
-  const source = sorted[0];
-  const target = sorted[1];
+    if (selected) {
+      const rest = sorted.filter((o) => o.id !== selected.id);
+      ordered = [...rest, selected];
+      const targetTime = selected.eventDate ? new Date(selected.eventDate).getTime() : null;
+      const laterSources = rest.filter(
+        (o) => targetTime !== null && o.eventDate && new Date(o.eventDate).getTime() > targetTime
+      );
+      if (laterSources.length > 0) {
+        const targetLabel = `#${selected.orderNumber} ${selected.eventName} (${dateOnly(selected.eventDate) || "sin fecha"})`;
+        const sourcesLabel = laterSources
+          .map((o) => `#${o.orderNumber} ${o.eventName} (${dateOnly(o.eventDate) || "sin fecha"})`)
+          .join(", ");
+        directionWarning = `El destino ${targetLabel} es anterior a ${sourcesLabel}. El trasiego en ese sentido no es físicamente posible; revisá las fechas o elegí otro destino.`;
+      }
+    }
+  }
+
+  if (ordered.length > 2) return compareMulti(ordered, byId, byName, directionWarning);
+
+  const source = ordered[0];
+  const target = ordered[1];
 
   type Group = { key: string; name: string; category: string; source: number; target: number };
   const map = new Map<string, Group>();
@@ -249,6 +281,7 @@ export async function compareOrders(ids: string[]): Promise<CompareResult> {
 
   return {
     mode: "pair",
+    directionWarning,
     source: {
       id: source.id,
       orderNumber: source.orderNumber,
@@ -271,7 +304,8 @@ export async function compareOrders(ids: string[]): Promise<CompareResult> {
 function compareMulti(
   orders: LoadedOrder[],
   byId: Map<string, Inv>,
-  byName: Map<string, Inv>
+  byName: Map<string, Inv>,
+  directionWarning?: string
 ): CompareMultiData {
   const events: CompareMultiEvent[] = orders.map((o) => ({
     id: o.id,
@@ -396,6 +430,7 @@ function compareMulti(
 
   return {
     mode: "multi",
+    directionWarning,
     source: events[0],
     target: events[events.length - 1],
     events,

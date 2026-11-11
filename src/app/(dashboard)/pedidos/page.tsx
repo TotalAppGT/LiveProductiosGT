@@ -94,6 +94,7 @@ export default function PedidosPage() {
   const [uploadDiscrepancies, setUploadDiscrepancies] = useState<any[]>([]);
   const [uploadEvent, setUploadEvent] = useState({ eventName: "", clientName: "", eventLocation: "", eventDate: "" });
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [compareTarget, setCompareTarget] = useState("auto");
   const [compareData, setCompareData] = useState<any | null>(null);
   const [showCompare, setShowCompare] = useState(false);
   const [compareLoading, setCompareLoading] = useState(false);
@@ -218,11 +219,19 @@ export default function PedidosPage() {
     }
   }
 
+  function comparePayload() {
+    const target = compareTarget === "auto" || compareTarget === "largest" || compareIds.includes(compareTarget) ? compareTarget : "auto";
+    return {
+      ids: compareIds,
+      ...(target === "largest" ? { targetMode: "largest" } : target !== "auto" ? { targetId: target } : {}),
+    };
+  }
+
   async function openCompare() {
     if (compareIds.length < 2) return toast.error("Seleccioná al menos 2 cuadros");
     setCompareLoading(true);
     try {
-      const res = await fetch("/api/orders/compare", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ids: compareIds }) });
+      const res = await fetch("/api/orders/compare", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(comparePayload()) });
       const json = await res.json();
       if (json.success) { setCompareData(json.data); setShowCompare(true); }
       else toast.error(json.error || "Error");
@@ -236,7 +245,7 @@ export default function PedidosPage() {
   async function downloadCompare() {
     if (compareIds.length < 2) return;
     try {
-      const res = await fetch("/api/orders/compare/report", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ids: compareIds }) });
+      const res = await fetch("/api/orders/compare/report", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(comparePayload()) });
       if (!res.ok) { toast.error("Error al generar el Excel"); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -258,7 +267,7 @@ export default function PedidosPage() {
     const win = window.open("", "_blank");
     setSheetLoading(true);
     try {
-      const res = await fetch("/api/orders/compare/sheet", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ids: compareIds }) });
+      const res = await fetch("/api/orders/compare/sheet", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(comparePayload()) });
       const json = await res.json();
       if (json.success && json.data?.url) {
         toast.success("Reporte creado en Google Sheets");
@@ -284,7 +293,7 @@ export default function PedidosPage() {
       const res = await fetch("/api/orders/compare/purchases-sheet", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ids: compareIds }),
+        body: JSON.stringify(comparePayload()),
       });
       const json = await res.json();
       if (json.success && json.data?.url) {
@@ -310,7 +319,7 @@ export default function PedidosPage() {
       const res = await fetch("/api/orders/compare/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ids: compareIds }),
+        body: JSON.stringify(comparePayload()),
       });
       if (!res.ok) { toast.error("Error al generar el PDF"); return; }
       const blob = await res.blob();
@@ -556,6 +565,11 @@ export default function PedidosPage() {
     dayGroups[idx].orders.push(o);
   }
 
+  const compareTargetValue =
+    compareTarget === "auto" || compareTarget === "largest" || compareIds.includes(compareTarget)
+      ? compareTarget
+      : "auto";
+
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
   return (
@@ -626,8 +640,27 @@ export default function PedidosPage() {
       {compareIds.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
           <span className="text-sm text-blue-800 dark:text-blue-200">{compareIds.length} cuadro(s) seleccionado(s). Elegí 2 o más para comparar.</span>
+          {compareIds.length >= 2 && (
+            <select
+              value={compareTargetValue}
+              onChange={(e) => setCompareTarget(e.target.value)}
+              className="rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-xs text-gray-900 dark:border-blue-700 dark:bg-gray-800 dark:text-white"
+              title="Destino del trasiego"
+            >
+              <option value="auto">Destino: automático (por fecha)</option>
+              <option value="largest">Destino: evento más grande</option>
+              {compareIds.map((id) => {
+                const o = orders.find((x) => x.id === id);
+                return o ? (
+                  <option key={id} value={id}>
+                    Destino: #{o.orderNumber} · {o.eventName}
+                  </option>
+                ) : null;
+              })}
+            </select>
+          )}
           <Button size="sm" onClick={openCompare} isLoading={compareLoading} disabled={compareIds.length < 2}>Comparar / Trasiego</Button>
-          <Button size="sm" variant="ghost" onClick={() => setCompareIds([])}>Limpiar</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setCompareIds([]); setCompareTarget("auto"); }}>Limpiar</Button>
         </div>
       )}
       <div className="mb-4 flex gap-2">
@@ -665,6 +698,7 @@ export default function PedidosPage() {
                         setCompareIds((prev) => [...prev, o.id]);
                       } else {
                         setCompareIds((prev) => prev.filter((id) => id !== o.id));
+                        if (compareTarget === o.id) setCompareTarget("auto");
                       }
                     }}
                     className="h-4 w-4 shrink-0 cursor-pointer"
@@ -1010,6 +1044,14 @@ export default function PedidosPage() {
                   <b>{compareData.events.length} cuadros seleccionados</b>
                   <span className="text-xs text-gray-500"> · análisis de inventario, trasiego y renta/compra</span>
                 </div>
+                <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                  Destino del trasiego: #{compareData.target.orderNumber} {compareData.target.eventName}
+                </p>
+                {compareData.directionWarning && (
+                  <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+                    {compareData.directionWarning}
+                  </p>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
                   <div className="rounded-lg border p-2"><p className="text-gray-500">Necesita</p><p className="text-lg font-bold">{compareData.totals.need} u</p></div>
                   <div className="rounded-lg border p-2"><p className="text-gray-500">Inventario</p><p className="text-lg font-bold">{compareData.totals.fromStock} u</p><p className="text-[10px] text-gray-500">{compareData.totals.pctFromStock}%</p></div>
@@ -1059,6 +1101,11 @@ export default function PedidosPage() {
                   <b>#{compareData.target.orderNumber} {compareData.target.eventName}</b> ({compareData.target.eventDate})
                   {compareData.target.montageDate && <span className="text-xs text-gray-500"> · traslado {compareData.target.montageDate}</span>}
                 </div>
+                {compareData.directionWarning && (
+                  <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+                    {compareData.directionWarning}
+                  </p>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
                   <div className="rounded-lg border p-2"><p className="text-gray-500">Origen</p><p className="text-lg font-bold">{compareData.totals.source} u</p></div>
                   <div className="rounded-lg border p-2"><p className="text-gray-500">Destino</p><p className="text-lg font-bold">{compareData.totals.target} u</p></div>
