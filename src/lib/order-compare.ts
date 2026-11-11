@@ -52,6 +52,7 @@ export type CompareEvent = {
 };
 
 export type CompareOptions = {
+  sourceId?: string;
   targetId?: string;
   targetMode?: "auto" | "largest";
 };
@@ -177,27 +178,38 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
   const byId = new Map(inventory.map((i) => [i.id, i]));
   const byName = new Map(inventory.map((i) => [norm(fixWords(i.name)), i]));
 
+  const totalQty = (o: LoadedOrder) => o.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const selectedTarget =
+    options?.targetId
+      ? sorted.find((o) => o.id === options.targetId) || null
+      : options?.targetMode === "largest"
+      ? sorted.reduce((best, o) => (totalQty(o) > totalQty(best) ? o : best), sorted[0])
+      : null;
+  const selectedSource = options?.sourceId ? sorted.find((o) => o.id === options.sourceId) || null : null;
+
   let ordered = sorted;
   let directionWarning: string | undefined;
-  if (options?.targetId || options?.targetMode === "largest") {
-    const totalQty = (o: LoadedOrder) => o.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-    const selected = options.targetId
-      ? sorted.find((o) => o.id === options.targetId)
-      : sorted.reduce((best, o) => (totalQty(o) > totalQty(best) ? o : best), sorted[0]);
+  if (selectedTarget || selectedSource) {
+    const same = selectedTarget && selectedSource && selectedTarget.id === selectedSource.id;
+    const target = same ? null : selectedTarget;
+    const source = same ? null : selectedSource;
+    const middle = sorted.filter(
+      (o) => o.id !== source?.id && o.id !== target?.id
+    );
+    ordered = [...(source ? [source] : []), ...middle, ...(target ? [target] : [])];
 
-    if (selected) {
-      const rest = sorted.filter((o) => o.id !== selected.id);
-      ordered = [...rest, selected];
-      const targetTime = selected.eventDate ? new Date(selected.eventDate).getTime() : null;
-      const laterSources = rest.filter(
-        (o) => targetTime !== null && o.eventDate && new Date(o.eventDate).getTime() > targetTime
-      );
-      if (laterSources.length > 0) {
-        const targetLabel = `#${selected.orderNumber} ${selected.eventName} (${dateOnly(selected.eventDate) || "sin fecha"})`;
-        const sourcesLabel = laterSources
-          .map((o) => `#${o.orderNumber} ${o.eventName} (${dateOnly(o.eventDate) || "sin fecha"})`)
-          .join(", ");
-        directionWarning = `El destino ${targetLabel} es anterior a ${sourcesLabel}. El trasiego en ese sentido no es físicamente posible; revisá las fechas o elegí otro destino.`;
+    outer: for (let i = 0; i < ordered.length; i++) {
+      const a = ordered[i];
+      const at = a.eventDate ? new Date(a.eventDate).getTime() : null;
+      if (!at) continue;
+      for (let j = i + 1; j < ordered.length; j++) {
+        const b = ordered[j];
+        const bt = b.eventDate ? new Date(b.eventDate).getTime() : null;
+        if (!bt) continue;
+        if (at > bt) {
+          directionWarning = `El orden del trasiego no es cronológico: #${a.orderNumber} ${a.eventName} (${dateOnly(a.eventDate)}) va antes que #${b.orderNumber} ${b.eventName} (${dateOnly(b.eventDate)}). No es posible trasladar equipo de un evento posterior a uno anterior; revisá Desde/Hacia o las fechas.`;
+          break outer;
+        }
       }
     }
   }

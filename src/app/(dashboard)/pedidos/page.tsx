@@ -94,6 +94,7 @@ export default function PedidosPage() {
   const [uploadDiscrepancies, setUploadDiscrepancies] = useState<any[]>([]);
   const [uploadEvent, setUploadEvent] = useState({ eventName: "", clientName: "", eventLocation: "", eventDate: "" });
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [compareSource, setCompareSource] = useState("auto");
   const [compareTarget, setCompareTarget] = useState("auto");
   const [compareData, setCompareData] = useState<any | null>(null);
   const [showCompare, setShowCompare] = useState(false);
@@ -220,9 +221,11 @@ export default function PedidosPage() {
   }
 
   function comparePayload() {
+    const source = compareSource === "auto" || compareIds.includes(compareSource) ? compareSource : "auto";
     const target = compareTarget === "auto" || compareTarget === "largest" || compareIds.includes(compareTarget) ? compareTarget : "auto";
     return {
       ids: compareIds,
+      ...(source !== "auto" ? { sourceId: source } : {}),
       ...(target === "largest" ? { targetMode: "largest" } : target !== "auto" ? { targetId: target } : {}),
     };
   }
@@ -565,10 +568,17 @@ export default function PedidosPage() {
     dayGroups[idx].orders.push(o);
   }
 
+  const compareSourceValue =
+    compareSource === "auto" || compareIds.includes(compareSource) ? compareSource : "auto";
   const compareTargetValue =
     compareTarget === "auto" || compareTarget === "largest" || compareIds.includes(compareTarget)
       ? compareTarget
       : "auto";
+  const compareDirectionInvalid =
+    compareSourceValue !== "auto" &&
+    compareTargetValue !== "auto" &&
+    compareTargetValue !== "largest" &&
+    compareSourceValue === compareTargetValue;
 
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
@@ -639,7 +649,25 @@ export default function PedidosPage() {
       {tab === "cuadros" && (<>
       {compareIds.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
-          <span className="text-sm text-blue-800 dark:text-blue-200">{compareIds.length} cuadro(s) seleccionado(s). Elegí 2 o más para comparar.</span>
+          <span className="text-sm text-blue-800 dark:text-blue-200">{compareIds.length} cuadro(s) seleccionado(s). Elegí 2 o más; podés fijar Desde y Hacia.</span>
+          {compareIds.length >= 2 && (
+            <select
+              value={compareSourceValue}
+              onChange={(e) => setCompareSource(e.target.value)}
+              className="rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-xs text-gray-900 dark:border-blue-700 dark:bg-gray-800 dark:text-white"
+              title="Origen del trasiego"
+            >
+              <option value="auto">Desde: automático</option>
+              {compareIds.map((id) => {
+                const o = orders.find((x) => x.id === id);
+                return o ? (
+                  <option key={id} value={id}>
+                    Desde: #{o.orderNumber} · {o.eventName}
+                  </option>
+                ) : null;
+              })}
+            </select>
+          )}
           {compareIds.length >= 2 && (
             <select
               value={compareTargetValue}
@@ -659,8 +687,8 @@ export default function PedidosPage() {
               })}
             </select>
           )}
-          <Button size="sm" onClick={openCompare} isLoading={compareLoading} disabled={compareIds.length < 2}>Comparar / Trasiego</Button>
-          <Button size="sm" variant="ghost" onClick={() => { setCompareIds([]); setCompareTarget("auto"); }}>Limpiar</Button>
+          <Button size="sm" onClick={openCompare} isLoading={compareLoading} disabled={compareIds.length < 2 || compareDirectionInvalid}>Comparar / Trasiego</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setCompareIds([]); setCompareSource("auto"); setCompareTarget("auto"); }}>Limpiar</Button>
         </div>
       )}
       <div className="mb-4 flex gap-2">
@@ -699,6 +727,7 @@ export default function PedidosPage() {
                       } else {
                         setCompareIds((prev) => prev.filter((id) => id !== o.id));
                         if (compareTarget === o.id) setCompareTarget("auto");
+                        if (compareSource === o.id) setCompareSource("auto");
                       }
                     }}
                     className="h-4 w-4 shrink-0 cursor-pointer"
@@ -1045,7 +1074,7 @@ export default function PedidosPage() {
                   <span className="text-xs text-gray-500"> · análisis de inventario, trasiego y renta/compra</span>
                 </div>
                 <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
-                  Destino del trasiego: #{compareData.target.orderNumber} {compareData.target.eventName}
+                  Origen: #{compareData.source.orderNumber} {compareData.source.eventName} · Destino: #{compareData.target.orderNumber} {compareData.target.eventName}
                 </p>
                 {compareData.directionWarning && (
                   <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">

@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     if (ids.length < 2) return NextResponse.json({ success: false, error: "Seleccioná al menos 2 cuadros" }, { status: 400 });
 
     const options = {
+      sourceId: body?.sourceId ? String(body.sourceId) : undefined,
       targetId: body?.targetId ? String(body.targetId) : undefined,
       targetMode: body?.targetMode === "largest" ? ("largest" as const) : undefined,
     };
