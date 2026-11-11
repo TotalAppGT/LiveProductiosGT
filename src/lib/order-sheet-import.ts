@@ -35,6 +35,16 @@ export type ItemMatch = SheetItem & {
 const norm = (s: unknown) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 const deaccent = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
+// Nombre completo (sin cortar en "con") para distinguir, por ejemplo,
+// "Atomizador con desinfectante" de "Atomizador con silicón".
+const fullKey = (value: string) => {
+  let s = deaccent(norm(value));
+  s = s.replace(/[.,;:/\\|"'`´+*]/g, " ");
+  s = s.replace(/\s+/g, " ").trim();
+  s = s.replace(/([a-z])\s+(\d)/g, "$1$2");
+  return s;
+};
+
 export const dateKey = (d: Date) => d.toISOString().slice(0, 10);
 
 export function cleanName(value: string): string {
@@ -214,12 +224,15 @@ export function sectionCategory(section: string): string {
 
 export function buildItemMatcher(inventory: InventoryOption[], aliases: AliasOption[]) {
   const byId = new Map(inventory.map((i) => [i.id, i]));
+  const invByFull = new Map<string, InventoryOption>();
   const invByClean = new Map<string, InventoryOption>();
   const invByKey = new Map<string, InventoryOption>();
   const aliasByClean = new Map<string, AliasOption>();
   const aliasByKey = new Map<string, AliasOption>();
 
   for (const item of inventory) {
+    const f = fullKey(item.name);
+    if (!invByFull.has(f) || item.status === "DISPONIBLE") invByFull.set(f, item);
     const c = cleanName(item.name);
     if (!invByClean.has(c) || item.status === "DISPONIBLE") invByClean.set(c, item);
     const k = tokenKey(item.name);
@@ -248,6 +261,17 @@ export function buildItemMatcher(inventory: InventoryOption[], aliases: AliasOpt
         matchType: "alias",
       };
     };
+
+    const invFull = invByFull.get(fullKey(item.name));
+    if (invFull) {
+      return {
+        ...item,
+        inventoryItemId: invFull.id,
+        matchedName: invFull.name,
+        category: invFull.category,
+        matchType: "exact",
+      };
+    }
 
     const invExact = invByClean.get(c);
     if (invExact) {
