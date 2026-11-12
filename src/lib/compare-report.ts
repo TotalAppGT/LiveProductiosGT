@@ -1,5 +1,8 @@
 import type { CompareData, CompareMultiData, CompareResult } from "@/lib/order-compare";
 
+const displayCategory = (value: { section?: string | null; category?: string | null }) =>
+  (value.section || value.category || "OTRO").toUpperCase();
+
 export type Row = (string | number)[];
 
 export type CompareTab = {
@@ -131,7 +134,7 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     ["ÍTEM", "CATEGORÍA", "BODEGA", "NECESITA", "INVENTARIO", "TRASIEGO", "RENTA/COMPRA", "REGENSA"],
     ...inventarioItems.map((i) => [
       i.name,
-      i.category,
+      displayCategory(i),
       i.bodega,
       i.totalNeed,
       i.totalFromStock,
@@ -143,7 +146,7 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
 
   const itemsByCategory = new Map<string, CompareMultiData["items"]>();
   for (const item of data.items) {
-    const cat = (item.category || "OTRO").toUpperCase();
+    const cat = displayCategory(item);
     if (!itemsByCategory.has(cat)) itemsByCategory.set(cat, []);
     itemsByCategory.get(cat)!.push(item);
   }
@@ -239,7 +242,7 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
   const detailSections: number[] = [];
   const byCategory = new Map<string, CompareMultiData["items"]>();
   for (const item of data.items) {
-    const cat = (item.category || "OTRO").toUpperCase();
+    const cat = displayCategory(item);
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(item);
   }
@@ -316,7 +319,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
   const detailSections: number[] = [];
   const byCategory = new Map<string, CompareData["rows"]>();
   for (const r of data.rows) {
-    const cat = (r.category || "OTRO").toUpperCase();
+    const cat = displayCategory(r);
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(r);
   }
@@ -338,7 +341,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
 
   const pairByCategory = new Map<string, CompareData["rows"]>();
   for (const r of data.rows) {
-    const cat = (r.category || "OTRO").toUpperCase();
+    const cat = displayCategory(r);
     if (!pairByCategory.has(cat)) pairByCategory.set(cat, []);
     pairByCategory.get(cat)!.push(r);
   }

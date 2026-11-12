@@ -173,7 +173,7 @@ type LoadedOrder = {
   items: { inventoryItemId: string | null; name: string; category: string; quantity: number }[];
 };
 
-type Inv = { id: string; name: string; quantity: number; section?: string | null };
+type Inv = { id: string; name: string; quantity: number; section?: string | null; category?: string | null };
 
 export async function compareOrders(ids: string[], options?: CompareOptions): Promise<CompareResult> {
   const unique = Array.from(new Set(ids.filter(Boolean)));
@@ -193,7 +193,7 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
 
   const inventory = await prisma.inventoryItem.findMany({
     where: { status: "DISPONIBLE" },
-    select: { id: true, name: true, quantity: true, section: true },
+    select: { id: true, name: true, quantity: true, section: true, category: true },
   });
   const byId = new Map(inventory.map((i) => [i.id, i]));
   const byName = new Map(inventory.map((i) => [norm(fixWords(i.name)), i]));
