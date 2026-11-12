@@ -147,6 +147,22 @@ const montageOf = (d: Date | null) => {
 };
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
 
+const VALID_INVENTORY_CATEGORIES = new Set([
+  "AUDIO",
+  "ILUMINACION",
+  "INSTRUMENTO",
+  "CABLEADO",
+  "MOBILIARIO",
+  "HERRAMIENTA",
+  "CONSUMIBLE",
+  "OTRO",
+]);
+
+const validCategory = (value: unknown) => {
+  const category = String(value || "").toUpperCase();
+  return VALID_INVENTORY_CATEGORIES.has(category) ? category : "OTRO";
+};
+
 type LoadedOrder = {
   id: string;
   orderNumber: number;
@@ -253,7 +269,7 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
     const returnQty = Math.max(0, g.source - transfer);
     rows.push({
       name: g.name,
-      category: g.category,
+      category: inv ? String(inv.category) : validCategory(g.category),
       section: inv?.section || null,
       sourceQty: g.source,
       targetQty: g.target,
@@ -417,7 +433,7 @@ function compareMulti(
 
     items.push({
       name: g.name,
-      category: g.category,
+      category: inv ? String(inv.category) : validCategory(g.category),
       section: inv?.section || null,
       bodega,
       totalNeed,

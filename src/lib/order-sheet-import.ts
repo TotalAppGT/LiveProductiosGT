@@ -221,13 +221,14 @@ export function parseWorkbookEvents(
 
 export function sectionCategory(section: string): string {
   const s = norm(section);
-  if (s.includes("audio") || s.includes("consola") || s.includes("micro") || s.includes("monitoreo") || s.includes("bateria") || s.includes("in ear") || s.includes("backline") || s.includes("instrument")) return "AUDIO";
+  // Solo categorías que existen en InventoryCategory.
+  if (s.includes("instrument")) return "INSTRUMENTO";
+  if (s.includes("audio") || s.includes("consola") || s.includes("micro") || s.includes("monitoreo") || s.includes("bateria") || s.includes("in ear") || s.includes("backline")) return "AUDIO";
   if (s.includes("ilumin")) return "ILUMINACION";
-  if (s.includes("estructura") || s.includes("truss") || s.includes("tarima") || s.includes("escenario")) return "ESTRUCTURA";
-  if (s.includes("pista")) return "PISTA";
-  if (s.includes("video") || s.includes("pantalla")) return "VIDEO";
-  if (s.includes("energia") || s.includes("generador") || s.includes("planta")) return "ENERGIA";
-  if (s.includes("mobiliario") || s.includes("mesa") || s.includes("silla")) return "MOBILIARIO";
+  if (s.includes("cable")) return "CABLEADO";
+  if (s.includes("herramient")) return "HERRAMIENTA";
+  if (s.includes("limpi") || s.includes("consum")) return "CONSUMIBLE";
+  if (s.includes("estructura") || s.includes("truss") || s.includes("tarima") || s.includes("escenario") || s.includes("pista") || s.includes("mobiliario") || s.includes("mesa") || s.includes("silla")) return "MOBILIARIO";
   return "OTRO";
 }
 
