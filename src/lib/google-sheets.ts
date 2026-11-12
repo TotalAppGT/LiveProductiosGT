@@ -1,6 +1,6 @@
 import { createSign } from "crypto";
 import { prisma } from "@/lib/prisma";
-import { buildReportTabs, buildCombinedReportRows, comparisonTabName, type CompareTab } from "@/lib/compare-report";
+import { buildReportTabs, buildCombinedReportRows, buildCompactTarget, comparisonTabName, type CompareTab } from "@/lib/compare-report";
 import { INVENTORY_SECTIONS } from "@/lib/inventory";
 import type { CompareResult } from "@/lib/order-compare";
 
@@ -486,6 +486,103 @@ export async function writeComparisonToSheet(
   }
 
   return { url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, spreadsheetId };
+}
+
+export async function writeCompactToSheet(
+  data: CompareResult,
+  spreadsheetId: string
+): Promise<{ url: string; spreadsheetId: string; tabName: string }> {
+  const sa = await getServiceAccount();
+  if (!sa) throw new Error("google-service-account-not-configured");
+  const token = await getAccessToken(sa);
+  const auth = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+  const compact = buildCompactTarget(data);
+  const tabName = comparisonTabName(data).replace(/^Trasiego/, "Compacto");
+  const rows = compact.rows;
+
+  const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`, { headers: auth });
+  const meta = await metaRes.json();
+  if (!metaRes.ok) throw new Error(meta?.error?.message || "sheet-read-failed");
+  const found = (meta.sheets || []).find((s: { properties: { title: string } }) => s.properties.title === tabName);
+  let sheetId: number | undefined = found?.properties?.sheetId;
+
+  if (sheetId === undefined) {
+    const addRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }),
+    });
+    const addJson = await addRes.json();
+    if (!addRes.ok) throw new Error(addJson?.error?.message || "sheet-add-failed");
+    sheetId = addJson?.replies?.[0]?.addSheet?.properties?.sheetId;
+  }
+
+  const quoted = tabName.replace(/'/g, "''");
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`'${quoted}'!A1:B5000`)}:clear`, { method: "POST", headers: auth, body: "{}" });
+  const valRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ valueInputOption: "RAW", data: [{ range: `'${quoted}'!A1`, values: rows }] }),
+  });
+  if (!valRes.ok) {
+    const err = await valRes.json().catch(() => ({}));
+    throw new Error(err?.error?.message || "sheet-values-failed");
+  }
+
+  if (sheetId !== undefined) {
+    const requests: any[] = [
+      {
+        repeatCell: {
+          range: { sheetId, startRowIndex: 0, endRowIndex: 5000, startColumnIndex: 0, endColumnIndex: 2 },
+          cell: { userEnteredFormat: {} },
+          fields: "userEnteredFormat",
+        },
+      },
+      {
+        repeatCell: {
+          range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 2 },
+          cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }, backgroundColor: { red: 0.12, green: 0.23, blue: 0.54 } } },
+          fields: "userEnteredFormat.textFormat,userEnteredFormat.backgroundColor",
+        },
+      },
+      {
+        updateDimensionProperties: {
+          range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 },
+          properties: { pixelSize: 650 },
+          fields: "pixelSize",
+        },
+      },
+      {
+        updateDimensionProperties: {
+          range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 2 },
+          properties: { pixelSize: 90 },
+          fields: "pixelSize",
+        },
+      },
+    ];
+    for (const section of compact.sections) {
+      requests.push({
+        mergeCells: { range: { sheetId, startRowIndex: section, endRowIndex: section + 1, startColumnIndex: 0, endColumnIndex: 2 }, mergeType: "MERGE_ALL" },
+      });
+      requests.push({
+        repeatCell: {
+          range: { sheetId, startRowIndex: section, endRowIndex: section + 1, startColumnIndex: 0, endColumnIndex: 2 },
+          cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }, backgroundColor: { red: 0, green: 0, blue: 0 } } },
+          fields: "userEnteredFormat.textFormat,userEnteredFormat.backgroundColor",
+        },
+      });
+    }
+    try {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({ requests }),
+      });
+    } catch {}
+  }
+
+  const gid = sheetId !== undefined ? `#gid=${sheetId}` : "";
+  return { url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit${gid}`, spreadsheetId, tabName };
 }
 
 export async function writeComparisonNewTab(

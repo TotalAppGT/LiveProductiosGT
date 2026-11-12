@@ -101,6 +101,7 @@ export default function PedidosPage() {
   const [compareLoading, setCompareLoading] = useState(false);
   const [sheetLoading, setSheetLoading] = useState(false);
   const [newSheetLoading, setNewSheetLoading] = useState(false);
+  const [compactSheetLoading, setCompactSheetLoading] = useState(false);
   const [purchasesLoading, setPurchasesLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [compactPdfLoading, setCompactPdfLoading] = useState(false);
@@ -314,6 +315,33 @@ export default function PedidosPage() {
       toast.error("Error al crear la hoja");
     } finally {
       setNewSheetLoading(false);
+    }
+  }
+
+  async function openCompactSheet() {
+    if (compareIds.length < 2) return;
+    const win = window.open("", "_blank");
+    setCompactSheetLoading(true);
+    try {
+      const res = await fetch("/api/orders/compare/sheet/compact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(comparePayload()),
+      });
+      const json = await res.json();
+      if (json.success && json.data?.url) {
+        toast.success(`Hoja compacta actualizada: ${json.data.tabName || "Compacto"}`);
+        if (win) win.location.href = json.data.url;
+        else toast.error("La hoja se creó, pero el navegador bloqueó la ventana. Permití ventanas emergentes.");
+      } else {
+        win?.close();
+        toast.error(json.error || "Error al crear la hoja compacta");
+      }
+    } catch {
+      win?.close();
+      toast.error("Error al crear la hoja compacta");
+    } finally {
+      setCompactSheetLoading(false);
     }
   }
 
@@ -1236,6 +1264,7 @@ export default function PedidosPage() {
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setShowCompare(false)}>Cerrar</Button>
               <Button variant="outline" onClick={openSheets} isLoading={sheetLoading}>Abrir en Google Sheets</Button>
+              <Button variant="outline" onClick={openCompactSheet} isLoading={compactSheetLoading}>Abrir compacto en Sheets</Button>
               <Button variant="outline" onClick={openNewSheet} isLoading={newSheetLoading}>Nueva hoja (fecha)</Button>
               <Button variant="outline" onClick={openPurchasesSheets} isLoading={purchasesLoading}>Compras / Renta</Button>
               <Button onClick={downloadCompare}>Descargar Excel</Button>
