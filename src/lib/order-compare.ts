@@ -30,6 +30,7 @@ export type CompareRow = {
   name: string;
   category: string;
   section: string | null;
+  order: number;
   sourceQty: number;
   targetQty: number;
   bodega: number;
@@ -96,6 +97,7 @@ export type CompareMultiItem = {
   name: string;
   category: string;
   section: string | null;
+  order: number;
   bodega: number;
   totalNeed: number;
   totalReuse: number;
@@ -239,14 +241,15 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
   const source = ordered[0];
   const target = ordered[1];
 
-  type Group = { key: string; name: string; category: string; source: number; target: number };
+  type Group = { key: string; name: string; category: string; source: number; target: number; order: number };
   const map = new Map<string, Group>();
+  let groupOrder = 0;
   const add = (items: typeof source.items, which: "source" | "target") => {
     for (const it of items) {
       const key = it.inventoryItemId || "n:" + norm(fixWords(it.name));
       let g = map.get(key);
       if (!g) {
-        g = { key, name: fixWords(it.name), category: it.category || "OTRO", source: 0, target: 0 };
+        g = { key, name: fixWords(it.name), category: it.category || "OTRO", source: 0, target: 0, order: groupOrder++ };
         map.set(key, g);
       }
       g[which] += Number(it.quantity) || 0;
@@ -271,6 +274,7 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
       name: g.name,
       category: inv ? String(inv.category) : validCategory(g.category),
       section: inv?.section || null,
+      order: g.order,
       sourceQty: g.source,
       targetQty: g.target,
       bodega,
@@ -360,14 +364,15 @@ function compareMulti(
   }));
   const eventById = new Map(events.map((e) => [e.id, e]));
 
-  type Group = { key: string; name: string; category: string; perEvent: Map<string, number> };
+  type Group = { key: string; name: string; category: string; perEvent: Map<string, number>; order: number };
   const groups = new Map<string, Group>();
+  let groupOrder = 0;
   for (const o of orders) {
     for (const it of o.items) {
       const key = it.inventoryItemId || "n:" + norm(fixWords(it.name));
       let g = groups.get(key);
       if (!g) {
-        g = { key, name: fixWords(it.name), category: it.category || "OTRO", perEvent: new Map() };
+        g = { key, name: fixWords(it.name), category: it.category || "OTRO", perEvent: new Map(), order: groupOrder++ };
         groups.set(key, g);
       }
       g.perEvent.set(o.id, (g.perEvent.get(o.id) || 0) + (Number(it.quantity) || 0));
@@ -435,6 +440,7 @@ function compareMulti(
       name: g.name,
       category: inv ? String(inv.category) : validCategory(g.category),
       section: inv?.section || null,
+      order: g.order,
       bodega,
       totalNeed,
       totalReuse,
