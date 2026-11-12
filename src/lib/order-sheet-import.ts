@@ -42,6 +42,7 @@ const fullKey = (value: string) => {
   s = s.replace(/[.,;:/\\|"'`´+*]/g, " ");
   s = s.replace(/\s+/g, " ").trim();
   s = s.replace(/([a-z])\s+(\d)/g, "$1$2");
+  s = s.replace(/(\d)\s+([a-z])/g, "$1$2");
   return s;
 };
 

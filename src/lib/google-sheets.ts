@@ -431,6 +431,28 @@ export async function writeComparisonToSheet(
       const sheetId = existingProps[i]?.sheetId;
       if (sheetId === undefined) return;
       const lastCol = Math.max(1, (tab.rows[0] || []).length);
+      formatRequests.push({
+        repeatCell: {
+          range: { sheetId, startRowIndex: 0, endRowIndex: 5000, startColumnIndex: 0, endColumnIndex: 26 },
+          cell: { userEnteredFormat: {} },
+          fields: "userEnteredFormat",
+        },
+      });
+      for (const headerIndex of tab.headerRows) {
+        formatRequests.push({
+          repeatCell: {
+            range: { sheetId, startRowIndex: headerIndex, endRowIndex: headerIndex + 1, startColumnIndex: 0, endColumnIndex: lastCol },
+            cell: {
+              userEnteredFormat: {
+                textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+                backgroundColor: { red: 0.12, green: 0.23, blue: 0.54 },
+                horizontalAlignment: "CENTER",
+              },
+            },
+            fields: "userEnteredFormat.textFormat,userEnteredFormat.backgroundColor,userEnteredFormat.horizontalAlignment",
+          },
+        });
+      }
       for (const row of tab.sectionRows) {
         formatRequests.push({
           repeatCell: {
@@ -523,17 +545,22 @@ export async function writeComparisonNewTab(
             const requests: any[] = [
               {
                 repeatCell: {
+                  range: { sheetId, startRowIndex: 0, endRowIndex: 5000, startColumnIndex: 0, endColumnIndex: 26 },
+                  cell: { userEnteredFormat: {} },
+                  fields: "userEnteredFormat",
+                },
+              },
+              {
+                repeatCell: {
                   range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
                   cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 14, foregroundColor: { red: 0.12, green: 0.23, blue: 0.54 } } } },
                   fields: "userEnteredFormat.textFormat",
                 },
               },
             ];
-            const categoryNames = new Set<string>(INVENTORY_SECTIONS.map((section) => section.toUpperCase()));
-            categoryNames.add("OTRO");
             const maxCol = Math.max(1, ...rows.map((row) => row.length));
             rows.forEach((row, index) => {
-              if (row.length !== 1 || !categoryNames.has(String(row[0]).toUpperCase())) return;
+              if (index === 0 || row.length !== 1 || !String(row[0]).trim()) return;
               if (maxCol > 1) {
                 requests.push({
                   mergeCells: {
