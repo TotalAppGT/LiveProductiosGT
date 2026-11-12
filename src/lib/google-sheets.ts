@@ -1,6 +1,7 @@
 import { createSign } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { buildReportTabs, buildCombinedReportRows, comparisonTabName, type CompareTab } from "@/lib/compare-report";
+import { INVENTORY_SECTIONS } from "@/lib/inventory";
 import type { CompareResult } from "@/lib/order-compare";
 
 type ServiceAccount = { client_email: string; private_key: string; token_uri?: string };
@@ -518,15 +519,39 @@ export async function writeComparisonNewTab(
         method: "POST",
         headers: auth,
         body: JSON.stringify({
-          requests: [
-            {
-              repeatCell: {
-                range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
-                cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 14, foregroundColor: { red: 0.12, green: 0.23, blue: 0.54 } } } },
-                fields: "userEnteredFormat.textFormat",
+          requests: (() => {
+            const requests: any[] = [
+              {
+                repeatCell: {
+                  range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+                  cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 14, foregroundColor: { red: 0.12, green: 0.23, blue: 0.54 } } } },
+                  fields: "userEnteredFormat.textFormat",
+                },
               },
-            },
-          ],
+            ];
+            const categoryNames = new Set<string>(INVENTORY_SECTIONS.map((section) => section.toUpperCase()));
+            categoryNames.add("OTRO");
+            const maxCol = Math.max(1, ...rows.map((row) => row.length));
+            rows.forEach((row, index) => {
+              if (row.length !== 1 || !categoryNames.has(String(row[0]).toUpperCase())) return;
+              if (maxCol > 1) {
+                requests.push({
+                  mergeCells: {
+                    range: { sheetId, startRowIndex: index, endRowIndex: index + 1, startColumnIndex: 0, endColumnIndex: maxCol },
+                    mergeType: "MERGE_ALL",
+                  },
+                });
+              }
+              requests.push({
+                repeatCell: {
+                  range: { sheetId, startRowIndex: index, endRowIndex: index + 1, startColumnIndex: 0, endColumnIndex: maxCol },
+                  cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }, backgroundColor: { red: 0, green: 0, blue: 0 } } },
+                  fields: "userEnteredFormat.textFormat,userEnteredFormat.backgroundColor",
+                },
+              });
+            });
+            return requests;
+          })(),
         }),
       });
     } catch {}
