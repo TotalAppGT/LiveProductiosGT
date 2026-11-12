@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import type { CompareResult } from "@/lib/order-compare";
 import { buildCompactTarget } from "@/lib/compare-report";
-import { drawTable, stampFooters, type Cell, type Col } from "@/lib/pdf-utils";
+import { drawTable, type Cell, type Col } from "@/lib/pdf-utils";
 
 export async function buildCompactPdf(data: CompareResult): Promise<{ buffer: Buffer; title: string }> {
   const compact = buildCompactTarget(data);
@@ -28,7 +28,6 @@ export async function buildCompactPdf(data: CompareResult): Promise<{ buffer: Bu
     ];
   });
   drawTable(doc, cols, rows);
-  stampFooters(doc, "Live Productions GT · Trasiego");
   doc.end();
   const buffer = await done;
   return { buffer, title: compact.title };

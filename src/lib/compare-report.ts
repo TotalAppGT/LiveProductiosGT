@@ -704,7 +704,7 @@ export function buildCompactTarget(data: CompareResult): CompactList {
       lines.push({
         name: row.name,
         qty: row.targetQty,
-        section: row.targetSection || row.section || row.category || "OTRO",
+        section: row.section || row.category || "OTRO",
         order: row.order,
       });
     }
