@@ -235,6 +235,8 @@ export async function POST(request: NextRequest) {
       const items = event.items.map(matchItem).map((i) => ({
         name: i.name,
         category: i.category,
+        service: i.service || null,
+        subsection: i.subsection || null,
         quantity: i.quantity,
         inventoryItemId: i.inventoryItemId,
       }));

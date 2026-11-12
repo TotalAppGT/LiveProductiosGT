@@ -30,6 +30,10 @@ export type CompareRow = {
   name: string;
   category: string;
   section: string | null;
+  sourceService: string;
+  sourceSubsection: string;
+  targetService: string;
+  targetSubsection: string;
   order: number;
   sourceQty: number;
   targetQty: number;
@@ -112,6 +116,8 @@ export type CompareMultiItem = {
     fromStock: number;
     short: number;
     returnQty: number;
+    service: string;
+    subsection: string;
   }[];
   transfers: { fromOrder: number; toOrder: number; qty: number }[];
 };
@@ -172,7 +178,7 @@ type LoadedOrder = {
   clientName: string | null;
   eventLocation: string | null;
   eventDate: Date | null;
-  items: { inventoryItemId: string | null; name: string; category: string; quantity: number }[];
+  items: { inventoryItemId: string | null; name: string; category: string; service?: string | null; subsection?: string | null; quantity: number }[];
 };
 
 type Inv = { id: string; name: string; quantity: number; section?: string | null; category?: string | null };
@@ -241,7 +247,18 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
   const source = ordered[0];
   const target = ordered[1];
 
-  type Group = { key: string; name: string; category: string; source: number; target: number; order: number };
+  type Group = {
+    key: string;
+    name: string;
+    category: string;
+    source: number;
+    target: number;
+    order: number;
+    sourceService: string;
+    sourceSubsection: string;
+    targetService: string;
+    targetSubsection: string;
+  };
   const map = new Map<string, Group>();
   let groupOrder = 0;
   const add = (items: typeof source.items, which: "source" | "target") => {
@@ -249,10 +266,28 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
       const key = it.inventoryItemId || "n:" + norm(fixWords(it.name));
       let g = map.get(key);
       if (!g) {
-        g = { key, name: fixWords(it.name), category: it.category || "OTRO", source: 0, target: 0, order: groupOrder++ };
+        g = {
+          key,
+          name: fixWords(it.name),
+          category: it.category || "OTRO",
+          source: 0,
+          target: 0,
+          order: groupOrder++,
+          sourceService: "",
+          sourceSubsection: "",
+          targetService: "",
+          targetSubsection: "",
+        };
         map.set(key, g);
       }
       g[which] += Number(it.quantity) || 0;
+      if (which === "source") {
+        if (!g.sourceService) g.sourceService = it.service || "";
+        if (!g.sourceSubsection) g.sourceSubsection = it.subsection || "";
+      } else {
+        if (!g.targetService) g.targetService = it.service || "";
+        if (!g.targetSubsection) g.targetSubsection = it.subsection || "";
+      }
     }
   };
   add(source.items, "source");
@@ -274,6 +309,10 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
       name: g.name,
       category: inv ? String(inv.category) : validCategory(g.category),
       section: inv?.section || null,
+      sourceService: g.sourceService,
+      sourceSubsection: g.sourceSubsection,
+      targetService: g.targetService,
+      targetSubsection: g.targetSubsection,
       order: g.order,
       sourceQty: g.source,
       targetQty: g.target,
@@ -364,7 +403,14 @@ function compareMulti(
   }));
   const eventById = new Map(events.map((e) => [e.id, e]));
 
-  type Group = { key: string; name: string; category: string; perEvent: Map<string, number>; order: number };
+  type Group = {
+    key: string;
+    name: string;
+    category: string;
+    perEvent: Map<string, number>;
+    perEventMeta: Map<string, { service: string; subsection: string }>;
+    order: number;
+  };
   const groups = new Map<string, Group>();
   let groupOrder = 0;
   for (const o of orders) {
@@ -372,10 +418,20 @@ function compareMulti(
       const key = it.inventoryItemId || "n:" + norm(fixWords(it.name));
       let g = groups.get(key);
       if (!g) {
-        g = { key, name: fixWords(it.name), category: it.category || "OTRO", perEvent: new Map(), order: groupOrder++ };
+        g = {
+          key,
+          name: fixWords(it.name),
+          category: it.category || "OTRO",
+          perEvent: new Map(),
+          perEventMeta: new Map(),
+          order: groupOrder++,
+        };
         groups.set(key, g);
       }
       g.perEvent.set(o.id, (g.perEvent.get(o.id) || 0) + (Number(it.quantity) || 0));
+      if (!g.perEventMeta.has(o.id)) {
+        g.perEventMeta.set(o.id, { service: it.service || "", subsection: it.subsection || "" });
+      }
     }
   }
 
@@ -410,7 +466,8 @@ function compareMulti(
       const provided = reuse + fromStock;
       if (provided > 0) layers.push({ orderId: o.id, orderNumber: o.orderNumber, qty: provided });
       if (qty > 0) {
-        perEvent.push({ id: o.id, orderNumber: o.orderNumber, need: qty, reuse, fromStock, short, returnQty: 0 });
+        const meta = g.perEventMeta.get(o.id) || { service: "", subsection: "" };
+        perEvent.push({ id: o.id, orderNumber: o.orderNumber, need: qty, reuse, fromStock, short, returnQty: 0, service: meta.service, subsection: meta.subsection });
       }
       const ev = eventById.get(o.id);
       if (ev) {

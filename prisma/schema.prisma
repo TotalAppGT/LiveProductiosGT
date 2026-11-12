@@ -737,6 +737,8 @@ model OrderItem {
   order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   name            String
   category        String    @default("AUDIO")
+  service         String?
+  subsection      String?
   quantity        Int       @default(1)
   preparedPhotos  String[]  @default([])
   preparedChecked Boolean   @default(false)

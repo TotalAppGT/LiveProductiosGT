@@ -8,6 +8,43 @@ const categoryRank = new Map(INVENTORY_SECTIONS.map((section, index) => [section
 const sortCategories = (a: string, b: string) =>
   (categoryRank.get(a.toUpperCase()) ?? 999) - (categoryRank.get(b.toUpperCase()) ?? 999) || a.localeCompare(b);
 
+
+type HierarchyEntry = { row: Row; service: string; subsection: string; order: number };
+
+function buildHierarchy(header: Row, entries: HierarchyEntry[]): { rows: Row[]; sections: number[] } {
+  const services = new Map<string, { order: number; subs: Map<string, { order: number; entries: HierarchyEntry[] }> }>();
+  for (const entry of entries) {
+    const service = (entry.service || "SIN SERVICIO").toUpperCase();
+    const subsection = (entry.subsection || "GENERAL").toUpperCase();
+    let group = services.get(service);
+    if (!group) {
+      group = { order: entry.order, subs: new Map() };
+      services.set(service, group);
+    }
+    group.order = Math.min(group.order, entry.order);
+    let sub = group.subs.get(subsection);
+    if (!sub) {
+      sub = { order: entry.order, entries: [] };
+      group.subs.set(subsection, sub);
+    }
+    sub.order = Math.min(sub.order, entry.order);
+    sub.entries.push(entry);
+  }
+
+  const body: Row[] = [];
+  const sections: number[] = [];
+  for (const [service, group] of [...services.entries()].sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))) {
+    sections.push(body.length + 1);
+    body.push([service]);
+    for (const [subsection, sub] of [...group.subs.entries()].sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))) {
+      sections.push(body.length + 1);
+      body.push([`  ${subsection}`]);
+      for (const entry of sub.entries.sort((a, b) => a.order - b.order)) body.push(entry.row);
+    }
+  }
+  return { rows: [header, ...body], sections };
+}
+
 const locationOf = (event: { eventLocation?: string | null; clientName?: string | null; eventName: string }) =>
   (event.eventLocation || event.clientName || event.eventName || "").trim();
 
@@ -108,6 +145,54 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     const e = eventByOrder.get(orderNumber);
     return e ? detailName(e) : `#${orderNumber}`;
   };
+
+  const multiTrasiegoEntries: HierarchyEntry[] = [];
+  for (const item of data.items) {
+    for (const t of item.transfers) {
+      const recipient = item.perEvent.find((p) => p.orderNumber === t.toOrder);
+      multiTrasiegoEntries.push({
+        row: [item.name, recipient?.subsection || recipient?.service || "GENERAL", t.qty, orderLabel(t.fromOrder), orderLabel(t.toOrder), ""],
+        service: recipient?.service || "",
+        subsection: recipient?.subsection || "",
+        order: item.order,
+      });
+    }
+  }
+  const multiBodegaEntries: HierarchyEntry[] = [];
+  const multiRentaEntries: HierarchyEntry[] = [];
+  const multiRegresaEntries: HierarchyEntry[] = [];
+  for (const item of data.items) {
+    for (const p of item.perEvent) {
+      if (p.fromStock > 0) {
+        multiBodegaEntries.push({
+          row: [eventName(p.id), item.name, p.subsection || p.service || "GENERAL", p.fromStock, ""],
+          service: p.service,
+          subsection: p.subsection,
+          order: item.order,
+        });
+      }
+      if (p.short > 0) {
+        multiRentaEntries.push({
+          row: [eventName(p.id), item.name, p.subsection || p.service || "GENERAL", p.short, "Renta o compra"],
+          service: p.service,
+          subsection: p.subsection,
+          order: item.order,
+        });
+      }
+      if (p.returnQty > 0) {
+        multiRegresaEntries.push({
+          row: [eventName(p.id), item.name, p.subsection || p.service || "GENERAL", p.returnQty, "No se usa en cuadros posteriores", ""],
+          service: p.service,
+          subsection: p.subsection,
+          order: item.order,
+        });
+      }
+    }
+  }
+  const multiTrasiegoH = buildHierarchy(["ÍTEM", "SUBCATEGORÍA", "CANTIDAD", "DESDE", "HACIA", "COMENTARIO"], multiTrasiegoEntries);
+  const multiBodegaH = buildHierarchy(["CUADRO", "ÍTEM", "SUBCATEGORÍA", "CANTIDAD", "COMENTARIO"], multiBodegaEntries);
+  const multiRentaH = buildHierarchy(["CUADRO", "ÍTEM", "SUBCATEGORÍA", "CANTIDAD", "COMENTARIO"], multiRentaEntries);
+  const multiRegresaH = buildHierarchy(["CUADRO", "ÍTEM", "SUBCATEGORÍA", "CANTIDAD", "MOTIVO", "COMENTARIO"], multiRegresaEntries);
 
   const resumen: Row[] = [
     [`RESUMEN — ${data.events.length} CUADROS`, "Unidades", "%"],
@@ -300,10 +385,10 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     { key: "multi-resumen", name: "Resumen", rows: resumen, widths: [42, 12, 12], headerRows: [0], sectionRows: [] },
     { key: "multi-eventos", name: "Eventos", rows: eventos, widths: [10, 26, 10, 10, 12, 10, 14, 10, 12], headerRows: [0], sectionRows: [] },
     { key: "multi-inventario", name: "Inventario", rows: inventario, widths: [46, 16, 10, 10, 12, 10, 14, 10], headerRows: [0], sectionRows: [] },
-    { key: "multi-trasiego", name: "Trasiego", rows: trasiego, widths: [46, 16, 12, 20, 16, 32], headerRows: [0], sectionRows: trasiegoSections },
-    { key: "multi-bodega", name: "Bodega", rows: bodega, widths: [28, 46, 16, 12, 30], headerRows: [0], sectionRows: bodegaSections },
-    { key: "multi-renta", name: "Renta-Compra", rows: renta, widths: [28, 46, 16, 12, 30], headerRows: [0], sectionRows: rentaSections },
-    { key: "multi-regresa", name: "Regresa", rows: regresa, widths: [28, 46, 16, 12, 30, 30], headerRows: [0], sectionRows: regresaSections },
+    { key: "multi-trasiego", name: "Trasiego", rows: multiTrasiegoH.rows, widths: [46, 16, 12, 20, 16, 32], headerRows: [0], sectionRows: multiTrasiegoH.sections },
+    { key: "multi-bodega", name: "Bodega", rows: multiBodegaH.rows, widths: [28, 46, 16, 12, 30], headerRows: [0], sectionRows: multiBodegaH.sections },
+    { key: "multi-renta", name: "Renta-Compra", rows: multiRentaH.rows, widths: [28, 46, 16, 12, 30], headerRows: [0], sectionRows: multiRentaH.sections },
+    { key: "multi-regresa", name: "Regresa", rows: multiRegresaH.rows, widths: [28, 46, 16, 12, 30, 30], headerRows: [0], sectionRows: multiRegresaH.sections },
     { key: "multi-detalle", name: "Detalle", rows: detalle, widths: [46, 24, 10, 10, 12, 10, 14, 10, 12], headerRows: [0], sectionRows: detailSections },
   ];
 }
@@ -436,6 +521,43 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
     }
   }
 
+  const pairTrasiegoH = buildHierarchy(
+    [`CUADRO DE EQUIPO TRASIEGO DE EVENTO ${sourceLocation} A ${targetLocation}`, "Subcategoría", "Cantidad", "Desde", "Hacia", "Comentario"],
+    data.rows.filter((r) => r.transfer > 0).map((r) => ({
+      row: [r.name, r.targetSubsection || r.targetService || "GENERAL", r.transfer, sourceLabel, targetLabel, ""],
+      service: r.targetService,
+      subsection: r.targetSubsection,
+      order: r.order,
+    }))
+  );
+  const pairCamionH = buildHierarchy(
+    [`CUADRO DE EQUIPO DE BODEGA A EVENTO ${targetLocation}`, "Subcategoría", "Cantidad", "¿Sale de bodega?", "Comentario"],
+    data.rows.filter((r) => r.targetFromStock > 0).map((r) => ({
+      row: [r.name, r.targetSubsection || r.targetService || "GENERAL", r.targetFromStock, "Sí", ""],
+      service: r.targetService,
+      subsection: r.targetSubsection,
+      order: r.order,
+    }))
+  );
+  const pairFaltanteH = buildHierarchy(
+    [`CUADRO DE EQUIPO FALTANTE PARA EVENTO ${targetLocation}`, "Subcategoría", "Cantidad", "Comentario"],
+    data.rows.filter((r) => r.targetShort > 0).map((r) => ({
+      row: [r.name, r.targetSubsection || r.targetService || "GENERAL", r.targetShort, ""],
+      service: r.targetService,
+      subsection: r.targetSubsection,
+      order: r.order,
+    }))
+  );
+  const pairRegresaH = buildHierarchy(
+    [`CUADRO DE EQUIPO QUE REGRESA A BODEGA — EVENTO ${sourceLocation}`, "Subcategoría", "Cantidad", "Motivo", "Comentario"],
+    data.rows.filter((r) => r.returnQty > 0).map((r) => ({
+      row: [r.name, r.sourceSubsection || r.sourceService || "GENERAL", r.returnQty, r.targetQty === 0 ? `No lo pide ${tName}` : `Solo se usa una parte en ${tName}`, ""],
+      service: r.sourceService,
+      subsection: r.sourceSubsection,
+      order: r.order,
+    }))
+  );
+
   const resumen: Row[] = [
     ["COBERTURA", "Unidades", "%"],
     [`${sName} reutilizado en ${tName} (trasiego)`, tt.transfer, `${tt.pctTransferSource}% de ${sName}`],
@@ -473,46 +595,34 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
     {
       key: "trasiego",
       name: unique("Trasiego"),
-      rows: [
-        [`CUADRO DE EQUIPO TRASIEGO DE EVENTO ${sourceLocation} A ${targetLocation}`, "Categoría", "Cantidad", "Desde", "Hacia", "Comentario"],
-        ...pairTrasiegoBody,
-      ],
+      rows: pairTrasiegoH.rows,
       widths: [46, 16, 12, 20, 16, 32],
       headerRows: [0],
-      sectionRows: pairTrasiegoSections,
+      sectionRows: pairTrasiegoH.sections,
     },
     {
       key: "camion",
       name: unique(`Camion ${tName}`),
-      rows: [
-        [`CUADRO DE EQUIPO DE BODEGA A EVENTO ${targetLocation}`, "Categoría", "Cantidad", "¿Sale de bodega?", "Comentario"],
-        ...pairCamionBody,
-      ],
+      rows: pairCamionH.rows,
       widths: [46, 16, 12, 14, 32],
       headerRows: [0],
-      sectionRows: pairCamionSections,
+      sectionRows: pairCamionH.sections,
     },
     {
       key: "faltante",
       name: unique(`${tName} No cubierto`),
-      rows: [
-        [`CUADRO DE EQUIPO FALTANTE PARA EVENTO ${targetLocation}`, "Categoría", "Cantidad", "Comentario"],
-        ...pairFaltanteBody,
-      ],
+      rows: pairFaltanteH.rows,
       widths: [46, 16, 12, 32],
       headerRows: [0],
-      sectionRows: pairFaltanteSections,
+      sectionRows: pairFaltanteH.sections,
     },
     {
       key: "regresa",
       name: unique("Regresa a Bodega"),
-      rows: [
-        [`CUADRO DE EQUIPO QUE REGRESA A BODEGA — EVENTO ${sourceLocation}`, "Categoría", "Cantidad", "Motivo", "Comentario"],
-        ...pairRegresaBody,
-      ],
+      rows: pairRegresaH.rows,
       widths: [46, 16, 12, 28, 32],
       headerRows: [0],
-      sectionRows: pairRegresaSections,
+      sectionRows: pairRegresaH.sections,
     },
     {
       key: "detalle",

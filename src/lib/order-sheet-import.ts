@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 
-export type SheetItem = { name: string; quantity: number; section: string };
+export type SheetItem = { name: string; quantity: number; section: string; service?: string; subsection?: string };
 
 export type SheetEvent = {
   sheet: string;
@@ -115,13 +115,27 @@ export function parseWorkbookEvents(
     let current: SheetEvent | null = null;
     let inTable = false;
     let section = "";
+    let service = "";
+    let subsection = "";
+
+    const topLevelRows = new Set<number>();
+    for (let i = 0; i < rows.length; i++) {
+      const a = String(rows[i]?.[0] ?? "").trim();
+      const b = String(rows[i]?.[1] ?? "").trim();
+      if (a || !b) continue;
+      if (norm(b).includes("cuadro de montaje") || norm(b).includes("equipo a llevar")) continue;
+      let j = i + 1;
+      while (j < rows.length && !(rows[j] || []).some((value) => String(value ?? "").trim())) j++;
+      if (j < rows.length && norm(rows[j]?.[0]) === "cantidad") topLevelRows.add(i);
+    }
 
     const flush = () => {
       if (current && current.items.length > 0) events.push(current);
       current = null;
     };
 
-    for (const row of rows) {
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      const row = rows[rowIndex];
       const a = row[0];
       const b = row[1];
       const na = norm(a);
@@ -146,6 +160,8 @@ export function parseWorkbookEvents(
         };
         inTable = false;
         section = "";
+        service = "";
+        subsection = "";
         continue;
       }
       if (!current) continue;
@@ -170,13 +186,17 @@ export function parseWorkbookEvents(
         inTable = true;
         continue;
       }
+      if (norm(nb).includes("equipo a llevar")) {
+        inTable = true;
+        continue;
+      }
 
       const aNorm = norm(a);
-      // Algunos cuadros no traen "CUADRO DE MONTAJE" e inician directo con
-      // "Cantidad | Pista de baile..." (o similar). Ese encabezado activa la
-      // tabla y el texto de la columna B es la sección.
-      if (!inTable && aNorm === "cantidad" && nb) {
+      // Encabezado "Cantidad | Consola/Audio/...": activa la tabla y el texto
+      // de la columna B es el subtítulo dentro del servicio actual.
+      if (aNorm === "cantidad" && nb) {
         inTable = true;
+        subsection = nb;
         section = nb;
         continue;
       }
@@ -191,10 +211,20 @@ export function parseWorkbookEvents(
           continue;
         }
       }
-      if (rawQty > 0 && nb) {
-        current.items.push({ name: nb, quantity: rawQty, section });
-      } else if (!a && nb) {
+      if (!a && nb) {
+        // Título de servicio (COCTEL, RECEPCION, EXTRAS) o subtítulo
+        // (Consola, Audio, MONITOREO INTERNO, MICROFONIA, ILUMINACION...).
+        if (topLevelRows.has(rowIndex)) {
+          service = nb;
+          subsection = "";
+        } else {
+          subsection = nb;
+        }
         section = nb;
+        continue;
+      }
+      if (rawQty > 0 && nb) {
+        current.items.push({ name: nb, quantity: rawQty, section, service, subsection });
       }
     }
     flush();
