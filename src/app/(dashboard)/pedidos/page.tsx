@@ -103,6 +103,7 @@ export default function PedidosPage() {
   const [newSheetLoading, setNewSheetLoading] = useState(false);
   const [purchasesLoading, setPurchasesLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [compactPdfLoading, setCompactPdfLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -366,6 +367,36 @@ export default function PedidosPage() {
       toast.error("Error al generar el PDF");
     } finally {
       setPdfLoading(false);
+    }
+  }
+
+  async function downloadCompactPdf() {
+    if (compareIds.length < 2) return;
+    setCompactPdfLoading(true);
+    try {
+      const res = await fetch("/api/orders/compare/pdf-compact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(comparePayload()),
+      });
+      if (!res.ok) { toast.error("Error al generar el PDF compacto"); return; }
+      const disposition = res.headers.get("content-disposition") || "";
+      const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const plain = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = utf8 ? decodeURIComponent(utf8[1]) : plain ? plain[1] : "trasiego.pdf";
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Error al generar el PDF compacto");
+    } finally {
+      setCompactPdfLoading(false);
     }
   }
 
@@ -1209,6 +1240,7 @@ export default function PedidosPage() {
               <Button variant="outline" onClick={openPurchasesSheets} isLoading={purchasesLoading}>Compras / Renta</Button>
               <Button onClick={downloadCompare}>Descargar Excel</Button>
               <Button variant="outline" onClick={downloadComparePdf} isLoading={pdfLoading}>Descargar PDF</Button>
+              <Button variant="outline" onClick={downloadCompactPdf} isLoading={compactPdfLoading}>PDF Compacto</Button>
             </div>
           </div>
         ) : (

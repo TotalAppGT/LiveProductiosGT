@@ -687,3 +687,56 @@ export function buildCombinedReportRows(data: CompareResult): Row[] {
   }
   return rows;
 }
+export type CompactList = { title: string; rows: Row[]; sections: number[] };
+
+export function buildCompactTarget(data: CompareResult): CompactList {
+  const location = (event: { eventLocation?: string | null; clientName?: string | null; eventName: string }) =>
+    (event.eventLocation || event.clientName || event.eventName || "").trim();
+  const title =
+    data.mode === "pair"
+      ? `CUADRO DE EQUIPO TRASIEGO DE EVENTO ${location(data.source)} A ${location(data.target)}`
+      : `CUADRO DE EQUIPO TRASIEGO DE EVENTOS A ${location(data.target)}`;
+
+  type Line = { name: string; qty: number; section: string; order: number };
+  const lines: Line[] = [];
+  if (data.mode === "pair") {
+    for (const row of data.rows.filter((r) => r.targetQty > 0)) {
+      lines.push({
+        name: row.name,
+        qty: row.targetQty,
+        section: row.targetSection || row.section || row.category || "OTRO",
+        order: row.order,
+      });
+    }
+  } else {
+    const targetId = data.target.id;
+    for (const item of data.items) {
+      const allocation = item.perEvent.find((p) => p.id === targetId);
+      if (!allocation || allocation.need <= 0) continue;
+      lines.push({
+        name: item.name,
+        qty: allocation.need,
+        section: item.section || item.category || "OTRO",
+        order: item.order,
+      });
+    }
+  }
+
+  const grouped = new Map<string, Line[]>();
+  for (const line of lines) {
+    const section = String(line.section || "OTRO").toUpperCase();
+    if (!grouped.has(section)) grouped.set(section, []);
+    grouped.get(section)!.push(line);
+  }
+  const categories = [...grouped.keys()].sort(sortCategories);
+  const rows: Row[] = [[title, "Cantidad"]];
+  const sections: number[] = [];
+  for (const category of categories) {
+    sections.push(rows.length);
+    rows.push([category]);
+    for (const line of grouped.get(category)!.sort((a, b) => a.order - b.order)) {
+      rows.push([line.name, line.qty]);
+    }
+  }
+  return { title, rows, sections };
+}
