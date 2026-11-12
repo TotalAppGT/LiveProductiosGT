@@ -442,8 +442,8 @@ export async function writeComparisonToSheet(
             },
             cell: {
               userEnteredFormat: {
-                textFormat: { bold: true, foregroundColor: { red: 0.12, green: 0.23, blue: 0.54 } },
-                backgroundColor: { red: 0.93, green: 0.95, blue: 1 },
+                textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+                backgroundColor: { red: 0, green: 0, blue: 0 },
               },
             },
             fields: "userEnteredFormat.textFormat,userEnteredFormat.backgroundColor",

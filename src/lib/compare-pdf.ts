@@ -83,7 +83,8 @@ export async function buildComparisonPdf(data: CompareResult): Promise<Buffer> {
       return row.map((v) => ({
         v: String(v ?? ""),
         bold: isSection,
-        bg: isSection ? "#e5e7eb" : undefined,
+        bg: isSection ? "#000000" : undefined,
+        color: isSection ? "#ffffff" : undefined,
       }));
     });
     drawTable(doc, cols, rows);

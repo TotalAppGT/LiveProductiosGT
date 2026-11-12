@@ -1,7 +1,15 @@
 import type { CompareData, CompareMultiData, CompareResult } from "@/lib/order-compare";
+import { INVENTORY_SECTIONS } from "@/lib/inventory";
 
 const displayCategory = (value: { section?: string | null; category?: string | null }) =>
   (value.section || value.category || "OTRO").toUpperCase();
+
+const categoryRank = new Map(INVENTORY_SECTIONS.map((section, index) => [section.toUpperCase(), index]));
+const sortCategories = (a: string, b: string) =>
+  (categoryRank.get(a.toUpperCase()) ?? 999) - (categoryRank.get(b.toUpperCase()) ?? 999) || a.localeCompare(b);
+
+const locationOf = (event: { eventLocation?: string | null; clientName?: string | null; eventName: string }) =>
+  (event.eventLocation || event.clientName || event.eventName || "").trim();
 
 export type Row = (string | number)[];
 
@@ -150,7 +158,7 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     if (!itemsByCategory.has(cat)) itemsByCategory.set(cat, []);
     itemsByCategory.get(cat)!.push(item);
   }
-  const categories = [...itemsByCategory.keys()].sort((a, b) => a.localeCompare(b));
+  const categories = [...itemsByCategory.keys()].sort(sortCategories);
 
   const trasiegoBody: Row[] = [];
   const trasiegoSections: number[] = [];
@@ -246,7 +254,8 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(item);
   }
-  for (const [cat, catItems] of byCategory) {
+  for (const cat of [...byCategory.keys()].sort(sortCategories)) {
+    const catItems = byCategory.get(cat)!;
     detailSections.push(detalle.length);
     detalle.push([cat]);
     for (const item of catItems) {
@@ -286,6 +295,8 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
   const tt = data.totals;
   const sName = shortName(s.eventName);
   const tName = shortName(t.eventName);
+  const sourceLocation = locationOf(s);
+  const targetLocation = locationOf(t);
   const sourceLabel = `#${s.orderNumber} ${s.eventName}${s.eventLocation ? ` · ${s.eventLocation}` : ""}`;
   const targetLabel = `#${t.orderNumber} ${t.eventName}${t.eventLocation ? ` · ${t.eventLocation}` : ""}`;
   const sd = ddmmyy(s.eventDate);
@@ -323,7 +334,8 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(r);
   }
-  for (const [cat, rows] of byCategory) {
+  for (const cat of [...byCategory.keys()].sort(sortCategories)) {
+    const rows = byCategory.get(cat)!;
     detailSections.push(detailRows.length);
     detailRows.push([cat]);
     for (const r of rows) {
@@ -345,7 +357,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
     if (!pairByCategory.has(cat)) pairByCategory.set(cat, []);
     pairByCategory.get(cat)!.push(r);
   }
-  const pairCategories = [...pairByCategory.keys()].sort((a, b) => a.localeCompare(b));
+  const pairCategories = [...pairByCategory.keys()].sort(sortCategories);
 
   const pairTrasiegoBody: Row[] = [];
   const pairTrasiegoSections: number[] = [];
@@ -402,7 +414,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       key: "origen",
       name: unique(sName),
       rows: [
-        [`LISTA PARA ${sName} — ${sd}`, "Cantidad", "Sale de bodega", "Faltante", `Se traslada a ${tName}`, "Regresa a bodega", "Comentario"],
+        [`CUADRO DE EQUIPO DEL EVENTO "${sourceLocation}"`, "Cantidad", "Sale de bodega", "Faltante", `Se traslada a ${tName}`, "Regresa a bodega", "Comentario"],
         ...data.rows.filter((r) => r.sourceQty > 0).sort((a, b) => b.sourceQty - a.sourceQty).map((r) => [r.name, r.sourceQty, r.stockSource, r.sourceShort, r.transfer, r.returnQty, ""]),
       ],
       widths: [46, 12, 14, 10, 18, 16, 32],
@@ -413,7 +425,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       key: "destino",
       name: unique(tName),
       rows: [
-        [`LISTA PARA ${tName} — ${targetWindow}`, "Cantidad", `Viene de ${sName}`, "Falta cargar de bodega", "Faltante", "Comentario"],
+        [`CUADRO DE EQUIPO DEL EVENTO "${targetLocation}"`, "Cantidad", `Viene de ${sName}`, "Falta cargar de bodega", "Faltante", "Comentario"],
         ...data.rows.filter((r) => r.targetQty > 0).sort((a, b) => b.targetQty - a.targetQty).map((r) => [r.name, r.targetQty, r.transfer, r.targetFromStock, r.targetShort, ""]),
       ],
       widths: [46, 12, 14, 20, 10, 32],
@@ -424,7 +436,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       key: "trasiego",
       name: unique("Trasiego"),
       rows: [
-        [`TRASIEGO ${sName} → ${tName} — ${tm}`, "Categoría", "Cantidad", "Desde", "Hacia", "Comentario"],
+        [`CUADRO DE EQUIPO TRASIEGO DE EVENTO "${sourceLocation}" A "${targetLocation}"`, "Categoría", "Cantidad", "Desde", "Hacia", "Comentario"],
         ...pairTrasiegoBody,
       ],
       widths: [46, 16, 12, 20, 16, 32],
@@ -435,7 +447,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       key: "camion",
       name: unique(`Camion ${tName}`),
       rows: [
-        [`CAMION ${tName} — SOLO LO QUE FALTA DE BODEGA`, "Categoría", "Cantidad", "¿Sale de bodega?", "Comentario"],
+        [`CUADRO DE EQUIPO DE BODEGA A EVENTO "${targetLocation}"`, "Categoría", "Cantidad", "¿Sale de bodega?", "Comentario"],
         ...pairCamionBody,
       ],
       widths: [46, 16, 12, 14, 32],
@@ -446,7 +458,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       key: "faltante",
       name: unique(`${tName} No cubierto`),
       rows: [
-        [`${tName} FALTANTE — NO CUBIERTO`, "Categoría", "Cantidad", "Comentario"],
+        [`CUADRO DE EQUIPO FALTANTE PARA EVENTO "${targetLocation}"`, "Categoría", "Cantidad", "Comentario"],
         ...pairFaltanteBody,
       ],
       widths: [46, 16, 12, 32],
@@ -457,7 +469,7 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
       key: "regresa",
       name: unique("Regresa a Bodega"),
       rows: [
-        [`${sName} QUE REGRESA A BODEGA — NO SE USA EN ${tName}`, "Cantidad", "Motivo", "Comentario"],
+        [`CUADRO DE EQUIPO QUE REGRESA A BODEGA — EVENTO "${sourceLocation}"`, "Cantidad", "Motivo", "Comentario"],
         ...data.rows
           .filter((r) => r.returnQty > 0)
           .sort((a, b) => b.returnQty - a.returnQty)

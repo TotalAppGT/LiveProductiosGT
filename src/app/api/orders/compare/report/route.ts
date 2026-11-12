@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, hasMinRole } from "@/lib/auth";
 import { compareOrders } from "@/lib/order-compare";
 import { buildReportTabs } from "@/lib/compare-report";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,20 +20,36 @@ export async function POST(request: NextRequest) {
       targetMode: body?.targetMode === "largest" ? ("largest" as const) : undefined,
     };
     const data = await compareOrders(ids, options);
-    const wb = XLSX.utils.book_new();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Live Productions GT";
     for (const tab of buildReportTabs(data)) {
-      const ws = XLSX.utils.aoa_to_sheet(tab.rows);
-      ws["!cols"] = tab.widths.map((wch) => ({ wch }));
-      if (tab.sectionRows.length > 0) {
-        const lastCol = Math.max(0, (tab.rows[0] || []).length - 1);
-        ws["!merges"] = tab.sectionRows.map((row) => ({
-          s: { r: row, c: 0 },
-          e: { r: row, c: lastCol },
-        }));
+      const ws = wb.addWorksheet(tab.name, { properties: { defaultRowHeight: 17 } });
+      ws.columns = tab.widths.map((width) => ({ width }));
+      tab.rows.forEach((row) => ws.addRow(row));
+      const lastCol = Math.max(1, (tab.rows[0] || []).length);
+      const headerRow = ws.getRow(1);
+      headerRow.height = 20;
+      for (let c = 1; c <= lastCol; c++) {
+        const cell = headerRow.getCell(c);
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E40AF" } };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 9 };
+        cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+        cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
       }
-      XLSX.utils.book_append_sheet(wb, ws, tab.name);
+      for (const sectionRow of tab.sectionRows) {
+        const rowNumber = sectionRow + 1;
+        if (lastCol > 1) ws.mergeCells(rowNumber, 1, rowNumber, lastCol);
+        const row = ws.getRow(rowNumber);
+        row.height = 20;
+        for (let c = 1; c <= lastCol; c++) {
+          const cell = row.getCell(c);
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF000000" } };
+          cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 9 };
+          cell.alignment = { vertical: "middle", horizontal: "left" };
+        }
+      }
     }
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
 
     return new NextResponse(buf as unknown as BodyInit, {
       headers: {
