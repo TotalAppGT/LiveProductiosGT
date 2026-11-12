@@ -9,23 +9,33 @@ const sortCategories = (a: string, b: string) =>
   (categoryRank.get(a.toUpperCase()) ?? 999) - (categoryRank.get(b.toUpperCase()) ?? 999) || a.localeCompare(b);
 
 
-type HierarchyEntry = { row: Row; service: string; subsection: string; order: number };
+type HierarchyEntry = { row: Row; service: string; section: string; subsection: string; order: number };
 
 function buildHierarchy(header: Row, entries: HierarchyEntry[]): { rows: Row[]; sections: number[] } {
-  const services = new Map<string, { order: number; subs: Map<string, { order: number; entries: HierarchyEntry[] }> }>();
+  type SubGroup = { order: number; entries: HierarchyEntry[] };
+  type SectionGroup = { order: number; subs: Map<string, SubGroup> };
+  const services = new Map<string, { order: number; sections: Map<string, SectionGroup> }>();
+
   for (const entry of entries) {
     const service = (entry.service || "SIN SERVICIO").toUpperCase();
-    const subsection = (entry.subsection || "GENERAL").toUpperCase();
-    let group = services.get(service);
-    if (!group) {
-      group = { order: entry.order, subs: new Map() };
-      services.set(service, group);
+    const section = (entry.section || "GENERAL").toUpperCase();
+    const subsection = (entry.subsection || "").toUpperCase();
+    let serviceGroup = services.get(service);
+    if (!serviceGroup) {
+      serviceGroup = { order: entry.order, sections: new Map() };
+      services.set(service, serviceGroup);
     }
-    group.order = Math.min(group.order, entry.order);
-    let sub = group.subs.get(subsection);
+    serviceGroup.order = Math.min(serviceGroup.order, entry.order);
+    let sectionGroup = serviceGroup.sections.get(section);
+    if (!sectionGroup) {
+      sectionGroup = { order: entry.order, subs: new Map() };
+      serviceGroup.sections.set(section, sectionGroup);
+    }
+    sectionGroup.order = Math.min(sectionGroup.order, entry.order);
+    let sub = sectionGroup.subs.get(subsection);
     if (!sub) {
       sub = { order: entry.order, entries: [] };
-      group.subs.set(subsection, sub);
+      sectionGroup.subs.set(subsection, sub);
     }
     sub.order = Math.min(sub.order, entry.order);
     sub.entries.push(entry);
@@ -33,13 +43,19 @@ function buildHierarchy(header: Row, entries: HierarchyEntry[]): { rows: Row[]; 
 
   const body: Row[] = [];
   const sections: number[] = [];
-  for (const [service, group] of [...services.entries()].sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))) {
+  for (const [service, serviceGroup] of [...services.entries()].sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))) {
     sections.push(body.length + 1);
     body.push([service]);
-    for (const [subsection, sub] of [...group.subs.entries()].sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))) {
+    for (const [section, sectionGroup] of [...serviceGroup.sections.entries()].sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))) {
       sections.push(body.length + 1);
-      body.push([`  ${subsection}`]);
-      for (const entry of sub.entries.sort((a, b) => a.order - b.order)) body.push(entry.row);
+      body.push([`  ${section}`]);
+      for (const [subsection, sub] of [...sectionGroup.subs.entries()].sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))) {
+        if (subsection) {
+          sections.push(body.length + 1);
+          body.push([`    ${subsection}`]);
+        }
+        for (const entry of sub.entries.sort((a, b) => a.order - b.order)) body.push(entry.row);
+      }
     }
   }
   return { rows: [header, ...body], sections };
@@ -151,8 +167,9 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     for (const t of item.transfers) {
       const recipient = item.perEvent.find((p) => p.orderNumber === t.toOrder);
       multiTrasiegoEntries.push({
-        row: [item.name, recipient?.subsection || recipient?.service || "GENERAL", t.qty, orderLabel(t.fromOrder), orderLabel(t.toOrder), ""],
+        row: [item.name, recipient?.subsection || recipient?.section || recipient?.service || "GENERAL", t.qty, orderLabel(t.fromOrder), orderLabel(t.toOrder), ""],
         service: recipient?.service || "",
+        section: recipient?.section || "",
         subsection: recipient?.subsection || "",
         order: item.order,
       });
@@ -165,24 +182,27 @@ export function buildMultiComparisonTabs(data: CompareMultiData): CompareTab[] {
     for (const p of item.perEvent) {
       if (p.fromStock > 0) {
         multiBodegaEntries.push({
-          row: [eventName(p.id), item.name, p.subsection || p.service || "GENERAL", p.fromStock, ""],
+          row: [eventName(p.id), item.name, p.subsection || p.section || p.service || "GENERAL", p.fromStock, ""],
           service: p.service,
+          section: p.section,
           subsection: p.subsection,
           order: item.order,
         });
       }
       if (p.short > 0) {
         multiRentaEntries.push({
-          row: [eventName(p.id), item.name, p.subsection || p.service || "GENERAL", p.short, "Renta o compra"],
+          row: [eventName(p.id), item.name, p.subsection || p.section || p.service || "GENERAL", p.short, "Renta o compra"],
           service: p.service,
+          section: p.section,
           subsection: p.subsection,
           order: item.order,
         });
       }
       if (p.returnQty > 0) {
         multiRegresaEntries.push({
-          row: [eventName(p.id), item.name, p.subsection || p.service || "GENERAL", p.returnQty, "No se usa en cuadros posteriores", ""],
+          row: [eventName(p.id), item.name, p.subsection || p.section || p.service || "GENERAL", p.returnQty, "No se usa en cuadros posteriores", ""],
           service: p.service,
+          section: p.section,
           subsection: p.subsection,
           order: item.order,
         });
@@ -524,8 +544,9 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
   const pairTrasiegoH = buildHierarchy(
     [`CUADRO DE EQUIPO TRASIEGO DE EVENTO ${sourceLocation} A ${targetLocation}`, "Subcategoría", "Cantidad", "Desde", "Hacia", "Comentario"],
     data.rows.filter((r) => r.transfer > 0).map((r) => ({
-      row: [r.name, r.targetSubsection || r.targetService || "GENERAL", r.transfer, sourceLabel, targetLabel, ""],
+      row: [r.name, r.targetSubsection || r.targetSection || r.targetService || "GENERAL", r.transfer, sourceLabel, targetLabel, ""],
       service: r.targetService,
+      section: r.targetSection,
       subsection: r.targetSubsection,
       order: r.order,
     }))
@@ -533,8 +554,9 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
   const pairCamionH = buildHierarchy(
     [`CUADRO DE EQUIPO DE BODEGA A EVENTO ${targetLocation}`, "Subcategoría", "Cantidad", "¿Sale de bodega?", "Comentario"],
     data.rows.filter((r) => r.targetFromStock > 0).map((r) => ({
-      row: [r.name, r.targetSubsection || r.targetService || "GENERAL", r.targetFromStock, "Sí", ""],
+      row: [r.name, r.targetSubsection || r.targetSection || r.targetService || "GENERAL", r.targetFromStock, "Sí", ""],
       service: r.targetService,
+      section: r.targetSection,
       subsection: r.targetSubsection,
       order: r.order,
     }))
@@ -542,8 +564,9 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
   const pairFaltanteH = buildHierarchy(
     [`CUADRO DE EQUIPO FALTANTE PARA EVENTO ${targetLocation}`, "Subcategoría", "Cantidad", "Comentario"],
     data.rows.filter((r) => r.targetShort > 0).map((r) => ({
-      row: [r.name, r.targetSubsection || r.targetService || "GENERAL", r.targetShort, ""],
+      row: [r.name, r.targetSubsection || r.targetSection || r.targetService || "GENERAL", r.targetShort, ""],
       service: r.targetService,
+      section: r.targetSection,
       subsection: r.targetSubsection,
       order: r.order,
     }))
@@ -551,8 +574,9 @@ export function buildComparisonTabs(data: CompareData): CompareTab[] {
   const pairRegresaH = buildHierarchy(
     [`CUADRO DE EQUIPO QUE REGRESA A BODEGA — EVENTO ${sourceLocation}`, "Subcategoría", "Cantidad", "Motivo", "Comentario"],
     data.rows.filter((r) => r.returnQty > 0).map((r) => ({
-      row: [r.name, r.sourceSubsection || r.sourceService || "GENERAL", r.returnQty, r.targetQty === 0 ? `No lo pide ${tName}` : `Solo se usa una parte en ${tName}`, ""],
+      row: [r.name, r.sourceSubsection || r.sourceSection || r.sourceService || "GENERAL", r.returnQty, r.targetQty === 0 ? `No lo pide ${tName}` : `Solo se usa una parte en ${tName}`, ""],
       service: r.sourceService,
+      section: r.sourceSection,
       subsection: r.sourceSubsection,
       order: r.order,
     }))

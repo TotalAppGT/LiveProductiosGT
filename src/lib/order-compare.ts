@@ -31,8 +31,10 @@ export type CompareRow = {
   category: string;
   section: string | null;
   sourceService: string;
+  sourceSection: string;
   sourceSubsection: string;
   targetService: string;
+  targetSection: string;
   targetSubsection: string;
   order: number;
   sourceQty: number;
@@ -117,6 +119,7 @@ export type CompareMultiItem = {
     short: number;
     returnQty: number;
     service: string;
+    section: string;
     subsection: string;
   }[];
   transfers: { fromOrder: number; toOrder: number; qty: number }[];
@@ -178,7 +181,7 @@ type LoadedOrder = {
   clientName: string | null;
   eventLocation: string | null;
   eventDate: Date | null;
-  items: { inventoryItemId: string | null; name: string; category: string; service?: string | null; subsection?: string | null; quantity: number }[];
+  items: { inventoryItemId: string | null; name: string; category: string; service?: string | null; section?: string | null; subsection?: string | null; quantity: number }[];
 };
 
 type Inv = { id: string; name: string; quantity: number; section?: string | null; category?: string | null };
@@ -255,8 +258,10 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
     target: number;
     order: number;
     sourceService: string;
+    sourceSection: string;
     sourceSubsection: string;
     targetService: string;
+    targetSection: string;
     targetSubsection: string;
   };
   const map = new Map<string, Group>();
@@ -274,8 +279,10 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
           target: 0,
           order: groupOrder++,
           sourceService: "",
+          sourceSection: "",
           sourceSubsection: "",
           targetService: "",
+          targetSection: "",
           targetSubsection: "",
         };
         map.set(key, g);
@@ -283,9 +290,11 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
       g[which] += Number(it.quantity) || 0;
       if (which === "source") {
         if (!g.sourceService) g.sourceService = it.service || "";
+        if (!g.sourceSection) g.sourceSection = it.section || "";
         if (!g.sourceSubsection) g.sourceSubsection = it.subsection || "";
       } else {
         if (!g.targetService) g.targetService = it.service || "";
+        if (!g.targetSection) g.targetSection = it.section || "";
         if (!g.targetSubsection) g.targetSubsection = it.subsection || "";
       }
     }
@@ -310,8 +319,10 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
       category: inv ? String(inv.category) : validCategory(g.category),
       section: inv?.section || null,
       sourceService: g.sourceService,
+      sourceSection: g.sourceSection,
       sourceSubsection: g.sourceSubsection,
       targetService: g.targetService,
+      targetSection: g.targetSection,
       targetSubsection: g.targetSubsection,
       order: g.order,
       sourceQty: g.source,
@@ -408,7 +419,7 @@ function compareMulti(
     name: string;
     category: string;
     perEvent: Map<string, number>;
-    perEventMeta: Map<string, { service: string; subsection: string }>;
+    perEventMeta: Map<string, { service: string; section: string; subsection: string }>;
     order: number;
   };
   const groups = new Map<string, Group>();
@@ -430,7 +441,7 @@ function compareMulti(
       }
       g.perEvent.set(o.id, (g.perEvent.get(o.id) || 0) + (Number(it.quantity) || 0));
       if (!g.perEventMeta.has(o.id)) {
-        g.perEventMeta.set(o.id, { service: it.service || "", subsection: it.subsection || "" });
+        g.perEventMeta.set(o.id, { service: it.service || "", section: it.section || "", subsection: it.subsection || "" });
       }
     }
   }
@@ -466,8 +477,8 @@ function compareMulti(
       const provided = reuse + fromStock;
       if (provided > 0) layers.push({ orderId: o.id, orderNumber: o.orderNumber, qty: provided });
       if (qty > 0) {
-        const meta = g.perEventMeta.get(o.id) || { service: "", subsection: "" };
-        perEvent.push({ id: o.id, orderNumber: o.orderNumber, need: qty, reuse, fromStock, short, returnQty: 0, service: meta.service, subsection: meta.subsection });
+        const meta = g.perEventMeta.get(o.id) || { service: "", section: "", subsection: "" };
+        perEvent.push({ id: o.id, orderNumber: o.orderNumber, need: qty, reuse, fromStock, short, returnQty: 0, service: meta.service, section: meta.section, subsection: meta.subsection });
       }
       const ev = eventById.get(o.id);
       if (ev) {

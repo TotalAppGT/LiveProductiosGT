@@ -87,6 +87,16 @@ function jaccard(a: string[], b: string[]): number {
   return inter / (setA.size + setB.size - inter);
 }
 
+const KNOWN_SUBSECTIONS = new Set([
+  "monitoreo",
+  "baterias",
+  "computadora",
+  "in ears",
+  "microfonia para voces",
+  "luces",
+  "case de pedestales de bateria",
+]);
+
 export function parseGuests(value: string): number | null {
   const m = String(value || "").replace(/,/g, "").match(/\d+/);
   return m ? parseInt(m[0], 10) : null;
@@ -196,8 +206,8 @@ export function parseWorkbookEvents(
       // de la columna B es el subtítulo dentro del servicio actual.
       if (aNorm === "cantidad" && nb) {
         inTable = true;
-        subsection = nb;
         section = nb;
+        subsection = "";
         continue;
       }
 
@@ -216,11 +226,14 @@ export function parseWorkbookEvents(
         // (Consola, Audio, MONITOREO INTERNO, MICROFONIA, ILUMINACION...).
         if (topLevelRows.has(rowIndex)) {
           service = nb;
+          section = "";
           subsection = "";
-        } else {
+        } else if (section && KNOWN_SUBSECTIONS.has(norm(nb))) {
           subsection = nb;
+        } else {
+          section = nb;
+          subsection = "";
         }
-        section = nb;
         continue;
       }
       if (rawQty > 0 && nb) {

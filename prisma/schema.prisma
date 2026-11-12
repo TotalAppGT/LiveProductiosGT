@@ -738,6 +738,7 @@ model OrderItem {
   name            String
   category        String    @default("AUDIO")
   service         String?
+  section         String?
   subsection      String?
   quantity        Int       @default(1)
   preparedPhotos  String[]  @default([])

@@ -236,6 +236,7 @@ export async function POST(request: NextRequest) {
         name: i.name,
         category: i.category,
         service: i.service || null,
+        section: i.section || null,
         subsection: i.subsection || null,
         quantity: i.quantity,
         inventoryItemId: i.inventoryItemId,
