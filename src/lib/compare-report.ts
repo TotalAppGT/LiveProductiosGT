@@ -17,7 +17,7 @@ function buildHierarchy(header: Row, entries: HierarchyEntry[]): { rows: Row[]; 
   const services = new Map<string, { order: number; sections: Map<string, SectionGroup> }>();
 
   for (const entry of entries) {
-    const service = (entry.service || "SIN SERVICIO").toUpperCase();
+    const service = (entry.service || "").toUpperCase();
     const section = (entry.section || "GENERAL").toUpperCase();
     const subsection = (entry.subsection || "").toUpperCase();
     let serviceGroup = services.get(service);
@@ -44,8 +44,10 @@ function buildHierarchy(header: Row, entries: HierarchyEntry[]): { rows: Row[]; 
   const body: Row[] = [];
   const sections: number[] = [];
   for (const [service, serviceGroup] of [...services.entries()].sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))) {
-    sections.push(body.length + 1);
-    body.push([service]);
+    if (service) {
+      sections.push(body.length + 1);
+      body.push([service]);
+    }
     for (const [section, sectionGroup] of [...serviceGroup.sections.entries()].sort((a, b) => a[1].order - b[1].order || a[0].localeCompare(b[0]))) {
       sections.push(body.length + 1);
       body.push([`  ${section}`]);
