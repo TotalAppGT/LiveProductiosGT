@@ -400,7 +400,10 @@ export async function writeComparisonToSheet(
     });
   }
 
-  const targets = tabs.map((t) => t.name);
+  const latestRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`, { headers: auth });
+  const latestMeta = await latestRes.json();
+  const latestTitles: string[] = (latestMeta.sheets || []).map((s: { properties: { title: string } }) => s.properties.title);
+  const targets = tabs.map((t, i) => latestTitles[i] || existing[i] || t.name);
 
   for (const title of targets) {
     const range = `'${title.replace(/'/g, "''")}'!A1:Z5000`;
