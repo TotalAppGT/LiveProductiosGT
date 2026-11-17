@@ -237,7 +237,7 @@ export function parseWorkbookEvents(
         }
         continue;
       }
-      if (rawQty > 0 && nb) {
+      if (rawQty >= 0 && nb) {
         current.items.push({ name: nb, quantity: rawQty, section, service, subsection });
       }
     }
