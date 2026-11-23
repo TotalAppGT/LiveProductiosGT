@@ -48,6 +48,11 @@ const fullKey = (value: string) => {
 
 export const dateKey = (d: Date) => d.toISOString().slice(0, 10);
 
+// Pestañas de rangos viejos, por ejemplo "12, 13, 14" o "26, 27, 28".
+// No son cuadros: son bloques auxiliares y no deben importarse.
+export const isRangeSheet = (name: string) =>
+  /^[\d\s,;yYy/\\-]+$/.test(String(name ?? "").trim());
+
 export function cleanName(value: string): string {
   let s = deaccent(norm(value));
   s = s.replace(/\([^)]*\)/g, " ");
@@ -111,7 +116,7 @@ export function parseWorkbookEvents(
     ? wb.SheetNames.filter((n) =>
         opts.sheets!.some((s) => norm(n) === norm(s) || norm(n).includes(norm(s)))
       )
-    : wb.SheetNames;
+    : wb.SheetNames.filter((n) => !isRangeSheet(n));
   const events: SheetEvent[] = [];
 
   for (const sheetName of names) {

@@ -713,6 +713,8 @@ model Order {
   eventEndDate  DateTime?
   contractNotes String?     @db.Text
   status        String      @default("BORRADOR")
+  fromSheetImport Boolean   @default(false)
+  sourceSheet     String?
   templateId    String?
   createdById   String
   createdBy     User        @relation("OrderCreator", fields: [createdById], references: [id])

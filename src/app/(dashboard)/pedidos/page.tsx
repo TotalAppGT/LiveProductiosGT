@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Package, Plus, Search, Check, Camera, Trash2, ClipboardList, ArrowRightLeft, PackageCheck } from "lucide-react";
+import { Package, Plus, Search, Check, Camera, Trash2, ClipboardList, ArrowRightLeft, PackageCheck, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/Card";
@@ -90,6 +90,7 @@ export default function PedidosPage() {
   const [bulkTo, setBulkTo] = useState("");
   const [bulkReplace, setBulkReplace] = useState(true);
   const [bulkSource, setBulkSource] = useState<"file" | "google">("file");
+  const [syncing, setSyncing] = useState(false);
   const [uploadItems, setUploadItems] = useState<any[] | null>(null);
   const [uploadDiscrepancies, setUploadDiscrepancies] = useState<any[]>([]);
   const [uploadEvent, setUploadEvent] = useState({ eventName: "", clientName: "", eventLocation: "", eventDate: "" });
@@ -474,6 +475,44 @@ export default function PedidosPage() {
     }
   }
 
+  async function syncCuadros() {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const preview = await fetch("/api/orders/import-sheets", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "google", mode: "preview", replace: true }),
+      });
+      const pj = await preview.json();
+      if (!pj.success) {
+        toast.error(pj.error || "Error al leer Google Sheets");
+        return;
+      }
+      const res = await fetch("/api/orders/import-sheets", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "google", mode: "apply", replace: true }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        toast.error(json.error || "Error al sincronizar cuadros");
+        return;
+      }
+      const d = json.data;
+      toast.success(
+        `${d.created} nuevos, ${d.updated} actualizados, ${d.deleted} eliminados` +
+          `${d.skipped ? `, ${d.skipped} omitidos` : ""}` +
+          `${json.data.unmatched?.length ? ` · ${json.data.unmatched.length} sin coincidencia` : ""}`
+      );
+      fetchData();
+    } catch {
+      toast.error("Error al sincronizar cuadros");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function applyBulk() {
     if (bulkSource === "google") {
       if (!bulkPreview) return;
@@ -487,7 +526,7 @@ export default function PedidosPage() {
         const json = await res.json();
         if (json.success) {
           const d = json.data;
-          toast.success(`${d.created} nuevos, ${d.updated} actualizados${d.skipped ? `, ${d.skipped} omitidos` : ""}${json.data.unmatched?.length ? ` · ${json.data.unmatched.length} sin coincidencia` : ""}`);
+          toast.success(`${d.created} nuevos, ${d.updated} actualizados, ${d.deleted} eliminados${d.skipped ? `, ${d.skipped} omitidos` : ""}${json.data.unmatched?.length ? ` · ${json.data.unmatched.length} sin coincidencia` : ""}`);
           setShowBulk(false);
           setBulkPreview(null);
           setBulkSource("file");
@@ -513,7 +552,7 @@ export default function PedidosPage() {
       const json = await res.json();
       if (json.success) {
         const d = json.data;
-        toast.success(`${d.created} nuevos, ${d.updated} actualizados${d.skipped ? `, ${d.skipped} omitidos` : ""}${json.data.unmatched?.length ? ` · ${json.data.unmatched.length} sin coincidencia` : ""}`);
+        toast.success(`${d.created} nuevos, ${d.updated} actualizados, ${d.deleted} eliminados${d.skipped ? `, ${d.skipped} omitidos` : ""}${json.data.unmatched?.length ? ` · ${json.data.unmatched.length} sin coincidencia` : ""}`);
         setShowBulk(false);
         setBulkPreview(null);
         setBulkFile(null);
@@ -727,6 +766,9 @@ export default function PedidosPage() {
           </Button>
           <Button variant="outline" onClick={() => downloadReport("/api/orders/template", "plantilla-cuadros.xlsx")}>
             ⬇️ Plantilla Excel
+          </Button>
+          <Button variant="outline" onClick={syncCuadros} isLoading={syncing} disabled={syncing}>
+            <RefreshCw className="w-4 h-4 mr-1" /> Actualizar cuadros
           </Button>
           <Button variant="outline" onClick={() => setShowBulk(true)}>
             ⬆️ Importar / Sincronizar cuadros
@@ -970,7 +1012,7 @@ export default function PedidosPage() {
       >
         <div className="space-y-4 p-1">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Subí el Excel tal como lo exportás de Sheets o cargá directo desde la <b>hoja fija de cuadros</b>. Detecta las hojas con <b>Fecha del evento</b> y <b>CUADRO DE MONTAJE</b> (Cantidad | Ítem), con uno o varios eventos por hoja. Compara cada ítem con el inventario y muestra los que no coinciden.
+            Subí el Excel tal como lo exportás de Sheets o cargá directo desde la <b>hoja fija de cuadros</b>. Detecta las hojas con <b>Fecha del evento</b> y <b>CUADRO DE MONTAJE</b> (Cantidad | Ítem). Con la opción de sincronizar, la hoja manda: agrega cuadros nuevos, actualiza los cambios y elimina los cuadros o ítems que ya no estén en la hoja.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -994,12 +1036,12 @@ export default function PedidosPage() {
               checked={bulkReplace}
               onChange={(e) => { setBulkReplace(e.target.checked); setBulkPreview(null); setBulkFile(null); }}
             />
-            Actualizar cuadros existentes (misma fecha y cliente)
+            Sincronizar con la hoja: actualizar existentes y quitar los que ya no estén
           </label>
 
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
             <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
-              Sincronizar desde la hoja fija respeta <b>Desde/Hasta</b> y la opción de <b>actualizar existentes</b>. Los cuadros ya en preparación o aprobados se omiten.
+              Modo espejo: la hoja es la fuente de verdad. Agrega, actualiza ítems/cantidades y elimina cuadros que ya no estén. Respeta <b>Desde/Hasta</b> si los usás. Los cuadros en operación o con historial no se eliminan solos.
             </p>
             <Button variant="outline" size="sm" onClick={previewBulkGoogle} isLoading={bulkLoading}>
               Cargar desde Google Sheets
@@ -1023,7 +1065,7 @@ export default function PedidosPage() {
                 <span><b>{bulkPreview.totals.items}</b> ítems</span>
                 <span><b>{bulkPreview.totals.matched}</b> con inventario</span>
                 <span className={bulkPreview.totals.unmatched ? "text-red-600" : "text-green-600"}><b>{bulkPreview.totals.unmatched}</b> sin coincidencia</span>
-                <span><b>{bulkPreview.totals.create}</b> nuevos · <b>{bulkPreview.totals.update}</b> actualizar{bulkPreview.totals.skip ? ` · ${bulkPreview.totals.skip} omitir` : ""}</span>
+                <span><b>{bulkPreview.totals.create}</b> nuevos · <b>{bulkPreview.totals.update}</b> actualizar{bulkPreview.totals.delete ? ` · ${bulkPreview.totals.delete} eliminar` : ""}{bulkPreview.totals.skip ? ` · ${bulkPreview.totals.skip} omitir` : ""}</span>
               </div>
 
               <div className="max-h-64 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -1058,6 +1100,24 @@ export default function PedidosPage() {
                   </tbody>
                 </table>
               </div>
+
+              {(bulkPreview.removals || []).length > 0 && (
+                <details className="text-xs" open>
+                  <summary className="cursor-pointer text-amber-600 font-medium">
+                    Ver {bulkPreview.removals.length} cuadro(s) que ya no están en la hoja
+                  </summary>
+                  <div className="mt-1 space-y-1">
+                    {bulkPreview.removals.map((r: any) => (
+                      <div key={r.id} className="flex items-center justify-between gap-2 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5">
+                        <span className="truncate">#{r.orderNumber} {r.eventName}</span>
+                        <span className={r.action === "delete" ? "text-red-600 whitespace-nowrap" : "text-amber-600 whitespace-nowrap"}>
+                          {r.action === "delete" ? "Eliminar" : `Conservar: ${r.reason}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
 
               {bulkPreview.unmatched.length > 0 && (
                 <details className="text-xs">

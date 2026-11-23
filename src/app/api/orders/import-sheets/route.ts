@@ -15,24 +15,64 @@ const CUADROS_SHEET_ID = "1OL9oQ5pGs45ZTu5L2qud8xMqKTmYOcrzNFFo0epSPe4";
 
 const norm = (s: unknown) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
+// Estos estados ya tienen operación encima (inventario comprometido, evento en
+// curso o cierre). No se borran solos para no perder historial.
+const PROTECTED_STATUS = new Set(["LISTO", "EN_EVENTO", "POR_RECIBIR", "DEVUELTO"]);
+
+type Scope = { sheets?: string[]; from: string; to: string };
+
 type ExistingOrder = Awaited<ReturnType<typeof findExistingOrders>>[number];
 
 async function findExistingOrders() {
   return prisma.order.findMany({
-    include: { items: true },
+    include: {
+      items: true,
+      _count: {
+        select: {
+          reintegros: true,
+          charges: true,
+          approvalRequests: true,
+          bitacora: true,
+        },
+      },
+    },
     orderBy: { orderNumber: "asc" },
   });
 }
 
-function isReplaceable(order: ExistingOrder): boolean {
-  if (order.status !== "BORRADOR") return false;
-  return order.items.every(
-    (i) =>
-      !i.preparedChecked &&
-      !i.returnChecked &&
-      (i.preparedPhotos || []).length === 0 &&
-      (i.returnPhotos || []).length === 0
+function hasHistory(order: ExistingOrder): boolean {
+  const c = order._count;
+  return !!(c.reintegros || c.charges || c.approvalRequests || c.bitacora);
+}
+
+function canDelete(order: ExistingOrder): boolean {
+  return (
+    order.fromSheetImport &&
+    !hasHistory(order) &&
+    !PROTECTED_STATUS.has(order.status)
   );
+}
+
+function reasonToKeep(order: ExistingOrder): string {
+  if (hasHistory(order)) return "Tiene historial (reintegros, cargos o aprobaciones)";
+  if (PROTECTED_STATUS.has(order.status)) return `Cuadro en operación (${order.status})`;
+  return "No se puede eliminar";
+}
+
+function inScope(order: ExistingOrder, scope: Scope): boolean {
+  if (scope.sheets?.length) {
+    return (
+      !!order.sourceSheet &&
+      scope.sheets.some((s) => norm(s) === norm(order.sourceSheet))
+    );
+  }
+  if (scope.from || scope.to) {
+    if (!order.eventDate) return false;
+    const d = dateKey(order.eventDate);
+    if (scope.from && d < scope.from) return false;
+    if (scope.to && d > scope.to) return false;
+  }
+  return true;
 }
 
 function matchExisting(
@@ -42,20 +82,45 @@ function matchExisting(
 ): ExistingOrder | null {
   const day = dateKey(event.date);
   const client = norm(event.client);
-  const candidates = orders.filter(
-    (o) => o.eventDate && dateKey(o.eventDate) === day && !used.has(o.id)
+  const sheet = norm(event.sheet);
+  const candidates = orders.filter((o) => !used.has(o.id));
+
+  // La pestaña manda: si solo cambió el cliente o la fecha dentro de la misma
+  // pestaña, se actualiza el mismo cuadro en vez de crear un duplicado.
+  const sameSheet = candidates.find(
+    (o) =>
+      !!o.sourceSheet &&
+      norm(o.sourceSheet) === sheet &&
+      ((o.eventDate && dateKey(o.eventDate) === day) ||
+        (!!o.clientName && norm(o.clientName) === client))
   );
-  if (candidates.length === 0) return null;
+  if (sameSheet) return sameSheet;
+
+  const sameDay = candidates.filter(
+    (o) => o.eventDate && dateKey(o.eventDate) === day
+  );
+  if (sameDay.length === 0) return null;
   return (
-    candidates.find((o) => norm(o.clientName) === client) ||
-    candidates.find((o) => norm(o.eventName).includes(client)) ||
-    candidates.find(
+    sameDay.find((o) => norm(o.clientName) === client) ||
+    sameDay.find((o) => norm(o.eventName).includes(client)) ||
+    sameDay.find(
       (o) =>
         !!o.clientName &&
         (client.includes(norm(o.clientName)) || norm(o.clientName).includes(client))
     ) ||
     null
   );
+}
+
+function itemKey(i: {
+  name: string;
+  service?: string | null;
+  section?: string | null;
+  subsection?: string | null;
+  inventoryItemId?: string | null;
+}): string {
+  if (i.inventoryItemId) return `id:${i.inventoryItemId}`;
+  return `n:${norm(i.name)}|${norm(i.service)}|${norm(i.section)}|${norm(i.subsection)}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -136,6 +201,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const scope: Scope = { sheets, from, to };
     const [inventory, orders] = await Promise.all([
       prisma.inventoryItem.findMany({
         select: { id: true, name: true, category: true, status: true },
@@ -159,13 +225,10 @@ export async function POST(request: NextRequest) {
       const items = event.items.map(matchItem);
       const existing = matchExisting(event, orders, used);
       if (existing) used.add(existing.id);
-      const replaceable = existing ? isReplaceable(existing) : false;
       const action: "create" | "update" | "skip" = !existing
         ? "create"
-        : replace && replaceable
-        ? "update"
         : replace
-        ? "skip"
+        ? "update"
         : "create";
       const unmatchedNames = Array.from(
         new Set(items.filter((i) => i.matchType === "none").map((i) => i.name))
@@ -182,10 +245,22 @@ export async function POST(request: NextRequest) {
         unmatched: unmatchedNames,
         existingOrderNumber: existing?.orderNumber ?? null,
         existingStatus: existing?.status ?? null,
-        replaceable,
         action,
       };
     });
+
+    const removals = replace
+      ? orders
+          .filter((o) => o.fromSheetImport && !used.has(o.id) && inScope(o, scope))
+          .map((o) => ({
+            id: o.id,
+            orderNumber: o.orderNumber,
+            eventName: o.eventName,
+            status: o.status,
+            action: canDelete(o) ? ("delete" as const) : ("keep" as const),
+            reason: canDelete(o) ? "Ya no está en la hoja" : reasonToKeep(o),
+          }))
+      : [];
 
     const allUnmatched = Array.from(new Set(preview.flatMap((e) => e.unmatched)));
     const totals = {
@@ -195,13 +270,15 @@ export async function POST(request: NextRequest) {
       unmatched: allUnmatched.length,
       create: preview.filter((e) => e.action === "create").length,
       update: preview.filter((e) => e.action === "update").length,
-      skip: preview.filter((e) => e.action === "skip").length,
+      skip: 0,
+      delete: removals.filter((r) => r.action === "delete").length,
+      keep: removals.filter((r) => r.action === "keep").length,
     };
 
     if (mode !== "apply") {
       return NextResponse.json({
         success: true,
-        data: { events: preview, totals, unmatched: allUnmatched },
+        data: { events: preview, totals, unmatched: allUnmatched, removals },
       });
     }
 
@@ -218,19 +295,11 @@ export async function POST(request: NextRequest) {
     for (const event of events) {
       const existing = matchExisting(event, orders, usedApply);
       if (existing) usedApply.add(existing.id);
-      const replaceable = existing ? isReplaceable(existing) : false;
-      const action: "create" | "update" | "skip" = !existing
+      const action: "create" | "update" = !existing
         ? "create"
-        : replace && replaceable
-        ? "update"
         : replace
-        ? "skip"
+        ? "update"
         : "create";
-
-      if (action === "skip") {
-        skipped++;
-        continue;
-      }
 
       const items = event.items.map(matchItem).map((i) => ({
         name: i.name,
@@ -252,14 +321,48 @@ export async function POST(request: NextRequest) {
         eventDate,
         eventEndDate: null,
         contractNotes: event.contract || null,
+        fromSheetImport: true,
+        sourceSheet: event.sheet,
       };
 
       if (action === "update" && existing) {
+        // Se conserva el avance físico (checks/fotos) de los ítems que siguen
+        // existiendo aunque cambie la cantidad o el orden.
+        const pool = new Map<string, typeof existing.items>();
+        for (const item of existing.items) {
+          const key = itemKey(item);
+          const list = pool.get(key) || [];
+          list.push(item);
+          pool.set(key, list);
+        }
+        const nextItems = items.map((item) => {
+          const prev = pool.get(itemKey(item))?.shift();
+          if (!prev) return item;
+          return {
+            ...item,
+            preparedChecked: prev.preparedChecked,
+            preparedPhotos: prev.preparedPhotos,
+            preparedById: prev.preparedById,
+            preparedAt: prev.preparedAt,
+            returnChecked: prev.returnChecked,
+            returnPhotos: prev.returnPhotos,
+            returnedById: prev.returnedById,
+            returnedAt: prev.returnedAt,
+            returnCondition: prev.returnCondition,
+            okQty: prev.okQty,
+            damagedQty: prev.damagedQty,
+            lostQty: prev.lostQty,
+            unitValue: prev.unitValue,
+            responsibleId: prev.responsibleId,
+            returnNotes: prev.returnNotes,
+          };
+        });
+
         await prisma.$transaction([
           prisma.orderItem.deleteMany({ where: { orderId: existing.id } }),
           prisma.order.update({
             where: { id: existing.id },
-            data: { ...data, items: { create: items } },
+            data: { ...data, items: { create: nextItems } },
           }),
         ]);
         updated++;
@@ -277,20 +380,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let deleted = 0;
+    const deleteFailures: string[] = [];
+    const kept = removals.filter((r) => r.action === "keep");
+    for (const removal of removals) {
+      if (removal.action !== "delete") continue;
+      try {
+        await prisma.order.delete({ where: { id: removal.id } });
+        deleted++;
+      } catch {
+        deleteFailures.push(`#${removal.orderNumber}`);
+      }
+    }
+
     await prisma.activity
       .create({
         data: {
           userId: auth.payload.userId,
           action: "IMPORTAR_CUADROS",
           resource: "ORDER",
-          details: `Importación Excel: ${created} nuevos, ${updated} actualizados, ${skipped} omitidos`,
+          details: `Sincronización de cuadros: ${created} nuevos, ${updated} actualizados, ${deleted} eliminados, ${skipped} omitidos`,
         },
       })
       .catch(() => {});
 
     return NextResponse.json({
       success: true,
-      data: { created, updated, skipped, totals, unmatched: allUnmatched, events: preview },
+      data: {
+        created,
+        updated,
+        deleted,
+        skipped,
+        kept: kept.length,
+        deleteFailures,
+        totals,
+        unmatched: allUnmatched,
+        events: preview,
+        removals,
+      },
     });
   } catch (error) {
     console.error("Error import-sheets cuadros:", error);
