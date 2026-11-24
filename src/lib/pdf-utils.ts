@@ -140,10 +140,15 @@ export function stampFooters(doc: any, left?: string) {
   const total = range.count;
   for (let i = range.start; i < range.start + total; i++) {
     doc.switchToPage(i);
+    // El pie va debajo del margen inferior. Sin esto, PDFKit interpreta que
+    // no cabe y agrega páginas en blanco al final del documento.
+    const bottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
     const y = doc.page.height - 26;
     doc.moveTo(doc.page.margins.left, y - 6).lineTo(doc.page.width - doc.page.margins.right, y - 6).lineWidth(0.5).strokeColor("#d1d5db").stroke();
     doc.font("Helvetica").fontSize(7.5).fillColor("#9ca3af");
     doc.text(left || "Live Productions GT · Inventario", doc.page.margins.left, y + 1, { width: 320, align: "left", lineBreak: false });
     doc.text(`Página ${i - range.start + 1} de ${total}`, doc.page.width - doc.page.margins.right - 200, y + 1, { width: 200, align: "right", lineBreak: false });
+    doc.page.margins.bottom = bottomMargin;
   }
 }
