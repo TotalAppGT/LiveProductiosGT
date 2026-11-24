@@ -332,6 +332,7 @@ export default function InventarioPage() {
       if (statusFilter) params.set("status", statusFilter);
       if (locationFilter) params.set("location", locationFilter);
       if (search) params.set("search", search);
+      params.set("thumb", "1");
       params.set("limit", "1000");
       const res = await fetch(`/api/inventory?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },

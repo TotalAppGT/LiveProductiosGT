@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status") || undefined;
     const location = searchParams.get("location") || undefined;
     const search = searchParams.get("search") || "";
+    const thumb = searchParams.get("thumb") === "1";
     const skip = (page - 1) * limit;
 
     const where: Prisma.InventoryItemWhereInput = {};
@@ -51,10 +52,18 @@ export async function GET(request: NextRequest) {
       prisma.inventoryItem.count({ where }),
     ]);
 
+    // Para listados grandes sólo mandamos la primera foto (miniatura).
+    const data = thumb
+      ? items.map((item) => ({
+          ...item,
+          photos: item.photos?.length ? [item.photos[0]] : [],
+        }))
+      : items;
+
     return NextResponse.json(
       {
         success: true,
-        data: items,
+        data,
         total,
         page,
         limit,

@@ -1,10 +1,10 @@
 // Reduce el peso de las fotos antes de subirlas. Se usa en el navegador.
 // Las fotos de inventario son para identificar el ítem, no para impresión:
-// 1280 px y JPEG 82% es suficiente y evita guardar 3–5 MB por foto.
+// 1000 px y JPEG 78% es suficiente y evita guardar 3–5 MB por foto.
 export async function compressImageFile(
   file: File,
-  maxSize = 1280,
-  quality = 0.82
+  maxSize = 1000,
+  quality = 0.78
 ): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
   if (typeof document === "undefined" || typeof createImageBitmap === "undefined") {

@@ -123,7 +123,11 @@ export async function GET(request: NextRequest) {
       const meta = `${item.category} · Perdido: ${nf(item.lostUnits)} u · Valor: ${money(
         item.amount
       )}${item.serialNumber ? ` · Serie: ${item.serialNumber}` : ""}`;
-      const notes = item.notes ? `Notas: ${item.notes}` : "";
+      const usefulNotes =
+        item.notes && item.notes.trim() !== "Carga desde INVENTARIO DISPONIBLE"
+          ? item.notes.trim()
+          : "";
+      const notes = usefulNotes ? `Notas: ${usefulNotes}` : "";
       const reviewed = `Última revisión: ${fmtDate(item.lastCheckedAt)}`;
 
       doc.font("Helvetica-Bold").fontSize(9.5);
