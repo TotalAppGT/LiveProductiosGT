@@ -84,6 +84,9 @@ export async function PUT(
       lastCheckedAt,
       photos,
       unitValue,
+      repairQty,
+      repairResponsible,
+      lostQty,
     } = body;
 
     const previousStatus = existingItem.status;
@@ -105,6 +108,9 @@ export async function PUT(
         photos: photos !== undefined ? photos : undefined,
         photoUpdatedAt: photos !== undefined ? new Date() : undefined,
         unitValue: unitValue !== undefined ? (unitValue === null || unitValue === "" ? null : Number(unitValue)) : undefined,
+        repairQty: repairQty !== undefined ? Number(repairQty) || 0 : undefined,
+        repairResponsible: repairResponsible !== undefined ? repairResponsible : undefined,
+        lostQty: lostQty !== undefined ? Number(lostQty) || 0 : undefined,
       },
       include: {
         assignedTo: {

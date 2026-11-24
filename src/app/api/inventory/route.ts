@@ -95,6 +95,9 @@ export async function POST(request: NextRequest) {
       serialNumber,
       photos,
       unitValue,
+      repairQty,
+      repairResponsible,
+      lostQty,
     } = body;
 
     if (!name) {
@@ -110,6 +113,9 @@ export async function POST(request: NextRequest) {
         category: category || "OTRO",
         section: section || null,
         quantity: quantity || 1,
+        repairQty: Number(repairQty) || 0,
+        repairResponsible: repairResponsible || null,
+        lostQty: Number(lostQty) || 0,
         assignedToId: assignedToId || null,
         status: status || "DISPONIBLE",
         location: location || "Bodega Cristo Rey",
