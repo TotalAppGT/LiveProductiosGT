@@ -333,6 +333,9 @@ model InventoryItem {
   section       String?
   category      InventoryCategory @default(OTRO)
   quantity      Int               @default(1)
+  repairQty     Int               @default(0)
+  repairResponsible String?
+  lostQty       Int               @default(0)
   unitValue     Decimal?          @db.Decimal(10, 2)
   assignedToId  String?
   status        InventoryStatus   @default(DISPONIBLE)

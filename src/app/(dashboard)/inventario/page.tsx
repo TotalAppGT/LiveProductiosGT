@@ -6,7 +6,6 @@ import {
   Search,
   Package,
   AlertTriangle,
-  Download,
   Pencil,
   Trash2,
   Filter,
@@ -27,6 +26,7 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, cn } from "@/lib/utils";
 import { WAREHOUSES, INVENTORY_SECTIONS } from "@/lib/inventory";
+import { compressImageFile } from "@/lib/image-client";
 import type { InventoryItem, ApiResponse, PaginatedResponse } from "@/types";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -99,6 +99,34 @@ export default function InventarioPage() {
   const [reportStatus, setReportStatus] = useState("ALL");
   const [reportWarehouse, setReportWarehouse] = useState("");
   const [reportSection, setReportSection] = useState("");
+  const [photoTourOpen, setPhotoTourOpen] = useState(false);
+  const [photoTourBusy, setPhotoTourBusy] = useState(false);
+  const [photoTourSkip, setPhotoTourSkip] = useState<Set<string>>(new Set());
+
+  async function downloadLossReport() {
+    try {
+      toast.loading("Generando reporte de pérdidas.", { id: "loss" });
+      const res = await fetch("/api/inventory/loss-report?format=pdf", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        toast.error("Error al generar el reporte", { id: "loss" });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `equipo-perdido-${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Reporte de pérdidas descargado", { id: "loss" });
+    } catch {
+      toast.error("Error al descargar el reporte", { id: "loss" });
+    }
+  }
 
   async function downloadInventoryReport(format: "xlsx" | "pdf") {
     try {
@@ -334,6 +362,9 @@ export default function InventarioPage() {
     reparacion: items.filter((i) => i.status === "EN_REPARACION").length,
     danado: items.filter((i) => i.status === "DANADO" || i.status === "PERDIDO").length,
   };
+  const repairUnits = items.reduce((s, i) => s + (i.repairQty || 0), 0);
+  const lostUnits = items.reduce((s, i) => s + (i.lostQty || 0), 0);
+  const withPhoto = items.filter((i) => (i.photos?.length || 0) > 0).length;
 
   const damagedItems = items.filter(
     (i) => i.status === "DANADO" || i.status === "PERDIDO"
@@ -374,7 +405,7 @@ export default function InventarioPage() {
     const urls: string[] = [];
     for (const file of Array.from(files)) {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", await compressImageFile(file));
       const res = await fetch("/api/files/upload", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -408,6 +439,45 @@ export default function InventarioPage() {
     } finally {
       setReceiveSaving(false);
     }
+  }
+
+  const pendingPhotos = items.filter(
+    (i) => !(i.photos?.length) && !photoTourSkip.has(i.id)
+  );
+  const tourItem = pendingPhotos[0] || null;
+
+  async function uploadTourPhoto(files: FileList | null) {
+    if (!files?.length || !tourItem) return;
+    setPhotoTourBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", await compressImageFile(files[0]));
+      const up = await fetch("/api/files/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const uj = await up.json();
+      if (!uj.success) throw new Error(uj.error || "upload");
+      const res = await fetch(`/api/inventory/${tourItem.id}/photos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ photos: [uj.data.fileUrl] }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "save");
+      toast.success(`Foto guardada: ${tourItem.name}`);
+      await fetchItems();
+    } catch {
+      toast.error("No se pudo guardar la foto");
+    } finally {
+      setPhotoTourBusy(false);
+    }
+  }
+
+  function skipTourItem() {
+    if (!tourItem) return;
+    setPhotoTourSkip((prev) => new Set(prev).add(tourItem.id));
   }
 
   function setReconcileName(key: string, name: string) {
@@ -574,7 +644,7 @@ export default function InventarioPage() {
             Gestiona el equipo y materiales
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={syncInventory} isLoading={syncing}>
             Sincronizar Sheets
           </Button>
@@ -596,8 +666,18 @@ export default function InventarioPage() {
           <Button variant="outline" size="sm" onClick={() => setShowReport(true)}>
             📊 Reportes
           </Button>
-          <Button variant="outline" size="sm" leftIcon={<Download className="h-4 w-4" />}>
-            Exportar
+          <Button variant="outline" size="sm" onClick={downloadLossReport}>
+            📕 Pérdidas
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setPhotoTourSkip(new Set());
+              setPhotoTourOpen(true);
+            }}
+          >
+            📷 Fotos ({pendingPhotos.length})
           </Button>
           <Button
             variant="primary"
@@ -623,6 +703,26 @@ export default function InventarioPage() {
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{stat.label}</p>
           </Card>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card variant="bordered" className="p-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">🔧 En taller (Jose Marroquin)</p>
+          <p className="text-2xl font-bold text-orange-500 mt-1">{repairUnits}</p>
+          <p className="text-xs text-gray-400">unidades en la columna H de la hoja</p>
+        </Card>
+        <Card variant="bordered" className="p-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">❌ Equipo perdido</p>
+          <p className="text-2xl font-bold text-red-500 mt-1">{lostUnits}</p>
+          <p className="text-xs text-gray-400">unidades en la columna K de la hoja</p>
+        </Card>
+        <Card variant="bordered" className="p-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400">📷 Con foto</p>
+          <p className="text-2xl font-bold text-blue-500 mt-1">
+            {withPhoto}<span className="text-sm font-normal text-gray-400"> / {items.length}</span>
+          </p>
+          <p className="text-xs text-gray-400">ítems con al menos una foto</p>
+        </Card>
       </div>
 
       {byWarehouse.length > 0 && (
@@ -822,21 +922,48 @@ export default function InventarioPage() {
                     )}
                   >
                     <td className="px-4 py-3">
-                      <div>
-                        {item.section && (
-                          <p className="text-[10px] uppercase tracking-wide text-gray-400">{item.section}</p>
+                      <div className="flex items-start gap-3">
+                        {item.photos?.[0] ? (
+                          <a href={item.photos[0]} target="_blank" rel="noreferrer" title="Ver foto">
+                            <img
+                              src={item.photos[0]}
+                              alt={item.name}
+                              className="w-11 h-11 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
+                            />
+                          </a>
+                        ) : (
+                          <div className="w-11 h-11 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-300">
+                            <Camera className="h-4 w-4" />
+                          </div>
                         )}
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">
-                          {item.name}
-                        </p>
-                        {item.serialNumber && (
-                          <p className="text-xs text-gray-400">SN: {item.serialNumber}</p>
-                        )}
-                        {((item as any).photos?.length || 0) > 0 && (
-                          <span className="inline-flex items-center gap-1 text-xs text-blue-600 mt-0.5">
-                            <Camera className="h-3 w-3" /> {(item as any).photos.length} foto(s)
-                          </span>
-                        )}
+                        <div>
+                          {item.section && (
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400">{item.section}</p>
+                          )}
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">
+                            {item.name}
+                          </p>
+                          {item.serialNumber && (
+                            <p className="text-xs text-gray-400">SN: {item.serialNumber}</p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            {((item.photos?.length || 0) > 0) && (
+                              <span className="inline-flex items-center gap-1 text-xs text-blue-600">
+                                <Camera className="h-3 w-3" /> {item.photos!.length} foto(s)
+                              </span>
+                            )}
+                            {(item.repairQty || 0) > 0 && (
+                              <span className="inline-flex items-center gap-1 text-xs text-orange-600">
+                                🔧 {item.repairQty} en taller{item.repairResponsible ? ` · ${item.repairResponsible}` : ""}
+                              </span>
+                            )}
+                            {(item.lostQty || 0) > 0 && (
+                              <span className="inline-flex items-center gap-1 text-xs text-red-600">
+                                ❌ {item.lostQty} perdido(s)
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -911,15 +1038,38 @@ export default function InventarioPage() {
                 (item.status === "DANADO" || item.status === "PERDIDO") && "bg-red-50/50 dark:bg-red-900/5"
               )}
             >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  {item.section && (
-                    <p className="text-[10px] uppercase tracking-wide text-gray-400">{item.section}</p>
+              <div className="flex items-start justify-between mb-3 gap-2">
+                <div className="flex items-start gap-3">
+                  {item.photos?.[0] ? (
+                    <a href={item.photos[0]} target="_blank" rel="noreferrer">
+                      <img
+                        src={item.photos[0]}
+                        alt={item.name}
+                        className="w-12 h-12 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
+                      />
+                    </a>
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-300">
+                      <Camera className="h-5 w-5" />
+                    </div>
                   )}
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{item.name}</p>
-                  {item.serialNumber && (
-                    <p className="text-xs text-gray-400">SN: {item.serialNumber}</p>
-                  )}
+                  <div>
+                    {item.section && (
+                      <p className="text-[10px] uppercase tracking-wide text-gray-400">{item.section}</p>
+                    )}
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{item.name}</p>
+                    {item.serialNumber && (
+                      <p className="text-xs text-gray-400">SN: {item.serialNumber}</p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      {(item.repairQty || 0) > 0 && (
+                        <span className="text-xs text-orange-600">🔧 {item.repairQty} en taller</span>
+                      )}
+                      {(item.lostQty || 0) > 0 && (
+                        <span className="text-xs text-red-600">❌ {item.lostQty} perdido(s)</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <Badge size="sm" color={inventoryStatusColor(item.status)}>
                   {inventoryStatusLabel(item.status)}
@@ -969,7 +1119,7 @@ export default function InventarioPage() {
           </p>
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
             <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
-              O sincronizá directo desde la hoja fija <b>INVENTARIO DISPONIBLE</b>: actualiza cantidades exactas, crea nuevos y pone en 0 los que ya no están.
+              O sincronizá directo desde la hoja fija <b>INVENTARIO DISPONIBLE</b>: actualiza cantidades exactas, crea nuevos, pone en 0 los que ya no están y trae <b>taller (Jose Marroquin)</b> y <b>perdido</b> de las columnas H y K.
             </p>
             <Button size="sm" onClick={syncInventory} isLoading={syncing}>Sincronizar ahora</Button>
           </div>
@@ -1392,10 +1542,100 @@ export default function InventarioPage() {
               </select>
             </div>
           </div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/10">
+            <p className="text-sm font-medium text-red-700 dark:text-red-300">Equipo perdido</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mb-2">
+              PDF con foto, descripción y cantidad perdida de cada ítem (columna K de la hoja).
+            </p>
+            <Button variant="outline" onClick={downloadLossReport}>
+              📕 Descargar reporte de pérdidas
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-2 justify-end">
             <Button variant="outline" onClick={() => downloadInventoryReport("xlsx")}>📊 Descargar Excel</Button>
             <Button variant="outline" onClick={() => downloadInventoryReport("pdf")}>📄 Descargar PDF</Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={photoTourOpen}
+        onClose={() => setPhotoTourOpen(false)}
+        title="Fotos pendientes del inventario"
+        size="lg"
+      >
+        <div className="space-y-4 p-1">
+          <div className="flex items-center justify-between text-sm">
+            <p>
+              Faltan <b>{pendingPhotos.length}</b> ítems por fotografiar. Tomá una foto por ítem y
+              seguimos con el siguiente.
+            </p>
+            <Button variant="ghost" size="sm" onClick={() => setPhotoTourOpen(false)}>
+              Cerrar
+            </Button>
+          </div>
+
+          {tourItem ? (
+            <>
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-400">
+                  {tourItem.section || "SIN SECCIÓN"}
+                </p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {tourItem.name}
+                </p>
+                <p className="text-sm text-gray-500">
+                  Cantidad: {tourItem.quantity} ·{" "}
+                  {CATEGORY_LABELS[tourItem.category] || tourItem.category}
+                </p>
+                {(tourItem.repairQty || 0) > 0 && (
+                  <p className="text-sm text-orange-600">
+                    🔧 En taller: {tourItem.repairQty} u
+                    {tourItem.repairResponsible ? ` · ${tourItem.repairResponsible}` : ""}
+                  </p>
+                )}
+                {(tourItem.lostQty || 0) > 0 && (
+                  <p className="text-sm text-red-600">❌ Perdido: {tourItem.lostQty} u</p>
+                )}
+                {tourItem.notes && (
+                  <p className="text-xs text-gray-500 mt-1">{tourItem.notes}</p>
+                )}
+              </div>
+
+              <label
+                className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-white cursor-pointer ${
+                  photoTourBusy ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                <Camera className="h-5 w-5" />
+                {photoTourBusy ? "Guardando foto..." : "Tomar foto"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  disabled={photoTourBusy}
+                  onChange={(e) => {
+                    uploadTourPhoto(e.target.files);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </label>
+
+              <div className="flex justify-between gap-2">
+                <Button variant="ghost" onClick={skipTourItem}>
+                  Omitir este
+                </Button>
+                <Button variant="ghost" onClick={() => setPhotoTourOpen(false)}>
+                  Cerrar
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+              Todo el inventario tiene al menos una foto. 🎉
+            </div>
+          )}
         </div>
       </Modal>
 
@@ -1497,7 +1737,7 @@ function InventoryFormModal({
     const urls: string[] = [];
     for (const file of Array.from(files)) {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", await compressImageFile(file));
       const res = await fetch("/api/files/upload", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -1665,7 +1905,38 @@ function InventoryFormModal({
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Fotos del estado
           </label>
-          <input type="file" accept="image/*" multiple onChange={(e) => uploadPhoto(e.target.files)} className="text-sm" />
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => uploadPhoto(e.target.files)}
+              className="text-sm"
+            />
+            <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+              <Camera className="h-4 w-4" /> Tomar foto
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  uploadPhoto(e.target.files);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {((item?.repairQty || 0) > 0 || (item?.lostQty || 0) > 0) && (
+            <p className="text-xs text-gray-500 mt-1">
+              Sincronizado de la hoja:{" "}
+              {(item?.repairQty || 0) > 0
+                ? `${item?.repairQty} en taller${item?.repairResponsible ? ` (${item.repairResponsible})` : ""}`
+                : ""}
+              {(item?.repairQty || 0) > 0 && (item?.lostQty || 0) > 0 ? " · " : ""}
+              {(item?.lostQty || 0) > 0 ? `${item?.lostQty} perdido(s)` : ""}
+            </p>
+          )}
           {photos.length > 0 && (
             <div className="flex gap-2 mt-2 flex-wrap">
               {photos.map((p, i) => (

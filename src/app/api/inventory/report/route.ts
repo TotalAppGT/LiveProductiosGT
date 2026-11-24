@@ -68,15 +68,23 @@ export async function GET(request: NextRequest) {
     // ================= PDF =================
     if (format === "pdf") {
       const { doc, done } = createPdf();
-      pdfHeader(doc, "Reporte de Inventario", `Total: ${nf(all.length)} ítems · ${nf(totalUnits)} unidades${filtroTxt ? "  ·  " + filtroTxt : ""}`);
+      const tallerTotal = all.reduce((s, i) => s + (i.repairQty || 0), 0);
+      const perdidoTotal = all.reduce((s, i) => s + (i.lostQty || 0), 0);
+      pdfHeader(
+        doc,
+        "Reporte de Inventario",
+        `Total: ${nf(all.length)} ítems · ${nf(totalUnits)} unidades · En taller: ${nf(
+          tallerTotal
+        )} u · Perdidos: ${nf(perdidoTotal)} u${filtroTxt ? "  ·  " + filtroTxt : ""}`
+      );
 
       // KPI ejecutivo
       kpiRow(doc, [
         { label: "Ítems", value: nf(all.length) },
         { label: "Unidades", value: nf(totalUnits) },
         { label: "Disponible", value: nf(groupArr(GROUPS.DISPONIBLE).reduce((s, i) => s + i.quantity, 0)), color: "#15803d" },
-        { label: "En reparación", value: nf(groupArr(GROUPS.REPARACION).reduce((s, i) => s + i.quantity, 0)), color: "#c2410c" },
-        { label: "Dañado / Perdido", value: nf(groupArr(GROUPS.DANADO).reduce((s, i) => s + i.quantity, 0)), color: "#b91c1c" },
+        { label: "En taller", value: nf(all.reduce((s, i) => s + (i.repairQty || 0), 0)), color: "#c2410c" },
+        { label: "Perdido", value: nf(all.reduce((s, i) => s + (i.lostQty || 0), 0)), color: "#b91c1c" },
       ]);
 
       // Resúmenes

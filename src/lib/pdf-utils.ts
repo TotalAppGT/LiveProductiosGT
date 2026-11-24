@@ -1,5 +1,19 @@
 import PDFDocument from "pdfkit";
 
+// Convierte una foto guardada como data URL en Buffer para PDFKit.
+// Soporta JPEG/PNG; si es WebP u otro formato, devuelve null y se usa el
+// marcador "sin foto" en el reporte.
+export function dataUrlImage(url?: string | null): Buffer | null {
+  if (!url) return null;
+  const match = /^data:image\/(png|jpe?g);base64,([\s\S]+)$/i.exec(url);
+  if (!match) return null;
+  try {
+    return Buffer.from(match[2], "base64");
+  } catch {
+    return null;
+  }
+}
+
 export function createPdf() {
   const doc = new PDFDocument({ size: "LETTER", margin: 40, bufferPages: true });
   const chunks: Buffer[] = [];

@@ -201,12 +201,17 @@ export interface InventoryItem {
   warehouse?: string | null;
   category: InventoryCategory;
   quantity: number;
+  repairQty?: number;
+  repairResponsible?: string | null;
+  lostQty?: number;
   assignedToId?: string | null;
   status: InventoryStatus;
   location: InventoryLocation;
   notes?: string | null;
   lastCheckedAt?: string | null;
   serialNumber?: string | null;
+  photos?: string[];
+  unitValue?: number | null;
   createdAt: string;
   updatedAt: string;
   assignedTo?: User | null;

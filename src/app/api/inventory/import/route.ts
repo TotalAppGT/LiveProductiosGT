@@ -76,17 +76,24 @@ export async function POST(request: NextRequest) {
       await prisma.inventoryItem.deleteMany({});
     }
 
-    const data = items.map((it) => ({
-      name: it.name,
-      section: it.section,
-      category: it.category,
-      quantity: it.quantity,
-      location: it.location || "Bodega Cristo Rey",
-      status: "DISPONIBLE" as const,
-      serialNumber: it.serialNumber || null,
-      notes: it.notes || null,
-      lastCheckedAt: new Date(),
-    }));
+    const data = items.map((it) => {
+      const repairQty = Math.max(0, Number(it.repairQty) || 0);
+      const lostQty = Math.max(0, Number(it.lostQty) || 0);
+      return {
+        name: it.name,
+        section: it.section,
+        category: it.category,
+        quantity: it.quantity,
+        repairQty,
+        repairResponsible: repairQty > 0 ? it.repairResponsible || "Jose Marroquin" : null,
+        lostQty,
+        location: it.location || "Bodega Cristo Rey",
+        status: "DISPONIBLE" as const,
+        serialNumber: it.serialNumber || null,
+        notes: it.notes || null,
+        lastCheckedAt: new Date(),
+      };
+    });
 
     const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
     let created = 0;
@@ -111,6 +118,9 @@ export async function POST(request: NextRequest) {
             where: { id: ex.id },
             data: {
               quantity: d.quantity,
+              repairQty: d.repairQty,
+              repairResponsible: d.repairResponsible,
+              lostQty: d.lostQty,
               ...(d.section ? { section: d.section } : {}),
               ...(d.category ? { category: d.category } : {}),
               lastCheckedAt: new Date(),
@@ -173,16 +183,20 @@ export async function POST(request: NextRequest) {
     }).catch(() => {});
 
     const sections = Array.from(new Set(items.map((i) => i.section).filter(Boolean)));
+    const repairItems = data.filter((d) => d.repairQty > 0).length;
+    const lostItems = data.filter((d) => d.lostQty > 0).length;
     return NextResponse.json({
       success: true,
       created,
       updated,
       zeroed,
+      repairItems,
+      lostItems,
       mode,
       sections,
       message:
         mode === "sync"
-          ? `${created} nuevos · ${updated} actualizados · ${zeroed} en 0`
+          ? `${created} nuevos · ${updated} actualizados · ${zeroed} en 0 · ${repairItems} en taller · ${lostItems} perdidos`
           : mode === "merge"
           ? `${created} nuevos · ${updated} sumados`
           : `${created} ítems importados`,
