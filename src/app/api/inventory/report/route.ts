@@ -192,6 +192,11 @@ export async function GET(request: NextRequest) {
     rs.mergeCells("A2:D2");
     rs.getCell("A2").value = `Generado: ${new Date().toLocaleString("es-GT", { timeZone: "America/Guatemala" })}${filtroTxt ? "   ·   " + filtroTxt : ""}`;
     rs.getCell("A2").font = { size: 10, italic: true, color: { argb: "FF6B7280" } };
+    rs.mergeCells("A3:D3");
+    rs.getCell("A3").value = `En taller (Jose Marroquin): ${nf(
+      all.reduce((s, i) => s + (i.repairQty || 0), 0)
+    )} u   ·   Perdidos: ${nf(all.reduce((s, i) => s + (i.lostQty || 0), 0))} u`;
+    rs.getCell("A3").font = { size: 10, color: { argb: "FFB91C1C" } };
 
     let rr = 4;
     const kpiRowExcel = (title: string, value: string, col: number) => {
@@ -204,7 +209,7 @@ export async function GET(request: NextRequest) {
     kpiRowExcel("ÍTEMS", nf(all.length), 1);
     kpiRowExcel("UNIDADES", nf(totalUnits), 2);
     kpiRowExcel("DISPONIBLE", nf(groupArr(GROUPS.DISPONIBLE).reduce((s, i) => s + i.quantity, 0)), 3);
-    kpiRowExcel("REPARACIÓN", nf(groupArr(GROUPS.REPARACION).reduce((s, i) => s + i.quantity, 0)), 4);
+    kpiRowExcel("EN TALLER", nf(all.reduce((s, i) => s + (i.repairQty || 0), 0)), 4);
     rr += 3;
 
     const tableBlock = (title: string, m: Map<string, { items: number; units: number }>, firstColLabel: string) => {

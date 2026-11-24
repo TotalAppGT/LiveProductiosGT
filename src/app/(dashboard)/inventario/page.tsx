@@ -1644,6 +1644,10 @@ export default function InventarioPage() {
                 </Button>
               </div>
             </>
+          ) : photoTourSkip.size > 0 ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+              Omitiste {photoTourSkip.size} ítem(s). Cerrá y volvé a abrir “Fotos” para retomarlos.
+            </div>
           ) : (
             <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
               Todo el inventario tiene al menos una foto. 🎉
