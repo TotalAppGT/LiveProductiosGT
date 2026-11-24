@@ -962,7 +962,7 @@ export default function InventarioPage() {
                           <div className="flex flex-wrap items-center gap-2 mt-1">
                             {((item.photos?.length || 0) > 0) && (
                               <span className="inline-flex items-center gap-1 text-xs text-blue-600">
-                                <Camera className="h-3 w-3" /> {item.photos!.length} foto(s)
+                                <Camera className="h-3 w-3" /> Con foto
                               </span>
                             )}
                             {(item.repairQty || 0) > 0 && (
