@@ -102,6 +102,10 @@ export default function InventarioPage() {
   const [photoTourOpen, setPhotoTourOpen] = useState(false);
   const [photoTourBusy, setPhotoTourBusy] = useState(false);
   const [photoTourSkip, setPhotoTourSkip] = useState<Set<string>>(new Set());
+  const [photoSearchOpen, setPhotoSearchOpen] = useState(false);
+  const [photoSearch, setPhotoSearch] = useState("");
+  const [photoItem, setPhotoItem] = useState<InventoryItem | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   async function downloadLossReport() {
     try {
@@ -458,6 +462,13 @@ export default function InventarioPage() {
     (i) => !(i.photos?.length) && !photoTourSkip.has(i.id)
   );
   const tourItem = pendingPhotos[0] || null;
+  const photoMatches = (
+    photoSearch.trim()
+      ? items.filter((i) =>
+          i.name.toLowerCase().includes(photoSearch.trim().toLowerCase())
+        )
+      : items
+  ).slice(0, 30);
 
   async function uploadTourPhoto(files: FileList | null) {
     if (!files?.length || !tourItem) return;
@@ -491,6 +502,39 @@ export default function InventarioPage() {
   function skipTourItem() {
     if (!tourItem) return;
     setPhotoTourSkip((prev) => new Set(prev).add(tourItem.id));
+  }
+
+  async function uploadItemPhoto(files: FileList | null) {
+    if (!files?.length || !photoItem) return;
+    setPhotoBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", await compressImageFile(files[0]));
+      const up = await fetch("/api/files/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const uj = await up.json();
+      if (!uj.success) throw new Error(uj.error || "upload");
+      const res = await fetch(`/api/inventory/${photoItem.id}/photos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ photos: [uj.data.fileUrl] }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "save");
+      setPhotoItem({
+        ...photoItem,
+        photos: [...(photoItem.photos || []), uj.data.fileUrl],
+      });
+      toast.success(`Foto agregada: ${photoItem.name}`);
+      await fetchItems();
+    } catch {
+      toast.error("No se pudo agregar la foto");
+    } finally {
+      setPhotoBusy(false);
+    }
   }
 
   function setReconcileName(key: string, name: string) {
@@ -686,11 +730,22 @@ export default function InventarioPage() {
             variant="outline"
             size="sm"
             onClick={() => {
+              setPhotoSearch("");
+              setPhotoItem(null);
+              setPhotoSearchOpen(true);
+            }}
+          >
+            📷 Agregar foto
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
               setPhotoTourSkip(new Set());
               setPhotoTourOpen(true);
             }}
           >
-            📷 Fotos ({pendingPhotos.length})
+            📷 Fotos pendientes ({pendingPhotos.length})
           </Button>
           <Button
             variant="primary"
@@ -703,39 +758,20 @@ export default function InventarioPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {[
           { label: "Total", value: stats.total, color: "bg-blue-500/10 text-blue-400" },
           { label: "Disponibles", value: stats.disponible, color: "bg-green-500/10 text-green-400" },
           { label: "Asignados", value: stats.asignado, color: "bg-yellow-500/10 text-yellow-400" },
-          { label: "En Reparación", value: stats.reparacion, color: "bg-purple-500/10 text-purple-400" },
-          { label: "Dañados/Perdidos", value: stats.danado, color: "bg-red-500/10 text-red-400" },
+          { label: "En taller", value: repairUnits, color: "bg-orange-500/10 text-orange-400" },
+          { label: "Perdidos", value: lostUnits, color: "bg-red-500/10 text-red-400" },
+          { label: "Con foto", value: `${withPhoto}/${items.length}`, color: "bg-blue-500/10 text-blue-400" },
         ].map((stat) => (
           <Card key={stat.label} variant="bordered" className="p-3 text-center">
             <p className={cn("text-2xl font-bold", stat.color)}>{stat.value}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{stat.label}</p>
           </Card>
         ))}
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Card variant="bordered" className="p-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400">🔧 En taller (Jose Marroquin)</p>
-          <p className="text-2xl font-bold text-orange-500 mt-1">{repairUnits}</p>
-          <p className="text-xs text-gray-400">unidades en la columna H de la hoja</p>
-        </Card>
-        <Card variant="bordered" className="p-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400">❌ Equipo perdido</p>
-          <p className="text-2xl font-bold text-red-500 mt-1">{lostUnits}</p>
-          <p className="text-xs text-gray-400">unidades en la columna K de la hoja</p>
-        </Card>
-        <Card variant="bordered" className="p-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400">📷 Con foto</p>
-          <p className="text-2xl font-bold text-blue-500 mt-1">
-            {withPhoto}<span className="text-sm font-normal text-gray-400"> / {items.length}</span>
-          </p>
-          <p className="text-xs text-gray-400">ítems con al menos una foto</p>
-        </Card>
       </div>
 
       {byWarehouse.length > 0 && (
@@ -818,9 +854,11 @@ export default function InventarioPage() {
               <option value="">Todos los estados</option>
               <option value="DISPONIBLE">Disponible</option>
               <option value="ASIGNADO">Asignado</option>
-              <option value="EN_REPARACION">En Reparación</option>
+              <option value="TALLER">En taller (columna H)</option>
+              <option value="PERDIDO_K">Perdido (columna K)</option>
+              <option value="EN_REPARACION">En Reparación (sistema)</option>
               <option value="DANADO">Dañado</option>
-              <option value="PERDIDO">Perdido</option>
+              <option value="PERDIDO">Perdido (sistema)</option>
             </select>
             <select
               value={locationFilter}
@@ -866,9 +904,11 @@ export default function InventarioPage() {
             <option value="">Todos los estados</option>
             <option value="DISPONIBLE">Disponible</option>
             <option value="ASIGNADO">Asignado</option>
-            <option value="EN_REPARACION">En Reparación</option>
+            <option value="TALLER">En taller (columna H)</option>
+            <option value="PERDIDO_K">Perdido (columna K)</option>
+            <option value="EN_REPARACION">En Reparación (sistema)</option>
             <option value="DANADO">Dañado</option>
-            <option value="PERDIDO">Perdido</option>
+            <option value="PERDIDO">Perdido (sistema)</option>
             <option value="PENDIENTE">Pendiente aprobación</option>
             <option value="POR_RECIBIR">Por recibir</option>
           </select>
@@ -1014,6 +1054,14 @@ export default function InventarioPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => setPhotoItem(item)}
+                          title="Agregar foto"
+                        >
+                          <Camera className="h-4 w-4 text-blue-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => openEdit(item)}
                           title="Editar"
                         >
@@ -1110,6 +1158,9 @@ export default function InventarioPage() {
                 {item.status === "POR_RECIBIR" && (
                   <Button variant="success" size="sm" onClick={() => setReceivingItem(item)}>Recibir</Button>
                 )}
+                <Button variant="ghost" size="sm" onClick={() => setPhotoItem(item)} title="Agregar foto">
+                  <Camera className="h-4 w-4 text-blue-500" />
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => openEdit(item)} title="Editar">
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -1568,6 +1619,159 @@ export default function InventarioPage() {
             <Button variant="outline" onClick={() => downloadInventoryReport("xlsx")}>📊 Descargar Excel</Button>
             <Button variant="outline" onClick={() => downloadInventoryReport("pdf")}>📄 Descargar PDF</Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={photoSearchOpen || !!photoItem}
+        onClose={() => {
+          setPhotoSearchOpen(false);
+          setPhotoItem(null);
+        }}
+        title={photoItem ? `Foto: ${photoItem.name}` : "Agregar foto al inventario"}
+        size="lg"
+      >
+        <div className="space-y-4 p-1">
+          {photoItem ? (
+            <>
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                <p className="text-xs uppercase tracking-wide text-gray-400">
+                  {photoItem.section || "SIN SECCIÓN"}
+                </p>
+                <p className="font-semibold text-gray-900 dark:text-white">{photoItem.name}</p>
+                <p className="text-xs text-gray-500">
+                  Cantidad: {photoItem.quantity} ·{" "}
+                  {CATEGORY_LABELS[photoItem.category] || photoItem.category}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Esta foto queda como referencia del inventario: sirve para saber qué es el ítem.
+                </p>
+              </div>
+
+              {(photoItem.photos?.length || 0) > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {photoItem.photos!.map((p, i) => (
+                    <a key={i} href={p} target="_blank" rel="noreferrer">
+                      <img
+                        src={p}
+                        alt={photoItem.name}
+                        className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                      />
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-amber-600">Este ítem todavía no tiene foto.</p>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <label
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-white cursor-pointer ${
+                    photoBusy ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
+                  }`}
+                >
+                  <Camera className="h-4 w-4" />
+                  {photoBusy ? "Guardando..." : "Tomar foto"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    disabled={photoBusy}
+                    onChange={(e) => {
+                      uploadItemPhoto(e.target.files);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <Upload className="h-4 w-4" /> Subir archivo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={photoBusy}
+                    onChange={(e) => {
+                      uploadItemPhoto(e.target.files);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-between gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setPhotoSearchOpen(true);
+                    setPhotoItem(null);
+                  }}
+                >
+                  Buscar otro ítem
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setPhotoSearchOpen(false);
+                    setPhotoItem(null);
+                  }}
+                >
+                  Cerrar
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Input
+                label="Buscar ítem por nombre"
+                value={photoSearch}
+                onChange={(e) => setPhotoSearch(e.target.value)}
+                placeholder="Ej: consola, cable XLR, par LED..."
+                autoFocus
+              />
+              <div className="max-h-80 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+                {photoMatches.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setPhotoItem(item)}
+                    className="w-full flex items-center gap-3 p-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800/60"
+                  >
+                    {item.photos?.[0] ? (
+                      <img
+                        src={item.photos[0]}
+                        alt={item.name}
+                        className="w-10 h-10 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-300">
+                        <Camera className="h-4 w-4" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {item.name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {item.section || "Sin sección"} · Cant. {item.quantity}
+                      </p>
+                    </div>
+                    <span className="text-xs text-blue-600 whitespace-nowrap">
+                      {(item.photos?.length || 0) > 0 ? "Agregar otra" : "Agregar foto"}
+                    </span>
+                  </button>
+                ))}
+                {photoMatches.length === 0 && (
+                  <p className="p-4 text-sm text-gray-500">
+                    No se encontró un ítem con ese nombre. Probá con otra palabra.
+                  </p>
+                )}
+              </div>
+              <p className="text-xs text-gray-400">
+                {photoMatches.length} resultado(s). Buscá por el nombre tal como está en el inventario.
+              </p>
+            </>
+          )}
         </div>
       </Modal>
 

@@ -26,7 +26,9 @@ export async function GET(request: NextRequest) {
     const where: Prisma.InventoryItemWhereInput = {};
 
     if (category) where.category = category as any;
-    if (status) where.status = status as any;
+    if (status === "TALLER") where.repairQty = { gt: 0 };
+    else if (status === "PERDIDO_K") where.lostQty = { gt: 0 };
+    else if (status) where.status = status as any;
     if (location) where.location = location as any;
 
     if (search) {

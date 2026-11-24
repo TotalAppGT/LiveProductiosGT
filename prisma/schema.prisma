@@ -592,6 +592,7 @@ model WorkshopItem {
   issue           String
   diagnostic      String?
   status          String        @default("EN_REVISION")
+  source          String?       // HOJA_H = importado de la columna H (taller)
   quantity        Int           @default(1)
   inventoryItemId String?
   inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])

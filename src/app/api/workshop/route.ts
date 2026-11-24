@@ -53,6 +53,20 @@ export async function POST(request: NextRequest) {
         select: { id: true, name: true, category: true, quantity: true, status: true, warehouse: true },
       });
       if (!inv) return NextResponse.json({ success: false, error: "Ítem de inventario no encontrado" }, { status: 404 });
+
+      const openTicket = await prisma.workshopItem.findFirst({
+        where: {
+          inventoryItemId: inv.id,
+          status: { notIn: ["DEVUELTO_A_BODEGA", "DESCARTADO"] },
+        },
+        select: { id: true },
+      });
+      if (openTicket) {
+        return NextResponse.json(
+          { success: false, error: "Este ítem ya tiene un ticket de taller abierto" },
+          { status: 400 }
+        );
+      }
     }
 
     const req = await prisma.approvalRequest.create({

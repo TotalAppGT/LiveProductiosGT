@@ -99,6 +99,9 @@ export async function POST(request: NextRequest) {
     let created = 0;
     let updated = 0;
     let zeroed = 0;
+    let workshopCreated = 0;
+    let workshopUpdated = 0;
+    let workshopClosed = 0;
 
     if (mode === "sync") {
       // La hoja es la fuente: actualiza la cantidad exacta (no suma) y crea nuevos.
@@ -137,10 +140,97 @@ export async function POST(request: NextRequest) {
         if (missing.length) {
           await prisma.inventoryItem.updateMany({
             where: { id: { in: missing.map((m) => m.id) } },
-            data: { quantity: 0, lastCheckedAt: new Date() },
+            data: {
+              quantity: 0,
+              repairQty: 0,
+              repairResponsible: null,
+              lostQty: 0,
+              lastCheckedAt: new Date(),
+            },
           });
           zeroed = missing.length;
         }
+      }
+
+      // Reflejar la columna H en el módulo de Taller: crea/actualiza un
+      // ticket por ítem, asignado a Jose Marroquin, y cierra los que ya no
+      // están en taller según la hoja.
+      const jose = await prisma.user.findFirst({
+        where: { name: { contains: "Marroquin", mode: "insensitive" }, active: true },
+        select: { id: true },
+      });
+      const repairInventory = await prisma.inventoryItem.findMany({
+        where: { repairQty: { gt: 0 } },
+        select: {
+          id: true,
+          name: true,
+          category: true,
+          repairQty: true,
+          repairResponsible: true,
+        },
+      });
+      const autoTickets = await prisma.workshopItem.findMany({
+        where: { source: "HOJA_H" },
+      });
+      const openAuto = new Map<string, (typeof autoTickets)[number]>();
+      for (const ticket of autoTickets) {
+        if (
+          ticket.inventoryItemId &&
+          !["DEVUELTO_A_BODEGA", "DESCARTADO"].includes(ticket.status)
+        ) {
+          openAuto.set(ticket.inventoryItemId, ticket);
+        }
+      }
+
+      const repairIds = new Set<string>();
+      for (const inv of repairInventory) {
+        repairIds.add(inv.id);
+        const existingTicket = openAuto.get(inv.id);
+        if (existingTicket) {
+          await prisma.workshopItem.update({
+            where: { id: existingTicket.id },
+            data: {
+              quantity: inv.repairQty,
+              ...(jose?.id ? { assignedToId: jose.id } : {}),
+            },
+          });
+          workshopUpdated++;
+        } else {
+          await prisma.workshopItem.create({
+            data: {
+              inventoryItemId: inv.id,
+              itemName: inv.name,
+              category: inv.category,
+              quantity: inv.repairQty,
+              issue: "En taller según hoja (columna H)",
+              status: "EN_REVISION",
+              source: "HOJA_H",
+              assignedToId: jose?.id || null,
+              deliveredAt: new Date(),
+              createdById: auth.payload.userId,
+              notes: `Importado de INVENTARIO DISPONIBLE · Responsable: ${
+                inv.repairResponsible || "Jose Marroquin"
+              }`,
+            },
+          });
+          workshopCreated++;
+        }
+      }
+
+      for (const ticket of autoTickets) {
+        if (!ticket.inventoryItemId || repairIds.has(ticket.inventoryItemId)) continue;
+        if (!["EN_REVISION", "EN_REPARACION"].includes(ticket.status)) continue;
+        await prisma.workshopItem.update({
+          where: { id: ticket.id },
+          data: {
+            status: "DEVUELTO_A_BODEGA",
+            completedAt: new Date(),
+            notes: [ticket.notes, "Cerrado por sincronización: columna H en 0"]
+              .filter(Boolean)
+              .join(" · "),
+          },
+        });
+        workshopClosed++;
       }
     } else if (mode === "merge") {
       // Sumar/agregar sin borrar: si el ítem existe (por nombre) se SUMA la cantidad; si no, se crea.
@@ -192,11 +282,14 @@ export async function POST(request: NextRequest) {
       zeroed,
       repairItems,
       lostItems,
+      workshopCreated,
+      workshopUpdated,
+      workshopClosed,
       mode,
       sections,
       message:
         mode === "sync"
-          ? `${created} nuevos · ${updated} actualizados · ${zeroed} en 0 · ${repairItems} en taller · ${lostItems} perdidos`
+          ? `${created} nuevos · ${updated} actualizados · ${zeroed} en 0 · ${repairItems} en taller · ${lostItems} perdidos · Taller: ${workshopCreated} nuevos, ${workshopUpdated} actualizados, ${workshopClosed} cerrados`
           : mode === "merge"
           ? `${created} nuevos · ${updated} sumados`
           : `${created} ítems importados`,
