@@ -91,7 +91,7 @@ export default function TallerPage() {
       const [woRes, uRes, iRes, whRes] = await Promise.all([
         fetch("/api/workshop", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/users/list", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/inventory?status=DISPONIBLE&limit=500", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/inventory?status=DISPONIBLE&limit=500&thumb=1", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/warehouses", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       const [woJson, uJson, iJson, whJson] = await Promise.all([woRes.json(), uRes.json(), iRes.json(), whRes.json()]);

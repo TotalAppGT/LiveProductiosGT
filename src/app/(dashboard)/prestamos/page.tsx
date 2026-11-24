@@ -42,7 +42,7 @@ export default function PrestamosPage() {
     try {
       const [lRes, iRes, uRes] = await Promise.all([
         fetch("/api/loans", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/inventory?status=DISPONIBLE&limit=500", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/inventory?status=DISPONIBLE&limit=500&thumb=1", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/users/list", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       const [lJson, iJson, uJson] = await Promise.all([lRes.json(), iRes.json(), uRes.json()]);

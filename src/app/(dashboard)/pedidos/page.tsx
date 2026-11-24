@@ -1599,7 +1599,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
     setEditItems(items.map((it) => ({ name: it.name, quantity: it.quantity, category: it.category, inventoryItemId: it.inventoryItemId })));
     setEditing(true);
     try {
-      const res = await fetch("/api/inventory?limit=1000", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch("/api/inventory?limit=1000&thumb=1", { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
       if (json.success) setInvList(json.data);
     } catch {

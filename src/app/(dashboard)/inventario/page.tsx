@@ -385,6 +385,18 @@ export default function InventarioPage() {
       .sort((a, b) => a.section.localeCompare(b.section));
   })();
 
+  async function openEdit(item: InventoryItem) {
+    try {
+      const res = await fetch(`/api/inventory/${item.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      setEditingItem(json.success ? json.data : item);
+    } catch {
+      setEditingItem(item);
+    }
+  }
+
   async function deleteItem(id: string) {
     if (!confirm("¿Estás seguro de eliminar este ítem?")) return;
     try {
@@ -1002,7 +1014,7 @@ export default function InventarioPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setEditingItem(item)}
+                          onClick={() => openEdit(item)}
                           title="Editar"
                         >
                           <Pencil className="h-4 w-4" />
@@ -1098,7 +1110,7 @@ export default function InventarioPage() {
                 {item.status === "POR_RECIBIR" && (
                   <Button variant="success" size="sm" onClick={() => setReceivingItem(item)}>Recibir</Button>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => setEditingItem(item)} title="Editar">
+                <Button variant="ghost" size="sm" onClick={() => openEdit(item)} title="Editar">
                   <Pencil className="h-4 w-4" />
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => deleteItem(item.id)} title="Eliminar">
