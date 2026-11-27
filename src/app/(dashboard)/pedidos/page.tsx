@@ -40,6 +40,7 @@ export default function PedidosPage() {
   const { user, token } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [reportDate, setReportDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }));
+  const [singleReportId, setSingleReportId] = useState("");
   const reportDateOptions = (() => {
     const map = new Map<string, { date: string; count: number }>();
     for (const o of orders) {
@@ -64,6 +65,13 @@ export default function PedidosPage() {
     if (!reportDateOptions.some((o) => o.date === reportDate)) {
       setReportDate(reportDateOptions[0].date);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
+
+  // Cuadro por defecto para el reporte individual.
+  useEffect(() => {
+    if (orders.length === 0) return;
+    if (!orders.some((o) => o.id === singleReportId)) setSingleReportId(orders[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders]);
 
@@ -224,23 +232,29 @@ export default function PedidosPage() {
     }
   }
 
-  function comparePayload() {
-    const source = compareSource === "auto" || compareIds.includes(compareSource) ? compareSource : "auto";
-    const target = compareTarget === "auto" || compareTarget === "largest" || compareIds.includes(compareTarget) ? compareTarget : "auto";
+  function comparePayload(idsArg?: string[]) {
+    const ids = idsArg && idsArg.length > 0 ? idsArg : compareIds;
+    const source = compareSource === "auto" || ids.includes(compareSource) ? compareSource : "auto";
+    const target = compareTarget === "auto" || compareTarget === "largest" || ids.includes(compareTarget) ? compareTarget : "auto";
     return {
-      ids: compareIds,
+      ids,
       ...(source !== "auto" ? { sourceId: source } : {}),
       ...(target === "largest" ? { targetMode: "largest" } : target !== "auto" ? { targetId: target } : {}),
     };
   }
 
-  async function openCompare() {
-    if (compareIds.length < 2) return toast.error("Seleccioná al menos 2 cuadros");
+  async function openCompare(idsArg?: string[]) {
+    const ids = idsArg && idsArg.length > 0 ? idsArg : compareIds;
+    if (ids.length < 1) return toast.error("Seleccioná al menos 1 cuadro");
     setCompareLoading(true);
     try {
-      const res = await fetch("/api/orders/compare", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(comparePayload()) });
+      const res = await fetch("/api/orders/compare", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(comparePayload(ids)) });
       const json = await res.json();
-      if (json.success) { setCompareData(json.data); setShowCompare(true); }
+      if (json.success) {
+        setCompareIds(ids);
+        setCompareData(json.data);
+        setShowCompare(true);
+      }
       else toast.error(json.error || "Error");
     } catch {
       toast.error("Error al comparar");
@@ -249,8 +263,34 @@ export default function PedidosPage() {
     }
   }
 
+  async function evaluateSingle() {
+    if (!singleReportId) return toast.error("Elegí un cuadro");
+    await openCompare([singleReportId]);
+  }
+
+  async function purchasesSingle() {
+    if (!singleReportId) return toast.error("Elegí un cuadro");
+    setPurchasesLoading(true);
+    try {
+      const res = await fetch("/api/orders/compare/purchases-sheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: [singleReportId] }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(`Compras / renta de este cuadro actualizado (${json.data.tabName || "hoja"})`);
+        if (json.data.url) window.open(json.data.url, "_blank");
+      } else toast.error(json.error || "Error al crear compras");
+    } catch {
+      toast.error("Error al crear compras");
+    } finally {
+      setPurchasesLoading(false);
+    }
+  }
+
   async function downloadCompare() {
-    if (compareIds.length < 2) return;
+    if (compareIds.length < 1) return;
     try {
       const res = await fetch("/api/orders/compare/report", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(comparePayload()) });
       if (!res.ok) { toast.error("Error al generar el Excel"); return; }
@@ -269,7 +309,7 @@ export default function PedidosPage() {
   }
 
   async function openSheets() {
-    if (compareIds.length < 2) return;
+    if (compareIds.length < 1) return;
     // Abrir la pestaña en el clic (antes del await) evita el bloqueo de pop-ups.
     const win = window.open("", "_blank");
     setSheetLoading(true);
@@ -293,7 +333,7 @@ export default function PedidosPage() {
   }
 
   async function openNewSheet() {
-    if (compareIds.length < 2) return;
+    if (compareIds.length < 1) return;
     const win = window.open("", "_blank");
     setNewSheetLoading(true);
     try {
@@ -320,7 +360,7 @@ export default function PedidosPage() {
   }
 
   async function openCompactSheet() {
-    if (compareIds.length < 2) return;
+    if (compareIds.length < 1) return;
     const win = window.open("", "_blank");
     setCompactSheetLoading(true);
     try {
@@ -347,7 +387,7 @@ export default function PedidosPage() {
   }
 
   async function openPurchasesSheets() {
-    if (compareIds.length < 2) return;
+    if (compareIds.length < 1) return;
     const win = window.open("", "_blank");
     setPurchasesLoading(true);
     try {
@@ -374,7 +414,7 @@ export default function PedidosPage() {
   }
 
   async function downloadComparePdf() {
-    if (compareIds.length < 2) return;
+    if (compareIds.length < 1) return;
     setPdfLoading(true);
     try {
       const res = await fetch("/api/orders/compare/pdf", {
@@ -400,7 +440,7 @@ export default function PedidosPage() {
   }
 
   async function downloadCompactPdf() {
-    if (compareIds.length < 2) return;
+    if (compareIds.length < 1) return;
     setCompactPdfLoading(true);
     try {
       const res = await fetch("/api/orders/compare/pdf-compact", {
@@ -731,6 +771,8 @@ export default function PedidosPage() {
 
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
+  const singleOrder = orders.find((o) => o.id === singleReportId) || null;
+
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -799,6 +841,47 @@ export default function PedidosPage() {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/20">
+        <span className="text-sm font-medium text-emerald-900 dark:text-emerald-100">Reporte de un solo cuadro:</span>
+        <select
+          value={singleReportId}
+          onChange={(e) => setSingleReportId(e.target.value)}
+          className="min-w-[240px] rounded-lg border border-emerald-300 bg-white px-2 py-1.5 text-xs text-gray-900 dark:border-emerald-700 dark:bg-gray-800 dark:text-white"
+        >
+          <option value="">Elegí un cuadro</option>
+          {orders.map((o) => (
+            <option key={o.id} value={o.id}>
+              #{o.orderNumber} · {o.eventName}{o.eventDate ? ` · ${new Date(o.eventDate).toLocaleDateString("es-GT", { timeZone: "America/Guatemala", day: "2-digit", month: "2-digit" })}` : ""}
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!singleReportId}
+          onClick={() => downloadReport(`/api/orders/report?format=xlsx&ids=${singleReportId}&t=${Date.now()}`, `cuadro-${singleOrder?.orderNumber || "informe"}.xlsx`)}
+        >
+          📊 Excel
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!singleReportId}
+          onClick={() => downloadReport(`/api/orders/report?format=pdf&ids=${singleReportId}&t=${Date.now()}`, `cuadro-${singleOrder?.orderNumber || "informe"}.pdf`)}
+        >
+          📄 PDF
+        </Button>
+        <Button variant="outline" size="sm" disabled={!singleReportId} onClick={evaluateSingle} isLoading={compareLoading}>
+          👁 Ver y evaluar
+        </Button>
+        <Button variant="outline" size="sm" disabled={!singleReportId} onClick={purchasesSingle} isLoading={purchasesLoading}>
+          🛒 Compras / Renta
+        </Button>
+        <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
+          Necesidades, trasiego y compras solo de este cuadro.
+        </span>
+      </div>
+
       <div className="flex gap-1 mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
         <button onClick={() => setTab("cuadros")} className={`px-4 py-2 rounded-md text-sm font-medium ${tab === "cuadros" ? "bg-white dark:bg-gray-700 shadow" : "text-gray-600 dark:text-gray-300"}`}>📋 Cuadros</button>
         <button onClick={() => setTab("plantillas")} className={`px-4 py-2 rounded-md text-sm font-medium ${tab === "plantillas" ? "bg-white dark:bg-gray-700 shadow" : "text-gray-600 dark:text-gray-300"}`}>📁 Plantillas ({templates.length})</button>
@@ -807,7 +890,11 @@ export default function PedidosPage() {
       {tab === "cuadros" && (<>
       {compareIds.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
-          <span className="text-sm text-blue-800 dark:text-blue-200">{compareIds.length} cuadro(s) seleccionado(s){selectedDaysLabel ? ` · Días: ${selectedDaysLabel}` : ""}. Elegí 2 o más; podés fijar Desde y Hacia.</span>
+          <span className="text-sm text-blue-800 dark:text-blue-200">
+            {compareIds.length === 1
+              ? `1 cuadro seleccionado${selectedDaysLabel ? ` · Día: ${selectedDaysLabel}` : ""} — evaluación individual de necesidades, trasiego y compras.`
+              : `${compareIds.length} cuadros seleccionados${selectedDaysLabel ? ` · Días: ${selectedDaysLabel}` : ""}. Elegí 1 o más; podés fijar Desde y Hacia.`}
+          </span>
           {compareIds.length >= 2 && (
             <select
               value={compareSourceValue}
@@ -845,7 +932,7 @@ export default function PedidosPage() {
               })}
             </select>
           )}
-          <Button size="sm" onClick={openCompare} isLoading={compareLoading} disabled={compareIds.length < 2 || compareDirectionInvalid}>Comparar / Trasiego</Button>
+          <Button size="sm" onClick={() => openCompare()} isLoading={compareLoading} disabled={compareIds.length < 1 || compareDirectionInvalid}>Comparar / Trasiego</Button>
           <Button size="sm" variant="ghost" onClick={() => { setCompareIds([]); setCompareSource("auto"); setCompareTarget("auto"); }}>Limpiar</Button>
         </div>
       )}
@@ -1263,12 +1350,18 @@ export default function PedidosPage() {
             {compareData.mode === "multi" ? (
               <>
                 <div className="text-sm text-gray-700 dark:text-gray-200">
-                  <b>{compareData.events.length} cuadros seleccionados</b>
+                  <b>
+                    {compareData.events.length === 1
+                      ? `#${compareData.events[0].orderNumber} ${compareData.events[0].eventName}`
+                      : `${compareData.events.length} cuadros seleccionados`}
+                  </b>
                   <span className="text-xs text-gray-500"> · análisis de inventario, trasiego y renta/compra</span>
                 </div>
-                <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
-                  Origen: #{compareData.source.orderNumber} {compareData.source.eventName} · Destino: #{compareData.target.orderNumber} {compareData.target.eventName}
-                </p>
+                {compareData.events.length > 1 && (
+                  <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                    Origen: #{compareData.source.orderNumber} {compareData.source.eventName} · Destino: #{compareData.target.orderNumber} {compareData.target.eventName}
+                  </p>
+                )}
                 {compareData.directionWarning && (
                   <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
                     {compareData.directionWarning}

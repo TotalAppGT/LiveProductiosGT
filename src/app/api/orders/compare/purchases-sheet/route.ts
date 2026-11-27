@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const ids = Array.isArray(body?.ids) ? body.ids.map(String) : [];
-    if (ids.length < 2) return NextResponse.json({ success: false, error: "Seleccioná al menos 2 cuadros" }, { status: 400 });
+    if (ids.length < 1) return NextResponse.json({ success: false, error: "Seleccioná al menos 1 cuadro" }, { status: 400 });
 
     const spreadsheetId = await getPurchasesSheetId();
     if (!spreadsheetId) {

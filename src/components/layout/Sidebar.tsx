@@ -34,6 +34,7 @@ import {
   ShoppingCart,
   ArrowRightLeft,
   Receipt,
+  Route,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
@@ -98,6 +99,12 @@ const navItems: NavItem[] = [
     label: "Operaciones",
     href: "/operaciones",
     icon: CalendarClock,
+    roles: ["DUENO", "ADMIN", "JEFE"],
+  },
+  {
+    label: "Logística",
+    href: "/logistica",
+    icon: Route,
     roles: ["DUENO", "ADMIN", "JEFE"],
   },
   {

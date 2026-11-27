@@ -733,8 +733,55 @@ model Order {
   bitacora         BitacoraEntry[]
   reintegros       OrderReintegro[]
   charges          InternalCharge[]
+  logisticsPlan    LogisticsPlan?
 
   @@unique([orderNumber])
+}
+
+// Planificación logística por cuadro: horarios, transporte, piloto, staff y pendientes.
+model LogisticsPlan {
+  id             String   @id @default(cuid())
+  orderId        String   @unique
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  reunionAt      String?
+  departureAt    String?
+  arrivalAt      String?
+  montageAt      String?
+  soundcheckAt   String?
+  eventStartAt   String?
+  eventEndAt     String?
+  showAt         String?
+  showEndAt      String?
+  dismantleAt    String?
+  dismantleEndAt String?
+
+  vehicleId      String?
+  vehicleLabel   String?
+  driverId       String?
+  driverName     String?
+
+  staffVehicleId    String?
+  staffVehicleLabel String?
+  staffDriverId     String?
+  staffDriverName   String?
+  staffPickup    String?
+  staffPickupAt  String?
+
+  musicianMeetPoint     String?
+  musicianDepartureAt   String?
+  musicianVehicleId     String?
+  musicianVehicleLabel  String?
+  musicianDriverId      String?
+  musicianDriverName    String?
+
+  providers      String?  @db.Text
+  notes          String?  @db.Text
+  questions      String?  @db.Text
+  status         String   @default("PENDIENTE")
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model OrderItem {

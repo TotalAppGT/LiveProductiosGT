@@ -188,13 +188,13 @@ type Inv = { id: string; name: string; quantity: number; section?: string | null
 
 export async function compareOrders(ids: string[], options?: CompareOptions): Promise<CompareResult> {
   const unique = Array.from(new Set(ids.filter(Boolean)));
-  if (unique.length < 2) throw new Error("Seleccioná al menos 2 cuadros");
+  if (unique.length < 1) throw new Error("Seleccioná al menos 1 cuadro");
 
   const orders = await prisma.order.findMany({
     where: { id: { in: unique } },
     include: { items: true },
   });
-  if (orders.length < 2) throw new Error("No se encontraron los cuadros");
+  if (orders.length < 1) throw new Error("No se encontraron los cuadros");
 
   const sorted = [...orders].sort((a, b) => {
     const da = a.eventDate ? new Date(a.eventDate).getTime() : 0;
@@ -245,6 +245,7 @@ export async function compareOrders(ids: string[], options?: CompareOptions): Pr
     }
   }
 
+  if (ordered.length === 1) return compareMulti(ordered, byId, byName, directionWarning);
   if (ordered.length > 2) return compareMulti(ordered, byId, byName, directionWarning);
 
   const source = ordered[0];
