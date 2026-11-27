@@ -1380,35 +1380,10 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
   const [destination, setDestination] = useState("Bodega Cristo Rey");
   const [receiving, setReceiving] = useState(false);
   const [sheetViewMode, setSheetViewMode] = useState<"date" | "selected">("date");
-  const [invList, setInvList] = useState<any[]>(inventory);
 
   useEffect(() => {
     setSheetViewMode("date");
   }, [order.id]);
-
-  // El inventario del padre puede venir de una carga vieja. Al abrir el cuadro
-  // se refresca para que "Tengo" no muestre cantidades en cero por caché.
-  useEffect(() => {
-    setInvList(inventory);
-  }, [inventory]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/inventory?limit=1000&thumb=1", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const json = await res.json();
-        if (alive && json.success && Array.isArray(json.data)) setInvList(json.data);
-      } catch {
-        // se queda con el inventario del padre
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [token, order.id]);
 
   useEffect(() => {
     (async () => {
@@ -1629,8 +1604,32 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
   const [editItems, setEditItems] = useState<any[]>([]);
-  const [invList, setInvList] = useState<any[]>([]);
+  const [invList, setInvList] = useState<any[]>(inventory);
   const [addSel, setAddSel] = useState("");
+
+  // El inventario del padre puede venir de una carga vieja. Al abrir el cuadro
+  // se refresca para que "Tengo" no muestre cantidades en cero por caché.
+  useEffect(() => {
+    setInvList(inventory);
+  }, [inventory]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/inventory?limit=1000&thumb=1", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await res.json();
+        if (alive && json.success && Array.isArray(json.data)) setInvList(json.data);
+      } catch {
+        // se queda con el inventario del padre
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [token, order.id]);
   const [savingEdit, setSavingEdit] = useState(false);
 
   async function startEdit() {
