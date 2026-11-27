@@ -1380,10 +1380,35 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
   const [destination, setDestination] = useState("Bodega Cristo Rey");
   const [receiving, setReceiving] = useState(false);
   const [sheetViewMode, setSheetViewMode] = useState<"date" | "selected">("date");
+  const [invList, setInvList] = useState<any[]>(inventory);
 
   useEffect(() => {
     setSheetViewMode("date");
   }, [order.id]);
+
+  // El inventario del padre puede venir de una carga vieja. Al abrir el cuadro
+  // se refresca para que "Tengo" no muestre cantidades en cero por caché.
+  useEffect(() => {
+    setInvList(inventory);
+  }, [inventory]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/inventory?limit=1000&thumb=1", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await res.json();
+        if (alive && json.success && Array.isArray(json.data)) setInvList(json.data);
+      } catch {
+        // se queda con el inventario del padre
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [token, order.id]);
 
   useEffect(() => {
     (async () => {
@@ -1700,7 +1725,7 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
     }
   }
   const sheetRows = Array.from(rowMap.values()).map((r) => {
-    const invs = inventory.filter((i: any) => (r.inventoryItemId && i.id === r.inventoryItemId) || normalize(i.name) === normalize(r.name));
+    const invs = invList.filter((i: any) => (r.inventoryItemId && i.id === r.inventoryItemId) || normalize(i.name) === normalize(r.name));
     const have = invs.filter((i: any) => i.status === "DISPONIBLE").reduce((s: number, i: any) => s + Number(i.quantity || 0), 0);
     const shortfall = Math.max(0, r.need - have);
     const action = shortfall === 0 ? "OK" : invs.length === 0 ? "Consultar" : have > 0 ? "Rentar" : "Comprar";
