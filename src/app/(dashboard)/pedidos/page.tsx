@@ -478,11 +478,22 @@ export default function PedidosPage() {
   async function syncCuadros() {
     if (syncing) return;
     setSyncing(true);
+    // El botón rápido respeta el alcance actual: desde el cuadro más antiguo
+    // cargado. Así no vuelve a traer eventos viejos que ya se quitaron.
+    const earliest = orders
+      .map((o) =>
+        o.eventDate
+          ? new Date(o.eventDate).toLocaleDateString("en-CA", { timeZone: "America/Guatemala" })
+          : ""
+      )
+      .filter(Boolean)
+      .sort()[0];
+    const scope = earliest ? { from: earliest } : {};
     try {
       const preview = await fetch("/api/orders/import-sheets", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ source: "google", mode: "preview", replace: true }),
+        body: JSON.stringify({ source: "google", mode: "preview", replace: true, ...scope }),
       });
       const pj = await preview.json();
       if (!pj.success) {
@@ -492,7 +503,7 @@ export default function PedidosPage() {
       const res = await fetch("/api/orders/import-sheets", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ source: "google", mode: "apply", replace: true }),
+        body: JSON.stringify({ source: "google", mode: "apply", replace: true, ...scope }),
       });
       const json = await res.json();
       if (!json.success) {
@@ -767,7 +778,13 @@ export default function PedidosPage() {
           <Button variant="outline" onClick={() => downloadReport("/api/orders/template", "plantilla-cuadros.xlsx")}>
             ⬇️ Plantilla Excel
           </Button>
-          <Button variant="outline" onClick={syncCuadros} isLoading={syncing} disabled={syncing}>
+          <Button
+            variant="outline"
+            onClick={syncCuadros}
+            isLoading={syncing}
+            disabled={syncing}
+            title="Actualiza desde la fecha del cuadro más antiguo cargado"
+          >
             <RefreshCw className="w-4 h-4 mr-1" /> Actualizar cuadros
           </Button>
           <Button variant="outline" onClick={() => setShowBulk(true)}>
@@ -1041,7 +1058,7 @@ export default function PedidosPage() {
 
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
             <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
-              Modo espejo: la hoja es la fuente de verdad. Agrega, actualiza ítems/cantidades y elimina cuadros que ya no estén. Respeta <b>Desde/Hasta</b> si los usás. Los cuadros en operación o con historial no se eliminan solos.
+              Modo espejo: la hoja es la fuente de verdad. Agrega, actualiza ítems/cantidades y elimina cuadros que ya no estén. Respeta <b>Desde/Hasta</b> si los usás. El botón rápido <b>Actualizar cuadros</b> usa como Desde la fecha del cuadro más antiguo cargado. Los cuadros en operación o con historial no se eliminan solos.
             </p>
             <Button variant="outline" size="sm" onClick={previewBulkGoogle} isLoading={bulkLoading}>
               Cargar desde Google Sheets
