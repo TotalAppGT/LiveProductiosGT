@@ -1379,6 +1379,11 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [destination, setDestination] = useState("Bodega Cristo Rey");
   const [receiving, setReceiving] = useState(false);
+  const [sheetViewMode, setSheetViewMode] = useState<"date" | "selected">("date");
+
+  useEffect(() => {
+    setSheetViewMode("date");
+  }, [order.id]);
 
   useEffect(() => {
     (async () => {
@@ -1674,20 +1679,24 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
     return `${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, "0")}-${String(x.getUTCDate()).padStart(2, "0")}`;
   };
   const normalize = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
-  const sameDayOrders = orders.filter((o: any) => o.eventDate && dayKey(o.eventDate) === dayKey(order.eventDate));
-  const rowMap = new Map<string, { name: string; category: string; inventoryItemId: string | null; need: number; selected: number; labels: string[] }>();
+  const currentOrder = orders.find((o: any) => o.id === order.id) || order;
+  const sameDayOrders = sheetViewMode === "selected"
+    ? [currentOrder]
+    : orders.filter((o: any) => o.eventDate && dayKey(o.eventDate) === dayKey(currentOrder.eventDate));
+  const rowMap = new Map<string, { name: string; category: string; inventoryItemId: string | null; need: number; selected: number; perOrder: Map<string, number> }>();
   for (const o of sameDayOrders) {
     for (const it of o.items || []) {
       const key = it.inventoryItemId || `n:${normalize(it.name)}`;
       let r = rowMap.get(key);
       if (!r) {
-        r = { name: it.name, category: it.category || "OTRO", inventoryItemId: it.inventoryItemId || null, need: 0, selected: 0, labels: [] };
+        r = { name: it.name, category: it.category || "OTRO", inventoryItemId: it.inventoryItemId || null, need: 0, selected: 0, perOrder: new Map() };
         rowMap.set(key, r);
       }
-      r.need += Number(it.quantity) || 0;
-      if (o.id === order.id) r.selected += Number(it.quantity) || 0;
+      const qty = Number(it.quantity) || 0;
+      r.need += qty;
+      if (o.id === currentOrder.id) r.selected += qty;
       const label = `#${o.orderNumber}`;
-      if (!r.labels.includes(label)) r.labels.push(label);
+      r.perOrder.set(label, (r.perOrder.get(label) || 0) + qty);
     }
   }
   const sheetRows = Array.from(rowMap.values()).map((r) => {
@@ -1744,12 +1753,32 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
 
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/60">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">
-              Vista del cuadro · {sameDayOrders.length} cuadro(s) de la misma fecha
-            </p>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              Necesito = suma de todos los cuadros de la fecha · Tengo = inventario disponible
-            </p>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                Vista del cuadro · {sheetViewMode === "date" ? `${sameDayOrders.length} cuadro(s) de la misma fecha` : "solo este cuadro"}
+              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                {sheetViewMode === "date"
+                  ? "Necesito = suma de todos los cuadros de la fecha · Cant. = solo este cuadro"
+                  : "Necesito = este cuadro · Tengo = inventario disponible"}
+              </p>
+            </div>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => setSheetViewMode("date")}
+                className={`text-[11px] px-2 py-1 rounded border ${sheetViewMode === "date" ? "bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900" : "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300"}`}
+              >
+                Toda la fecha
+              </button>
+              <button
+                type="button"
+                onClick={() => setSheetViewMode("selected")}
+                className={`text-[11px] px-2 py-1 rounded border ${sheetViewMode === "selected" ? "bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900" : "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300"}`}
+              >
+                Solo este cuadro
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto max-h-[48vh]">
             <table className="w-full min-w-[900px] text-xs">
@@ -1762,13 +1791,13 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
                   <th className="text-right px-2 py-2 font-semibold">Tengo</th>
                   <th className="text-right px-2 py-2 font-semibold">Faltante</th>
                   <th className="text-left px-2 py-2 font-semibold">Acción</th>
-                  <th className="text-left px-2 py-2 font-semibold">Cuadros</th>
+                  <th className="text-left px-2 py-2 font-semibold">Cuadros (cant.)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {sheetRows.map((r, i) => (
                   <tr key={i} className={r.shortfall > 0 ? "bg-red-50/40 dark:bg-red-900/10" : ""}>
-                    <td className="px-2 py-1.5 text-right font-medium">{r.selected || "—"}</td>
+                    <td className={`px-2 py-1.5 text-right font-medium ${r.selected ? "" : "text-gray-400"}`}>{r.selected}</td>
                     <td className="px-2 py-1.5">{r.name}</td>
                     <td className="px-2 py-1.5 text-gray-500">{r.category}</td>
                     <td className="px-2 py-1.5 text-right">{r.need}</td>
@@ -1782,7 +1811,11 @@ function OrderDetailModal({ order, onClose, token, onUpdated, inventory = [], or
                         "bg-gray-100 text-gray-600"
                       }`}>{r.action}</span>
                     </td>
-                    <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{r.labels.join(", ")}</td>
+                    <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">
+                      {Array.from(r.perOrder.entries())
+                        .map(([label, qty]) => `${label} (${qty})`)
+                        .join(", ")}
+                    </td>
                   </tr>
                 ))}
                 {sheetRows.length === 0 && (
